@@ -1,0 +1,24 @@
+(rule
+ (targets libpolars_ocaml.a dllpolars_ocaml.so)
+ (deps
+  (glob_files ../rust/Cargo.*)
+  (glob_files ../rust/src/*.rs))
+ (action
+  (progn
+   (run sh -c "cd %{project_root}/rust && cargo build --release")
+   (run
+    sh
+    -c
+    "cp %{project_root}/rust/target/release/libpolars_ocaml.so ./dllpolars_ocaml.so 2> /dev/null || cp %{project_root}/rust/target/release/libpolars_ocaml.dylib ./dllpolars_ocaml.so")
+   (run
+    cp
+    %{project_root}/rust/target/release/libpolars_ocaml.a
+    libpolars_ocaml.a))))
+
+(library
+ (name polars_ocaml)
+ (foreign_archives polars_ocaml)
+ (libraries core)
+ (inline_tests)
+ (preprocess
+  (pps ppx_jane)))
