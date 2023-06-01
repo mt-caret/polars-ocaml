@@ -33,13 +33,10 @@ ocaml_export! {
         let mut series: OCaml<OCamlList<DynBox<Series>>> = series.to_ocaml(cr);
 
         let mut ret = Vec::new();
-        while let Some(head) = series.hd() {
+        while let Some((head, tail)) = series.uncons() {
             ret.push(Borrow::<Series>::borrow(&head).clone());
 
-            match series.tl() {
-                Some(tail) => series = tail,
-                None => break,
-            }
+            series = tail;
         }
 
         match DataFrame::new(ret) {
