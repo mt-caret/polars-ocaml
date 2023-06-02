@@ -30,6 +30,15 @@ fn box_result<'a, T: 'static, E: Display>(
     }
 }
 
+fn expr_unary_op<'a>(
+    cr: &'a mut &'a mut OCamlRuntime,
+    expr: OCamlRef<'a, DynBox<Expr>>,
+    f: impl Fn(Expr) -> Expr,
+) -> OCaml<'a, DynBox<Expr>> {
+    let expr: Expr = Borrow::<Expr>::borrow(&expr.to_ocaml(cr)).clone();
+    OCaml::box_value(cr, f(expr))
+}
+
 fn expr_binary_op<'a>(
     cr: &'a mut &'a mut OCamlRuntime,
     expr: OCamlRef<'a, DynBox<Expr>>,
@@ -41,10 +50,6 @@ fn expr_binary_op<'a>(
     OCaml::box_value(cr, f(expr, other))
 }
 
-// `ocaml_export` expands the function definitions by adding `pub` visibility and
-// the required `#[no_mangle]` and `extern` declarations. It also takes care of
-// acquiring the OCaml runtime handle and binding it to the name provided as
-// the first parameter of the function.
 ocaml_export! {
     fn rust_expr_col(cr, name: OCamlRef<String>) -> OCaml<DynBox<Expr>> {
         let name: String = name.to_rust(cr);
@@ -62,9 +67,8 @@ ocaml_export! {
     }
 
     fn rust_expr_sort(cr, expr: OCamlRef<DynBox<Expr>>, descending: OCamlRef<bool>) -> OCaml<DynBox<Expr>> {
-        let expr: Expr = Borrow::<Expr>::borrow(&expr.to_ocaml(cr)).clone();
         let descending: bool = descending.to_rust(cr);
-        OCaml::box_value(cr, expr.sort(descending))
+        expr_unary_op(cr, expr, |expr| expr.sort(descending))
     }
 
     fn rust_expr_head(cr, expr: OCamlRef<DynBox<Expr>>, length: OCamlRef<Option<OCamlInt>>) -> OCaml<Option<DynBox<Expr>>> {
@@ -90,20 +94,16 @@ ocaml_export! {
     }
 
     fn rust_expr_filter(cr, expr: OCamlRef<DynBox<Expr>>, predicate: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
-        let expr: Expr = Borrow::<Expr>::borrow(&expr.to_ocaml(cr)).clone();
-        let predicate: Expr = Borrow::<Expr>::borrow(&predicate.to_ocaml(cr)).clone();
-        OCaml::box_value(cr, expr.filter(predicate))
+        expr_binary_op(cr, expr, predicate, |expr, predicate| expr.filter(predicate))
     }
 
     fn rust_expr_sum(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
-        let expr: Expr = Borrow::<Expr>::borrow(&expr.to_ocaml(cr)).clone();
-        OCaml::box_value(cr, expr.sum())
+        expr_unary_op(cr, expr, |expr| expr.sum())
     }
 
     fn rust_expr_alias(cr, expr: OCamlRef<DynBox<Expr>>, name: OCamlRef<String>) -> OCaml<DynBox<Expr>> {
-        let expr: Expr = Borrow::<Expr>::borrow(&expr.to_ocaml(cr)).clone();
         let name: String = name.to_rust(cr);
-        OCaml::box_value(cr, expr.alias(&name))
+        expr_unary_op(cr, expr, |expr| expr.alias(&name))
     }
 
     fn rust_expr_eq(cr, expr: OCamlRef<DynBox<Expr>>, other: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
@@ -131,8 +131,7 @@ ocaml_export! {
     }
 
     fn rust_expr_not(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
-        let expr: Expr = Borrow::<Expr>::borrow(&expr.to_ocaml(cr)).clone();
-        OCaml::box_value(cr, expr.not())
+        expr_unary_op(cr, expr, |expr| expr.not())
     }
 
     fn rust_expr_and(cr, expr: OCamlRef<DynBox<Expr>>, other: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
@@ -264,24 +263,8 @@ ocaml_export! {
         let exprs = ocaml_list_to_vec(exprs.to_ocaml(cr));
 
         let lazy_frame: OCaml<DynBox<LazyFrame>> = lazy_frame.to_ocaml(cr);
-        let lazy_frame:LazyFrame =  Borrow::<LazyFrame>::borrow(&lazy_frame).clone();
+        let lazy_frame: LazyFrame = Borrow::<LazyFrame>::borrow(&lazy_frame).clone();
 
         OCaml::box_value(cr, lazy_frame.select(&exprs))
     }
 }
-
-//pub fn add(left: usize, right: usize) -> usize {
-//    left + right
-//}
-//
-//#[cfg(test)]
-//mod tests {
-//    use super::*;
-//
-//    #[test]
-//    fn it_works() {
-//        let result = add(2, 2);
-//        assert_eq!(result, 4);
-//    }
-//}
-//
