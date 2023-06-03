@@ -148,7 +148,7 @@ ocaml_export! {
 
     fn rust_expr_exclude(cr, name: OCamlRef<String>) -> OCaml<DynBox<Expr>> {
         let name: String = name.to_rust(cr);
-        OCaml::box_value(cr, all().exclude(&[name]))
+        OCaml::box_value(cr, all().exclude([name]))
     }
 
     fn rust_expr_int(cr, value: OCamlRef<OCamlInt>) -> OCaml<DynBox<Expr>> {
