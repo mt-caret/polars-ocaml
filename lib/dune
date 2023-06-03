@@ -17,7 +17,7 @@
     libpolars_ocaml.a))))
 
 (library
- (name polars_ocaml)
+ (name polars)
  (foreign_archives polars_ocaml)
  (libraries core)
  (inline_tests)

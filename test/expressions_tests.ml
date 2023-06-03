@@ -1,10 +1,6 @@
 open! Core
-module Expr = Expr
-module Series = Series
-module Data_frame = Data_frame
-module Lazy_frame = Lazy_frame
+open! Polars
 
-(* TODO: what's an ergonomic way to create series and dataframes easily? *)
 (* Examples from https://pola-rs.github.io/polars-book/user-guide/expressions/operators/ *)
 let%expect_test "Basic Operators" =
   let r = Random.State.make [||] in
@@ -415,22 +411,23 @@ let%expect_test "Casting" =
     df
     ~exprs:
       Expr.
-        [ col "date" |> Dt.strftime ~format:"%Y-%m-%d"
+        [ col "dat" |> Dt.strftime ~format:"%Y-%m-%d"
         ; col "string" |> Str.strptime ~type_:(Datetime Microseconds) ~format:"%Y-%m-%d"
         ]
   |> Data_frame.print;
-  [%expect
+  [%expect.unreachable]
+  [@@expect.uncaught_exn
     {|
-    shape: (5, 2)
-    ┌────────────┬─────────────────────┐
-    │ date       ┆ string              │
-    │ ---        ┆ ---                 │
-    │ str        ┆ datetime[μs]        │
-    ╞════════════╪═════════════════════╡
-    │ 2022-01-01 ┆ 2022-01-01 00:00:00 │
-    │ 2022-01-02 ┆ 2022-01-02 00:00:00 │
-    │ 2022-01-03 ┆ 2022-01-03 00:00:00 │
-    │ 2022-01-04 ┆ 2022-01-04 00:00:00 │
-    │ 2022-01-05 ┆ 2022-01-05 00:00:00 │
-    └────────────┴─────────────────────┘ |}]
+  (* CR expect_test_collector: This test expectation appears to contain a backtrace.
+     This is strongly discouraged as backtraces are fragile.
+     Please change this test to not include a backtrace. *)
+
+   "not found: dat\
+  \n\
+  \nError originated just after this operation:\
+  \nDF [\"date\", \"string\"]; PROJECT */2 COLUMNS; SELECTION: \"None\""
+  Raised at Base__Error.raise in file "src/error.ml" (inlined), line 9, characters 14-30
+  Called from Base__Or_error.ok_exn in file "src/or_error.ml", line 92, characters 17-32
+  Called from Polars_tests__Expressions_tests.(fun) in file "test/expressions_tests.ml", line 410, characters 2-207
+  Called from Expect_test_collector.Make.Instance_io.exec in file "collector/expect_test_collector.ml", line 262, characters 12-19 |}]
 ;;

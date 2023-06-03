@@ -1,2 +1,6 @@
-(test
- (name polars_ocaml))
+(library
+ (name polars_tests)
+ (libraries core polars)
+ (inline_tests)
+ (preprocess
+  (pps ppx_jane)))

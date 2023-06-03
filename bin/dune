@@ -1,4 +1,4 @@
 (executable
- (public_name polars_ocaml)
+ (public_name polars)
  (name main)
- (libraries polars_ocaml))
+ (libraries polars))
