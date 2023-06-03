@@ -138,5 +138,46 @@ let%expect_test "Functions" =
     │ 8       ┆ -2      │
     │ null    ┆ null    │
     │ 10      ┆ 0       │
-    └─────────┴─────────┘ |}]
+    └─────────┴─────────┘ |}];
+  let df_alias =
+    Data_frame.select_exn
+      df
+      ~exprs:
+        Expr.
+          [ col "names" |> n_unique |> alias ~name:"unique"
+          ; col "names" |> approx_unique |> alias ~name:"approx_unique"
+          ]
+  in
+  Data_frame.print df_alias;
+  [%expect
+    {|
+    shape: (1, 2)
+    ┌────────┬───────────────┐
+    │ unique ┆ approx_unique │
+    │ ---    ┆ ---           │
+    │ u32    ┆ u32           │
+    ╞════════╪═══════════════╡
+    │ 4      ┆ 4             │
+    └────────┴───────────────┘ |}];
+  let df_conditional =
+    Data_frame.select_exn
+      df
+      ~exprs:
+        Expr.[ col "nrs"; when_ [ col "nrs" > int 2, bool true ] ~otherwise:(bool false) ]
+  in
+  Data_frame.print df_conditional;
+  [%expect
+    {|
+    shape: (5, 2)
+    ┌──────┬─────────┐
+    │ nrs  ┆ literal │
+    │ ---  ┆ ---     │
+    │ i64  ┆ bool    │
+    ╞══════╪═════════╡
+    │ 1    ┆ false   │
+    │ 2    ┆ false   │
+    │ 3    ┆ true    │
+    │ null ┆ false   │
+    │ 5    ┆ true    │
+    └──────┴─────────┘ |}]
 ;;

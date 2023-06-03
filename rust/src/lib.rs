@@ -50,10 +50,26 @@ fn expr_binary_op<'a>(
     OCaml::box_value(cr, f(expr, other))
 }
 
+enum WhenThenClause {
+    Empty,
+    WhenThen(WhenThen),
+    WhenThenThen(WhenThenThen),
+}
+
 ocaml_export! {
     fn rust_expr_col(cr, name: OCamlRef<String>) -> OCaml<DynBox<Expr>> {
         let name: String = name.to_rust(cr);
         OCaml::box_value(cr, col(&name))
+    }
+
+    fn rust_expr_all(cr, unit: OCamlRef<()>) -> OCaml<DynBox<Expr>> {
+        let _: () = unit.to_rust(cr);
+        OCaml::box_value(cr, all())
+    }
+
+    fn rust_expr_exclude(cr, name: OCamlRef<String>) -> OCaml<DynBox<Expr>> {
+        let name: String = name.to_rust(cr);
+        OCaml::box_value(cr, all().exclude(&[name]))
     }
 
     fn rust_expr_int(cr, value: OCamlRef<OCamlInt>) -> OCaml<DynBox<Expr>> {
@@ -63,6 +79,11 @@ ocaml_export! {
 
     fn rust_expr_float(cr, value: OCamlRef<OCamlFloat>) -> OCaml<DynBox<Expr>> {
         let value: f64 = value.to_rust(cr);
+        OCaml::box_value(cr, lit(value))
+    }
+
+    fn rust_expr_bool(cr, value: OCamlRef<bool>) -> OCaml<DynBox<Expr>> {
+        let value: bool = value.to_rust(cr);
         OCaml::box_value(cr, lit(value))
     }
 
@@ -101,9 +122,62 @@ ocaml_export! {
         expr_unary_op(cr, expr, |expr| expr.sum())
     }
 
+    fn rust_expr_n_unique(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
+        expr_unary_op(cr, expr, |expr| expr.n_unique())
+    }
+
+    fn rust_expr_approx_unique(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
+        expr_unary_op(cr, expr, |expr| expr.approx_unique())
+    }
+
+    fn rust_expr_when_then(cr, when_then_clauses: OCamlRef<OCamlList<(DynBox<Expr>, DynBox<Expr>)>>, otherwise: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
+        let mut when_then_clauses = when_then_clauses.to_ocaml(cr);
+        let when_then_clauses = {
+            let mut ret = Vec::new();
+
+            while let Some((head, tail)) = when_then_clauses.uncons() {
+                let (when, then): (OCaml<DynBox<Expr>>, OCaml<DynBox<Expr>>) = head.to_tuple();
+                let when = Borrow::<Expr>::borrow(&when).clone();
+                let then = Borrow::<Expr>::borrow(&then).clone();
+                ret.push((when, then));
+                when_then_clauses = tail;
+            }
+
+            ret
+        };
+
+        let otherwise: Expr = Borrow::<Expr>::borrow(&otherwise.to_ocaml(cr)).clone();
+
+        let mut ret = WhenThenClause::Empty;
+
+        for (when_expr, then_expr) in when_then_clauses {
+            match ret {
+                WhenThenClause::Empty => ret = WhenThenClause::WhenThen(when(when_expr).then(then_expr)),
+                WhenThenClause::WhenThen(when_then) => ret = WhenThenClause::WhenThenThen(when_then.when(when_expr).then(then_expr)),
+                WhenThenClause::WhenThenThen(when_then_then) => ret = WhenThenClause::WhenThenThen(when_then_then.when(when_expr).then(then_expr))
+            }
+        }
+
+        match ret {
+            WhenThenClause::Empty => OCaml::box_value(cr, otherwise),
+            WhenThenClause::WhenThen(when_then) => OCaml::box_value(cr, when_then.otherwise(otherwise)),
+            WhenThenClause::WhenThenThen(when_then_then) => OCaml::box_value(cr, when_then_then.otherwise(otherwise))
+        }
+    }
+
     fn rust_expr_alias(cr, expr: OCamlRef<DynBox<Expr>>, name: OCamlRef<String>) -> OCaml<DynBox<Expr>> {
         let name: String = name.to_rust(cr);
         expr_unary_op(cr, expr, |expr| expr.alias(&name))
+    }
+
+    fn rust_expr_prefix(cr, expr: OCamlRef<DynBox<Expr>>, prefix: OCamlRef<String>) -> OCaml<DynBox<Expr>> {
+        let prefix: String = prefix.to_rust(cr);
+        expr_unary_op(cr, expr, |expr| expr.prefix(&prefix))
+    }
+
+    fn rust_expr_suffix(cr, expr: OCamlRef<DynBox<Expr>>, suffix: OCamlRef<String>) -> OCaml<DynBox<Expr>> {
+        let suffix: String = suffix.to_rust(cr);
+        expr_unary_op(cr, expr, |expr| expr.suffix(&suffix))
     }
 
     fn rust_expr_eq(cr, expr: OCamlRef<DynBox<Expr>>, other: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {

@@ -3,13 +3,21 @@ open! Core
 type t
 
 external col : string -> t = "rust_expr_col"
+external all : unit -> t = "rust_expr_all"
+external exclude : string -> t = "rust_expr_exclude"
 external int : int -> t = "rust_expr_int"
 external float : float -> t = "rust_expr_float"
+external bool : bool -> t = "rust_expr_bool"
 external sort : t -> descending:bool -> t = "rust_expr_sort"
 external head : t -> length:int option -> t = "rust_expr_head"
 external filter : t -> predicate:t -> t = "rust_expr_filter"
 external sum : t -> t = "rust_expr_sum"
+external n_unique : t -> t = "rust_expr_n_unique"
+external approx_unique : t -> t = "rust_expr_approx_unique"
+external when_ : (t * t) list -> otherwise:t -> t = "rust_expr_when_then"
 external alias : t -> name:string -> t = "rust_expr_alias"
+external prefix : t -> prefix:string -> t = "rust_expr_prefix"
+external suffix : t -> suffix:string -> t = "rust_expr_suffix"
 external equal : t -> t -> t = "rust_expr_eq"
 val ( = ) : t -> t -> t
 external ( <> ) : t -> t -> t = "rust_expr_neq"
