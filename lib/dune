@@ -5,14 +5,15 @@
   (glob_files ../rust/src/*.rs))
  (action
   (progn
-   (run sh -c "cd %{project_root}/rust && cargo build --release")
+   ; TODO: make toggling --release possible
+   (run sh -c "cd %{project_root}/rust && cargo build")
    (run
     sh
     -c
-    "cp %{project_root}/rust/target/release/libpolars_ocaml.so ./dllpolars_ocaml.so 2> /dev/null || cp %{project_root}/rust/target/release/libpolars_ocaml.dylib ./dllpolars_ocaml.so")
+    "cp %{project_root}/rust/target/debug/libpolars_ocaml.so ./dllpolars_ocaml.so 2> /dev/null || cp %{project_root}/rust/target/debug/libpolars_ocaml.dylib ./dllpolars_ocaml.so")
    (run
     cp
-    %{project_root}/rust/target/release/libpolars_ocaml.a
+    %{project_root}/rust/target/debug/libpolars_ocaml.a
     libpolars_ocaml.a))))
 
 (library

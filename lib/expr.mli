@@ -5,9 +5,11 @@ type t
 external col : string -> t = "rust_expr_col"
 external all : unit -> t = "rust_expr_all"
 external exclude : string -> t = "rust_expr_exclude"
+val cast : ?strict:bool -> t -> to_:Data_type.t -> t
 external int : int -> t = "rust_expr_int"
 external float : float -> t = "rust_expr_float"
 external bool : bool -> t = "rust_expr_bool"
+external string : string -> t = "rust_expr_string"
 external sort : t -> descending:bool -> t = "rust_expr_sort"
 external head : t -> length:int option -> t = "rust_expr_head"
 external filter : t -> predicate:t -> t = "rust_expr_filter"
@@ -41,3 +43,16 @@ val ( + ) : t -> t -> t
 val ( - ) : t -> t -> t
 val ( * ) : t -> t -> t
 val ( / ) : t -> t -> t
+
+module Dt : sig
+  external strftime : t -> format:string -> t = "rust_expr_dt_strftime"
+end
+
+module Str : sig
+  external strptime
+    :  t
+    -> type_:Data_type.t
+    -> format:string
+    -> t
+    = "rust_expr_str_strptime"
+end

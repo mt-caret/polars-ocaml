@@ -1,10 +1,59 @@
+use chrono::naive::{NaiveDate, NaiveDateTime};
 use ocaml_interop::{
-    ocaml_export, BoxRoot, DynBox, OCaml, OCamlBytes, OCamlFloat, OCamlInt, OCamlList, OCamlRef,
-    OCamlRuntime, ToOCaml,
+    ocaml_export, ocaml_unpack_variant, BoxRoot, DynBox, FromOCaml, OCaml, OCamlBytes, OCamlFloat,
+    OCamlInt, OCamlList, OCamlRef, OCamlRuntime, ToOCaml,
 };
+use polars::prelude::prelude::*;
 use polars::prelude::*;
 use std::fmt::Display;
 use std::{borrow::Borrow, path::Path};
+
+struct PolarsTimeUnit(TimeUnit);
+
+unsafe impl FromOCaml<TimeUnit> for PolarsTimeUnit {
+    fn from_ocaml(v: OCaml<TimeUnit>) -> Self {
+        let result = ocaml_unpack_variant! {
+            v => {
+                TimeUnit::Nanoseconds,
+                TimeUnit::Microseconds,
+                TimeUnit::Milliseconds,
+            }
+        };
+        PolarsTimeUnit(result.expect("Failure when unpacking an OCaml<TimeUnit> variant into PolarsTimeUnit (unexpected tag value"))
+    }
+}
+
+struct PolarsDataType(DataType);
+
+unsafe impl FromOCaml<DataType> for PolarsDataType {
+    fn from_ocaml(v: OCaml<DataType>) -> Self {
+        let result = ocaml_unpack_variant! {
+            v => {
+                DataType::Boolean,
+                DataType::UInt8,
+                DataType::UInt16,
+                DataType::UInt32,
+                DataType::UInt64,
+                DataType::Int8,
+                DataType::Int16,
+                DataType::Int32,
+                DataType::Int64,
+                DataType::Float32,
+                DataType::Float64,
+                DataType::Utf8,
+                DataType::Binary,
+                DataType::Date,
+                DataType::Datetime(timeunit: TimeUnit) => {
+                    let PolarsTimeUnit(timeunit) = timeunit;
+                    DataType::Datetime(timeunit, None)},
+                DataType::Time,
+                DataType::Null,
+                DataType::Unknown,
+            }
+        };
+        PolarsDataType(result.expect("Failure when unpacking an OCaml<DataType> variant into PolarsDataType (unexpected tag value"))
+    }
+}
 
 fn ocaml_list_to_vec<T: 'static + Clone>(mut list: OCaml<OCamlList<DynBox<T>>>) -> Vec<T> {
     let mut ret = Vec::new();
@@ -57,6 +106,36 @@ enum WhenThenClause {
 }
 
 ocaml_export! {
+    fn rust_naive_date(cr, year: OCamlRef<OCamlInt>, month: OCamlRef<OCamlInt>, day: OCamlRef<OCamlInt>) -> OCaml<Option<DynBox<NaiveDate>>> {
+        let year: i32 = year.to_rust(cr);
+        let month: Option<u32> = month.to_rust::<i32>(cr).try_into().ok();
+        let day: Option<u32> = day.to_rust::<i32>(cr).try_into().ok();
+        match (month, day) {
+            (Some(month), Some(day)) => {
+                match NaiveDate::from_ymd_opt(year, month, day) {
+                    None => OCaml::none(),
+                    Some(date) => {
+                        let date: BoxRoot<DynBox<NaiveDate>> = OCaml::box_value(cr, date).root();
+                        Some(date).to_ocaml(cr)
+                    }
+                }
+            },
+            _ => OCaml::none()
+        }
+    }
+
+    fn rust_naive_date_to_naive_datetime(cr, date: OCamlRef<DynBox<NaiveDate>>) -> OCaml<Option<DynBox<NaiveDateTime>>> {
+        let date: NaiveDate = *Borrow::<NaiveDate>::borrow(&date.to_ocaml(cr));
+
+        match date.and_hms_opt(0, 0, 0) {
+            None => OCaml::none(),
+            Some(datetime) => {
+                let datetime: BoxRoot<DynBox<NaiveDateTime>> = OCaml::box_value(cr, datetime).root();
+                Some(datetime).to_ocaml(cr)
+            }
+        }
+    }
+
     fn rust_expr_col(cr, name: OCamlRef<String>) -> OCaml<DynBox<Expr>> {
         let name: String = name.to_rust(cr);
         OCaml::box_value(cr, col(&name))
@@ -85,6 +164,22 @@ ocaml_export! {
     fn rust_expr_bool(cr, value: OCamlRef<bool>) -> OCaml<DynBox<Expr>> {
         let value: bool = value.to_rust(cr);
         OCaml::box_value(cr, lit(value))
+    }
+
+    fn rust_expr_string(cr, value: OCamlRef<String>) -> OCaml<DynBox<Expr>> {
+        let value: String = value.to_rust(cr);
+        OCaml::box_value(cr, lit(value))
+    }
+
+    fn rust_expr_cast(cr, expr: OCamlRef<DynBox<Expr>>, data_type: OCamlRef<DataType>, is_strict: OCamlRef<bool>) -> OCaml<DynBox<Expr>> {
+        let PolarsDataType(data_type): PolarsDataType = data_type.to_rust(cr);
+        let is_strict: bool = is_strict.to_rust(cr);
+        expr_unary_op(cr, expr, |expr|
+            if is_strict {
+                expr.strict_cast(data_type.clone())
+            } else {
+                expr.cast(data_type.clone())
+            })
     }
 
     fn rust_expr_sort(cr, expr: OCamlRef<DynBox<Expr>>, descending: OCamlRef<bool>) -> OCaml<DynBox<Expr>> {
@@ -236,6 +331,23 @@ ocaml_export! {
         expr_binary_op(cr, expr, other, |a, b| a / b)
     }
 
+    fn rust_expr_dt_strftime(cr, expr: OCamlRef<DynBox<Expr>>, format:OCamlRef<String>)-> OCaml<DynBox<Expr>> {
+        let format: String = format.to_rust(cr);
+        expr_unary_op(cr, expr, |expr| expr.dt().to_string(&format))
+    }
+
+    fn rust_expr_str_strptime(cr, expr: OCamlRef<DynBox<Expr>>, data_type: OCamlRef<DataType>, format:OCamlRef<String>)-> OCaml<DynBox<Expr>> {
+        let PolarsDataType(data_type): PolarsDataType = data_type.to_rust(cr);
+        let format: String = format.to_rust(cr);
+
+        expr_unary_op(cr, expr, |expr| {
+            let options = StrptimeOptions {
+                format: Some(format.clone()), strict: true, exact:true, cache: false
+            };
+            expr.str().strptime(data_type.clone(), options)
+        })
+    }
+
     fn rust_series_new_int(cr, name: OCamlRef<String>, values: OCamlRef<OCamlList<OCamlInt>>) -> OCaml<DynBox<Series>> {
         let name: String = name.to_rust(cr);
         let values: Vec<i64> = values.to_rust(cr);
@@ -270,6 +382,50 @@ ocaml_export! {
         let name: String = name.to_rust(cr);
         let values: Vec<Option<String>> = values.to_rust(cr);
         OCaml::box_value(cr, Series::new(&name, values))
+    }
+
+    fn rust_series_new_bool(cr, name: OCamlRef<String>, values: OCamlRef<OCamlList<bool>>) -> OCaml<DynBox<Series>> {
+        let name: String = name.to_rust(cr);
+        let values: Vec<bool> = values.to_rust(cr);
+        OCaml::box_value(cr, Series::new(&name, values))
+    }
+
+    fn rust_series_new_bool_option(cr, name: OCamlRef<String>, values: OCamlRef<OCamlList<Option<bool>>>) -> OCaml<DynBox<Series>> {
+        let name: String = name.to_rust(cr);
+        let values: Vec<Option<bool>> = values.to_rust(cr);
+        OCaml::box_value(cr, Series::new(&name, values))
+    }
+
+    fn rust_series_date_range(cr, name: OCamlRef<String>, start: OCamlRef<DynBox<NaiveDateTime>>, stop: OCamlRef<DynBox<NaiveDateTime>>, cast_to_date: OCamlRef<bool>) -> OCaml<Result<DynBox<Series>,String>> {
+        let name: String = name.to_rust(cr);
+
+        let start: OCaml<DynBox<NaiveDateTime>> = start.to_ocaml(cr);
+        let start: NaiveDateTime = *Borrow::<NaiveDateTime>::borrow(&start);
+
+        let stop: OCaml<DynBox<NaiveDateTime>> = stop.to_ocaml(cr);
+        let stop: NaiveDateTime = *Borrow::<NaiveDateTime>::borrow(&stop);
+
+        let cast_to_date: bool = cast_to_date.to_rust(cr);
+
+        let series =
+            date_range(&name, start, stop, Duration::parse("1d"), ClosedWindow::Both, TimeUnit::Milliseconds, None).and_then(|date_range| {
+                let series = date_range.into_series();
+                if cast_to_date {
+                    series.cast(&DataType::Date)
+                } else {
+                    Ok(series)
+                }
+            });
+
+        match series {
+            Err(err) => {
+                Err::<BoxRoot<DynBox<Series>>, _>(err.to_string()).to_ocaml(cr)
+            },
+            Ok(series) => {
+                let series: BoxRoot<DynBox<Series>> = OCaml::box_value(cr, series).root();
+                Ok::<_, String>(series).to_ocaml(cr)
+            },
+        }
     }
 
     fn rust_series_to_string_hum(cr, series: OCamlRef<DynBox<Series>>) -> OCaml<String> {
@@ -340,5 +496,69 @@ ocaml_export! {
         let lazy_frame: LazyFrame = Borrow::<LazyFrame>::borrow(&lazy_frame).clone();
 
         OCaml::box_value(cr, lazy_frame.select(&exprs))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use expect_test::{expect, Expect};
+    use std::fmt::Debug;
+
+    fn check<T: Debug>(actual: T, expect: Expect) {
+        let actual = format!("{:?}", actual);
+        expect.assert_eq(&actual);
+    }
+
+    #[test]
+    fn check_date_range() {
+        let start = NaiveDate::from_ymd_opt(2022, 1, 1)
+            .unwrap()
+            .and_hms_opt(0, 0, 0)
+            .unwrap();
+        let stop = NaiveDate::from_ymd_opt(2022, 1, 5)
+            .unwrap()
+            .and_hms_opt(0, 0, 0)
+            .unwrap();
+        check(
+            date_range(
+                "date",
+                start,
+                stop,
+                Duration::parse("1d"),
+                ClosedWindow::Both,
+                TimeUnit::Microseconds, // TODO: BUG!
+                None,
+            )
+            .map(|date_range| date_range.into_series()),
+            expect![[r#"
+                Ok(shape: (1,)
+                Series: 'date' [datetime[μs]]
+                [
+                	1970-01-01 00:27:20.995200
+                ])"#]],
+        );
+        check(
+            date_range(
+                "date",
+                start,
+                stop,
+                Duration::parse("1d"),
+                ClosedWindow::Both,
+                TimeUnit::Milliseconds,
+                None,
+            )
+            .map(|date_range| date_range.into_series()),
+            expect![[r#"
+                Ok(shape: (5,)
+                Series: 'date' [datetime[ms]]
+                [
+                	2022-01-01 00:00:00
+                	2022-01-02 00:00:00
+                	2022-01-03 00:00:00
+                	2022-01-04 00:00:00
+                	2022-01-05 00:00:00
+                ])"#]],
+        )
     }
 }
