@@ -55,15 +55,15 @@ unsafe impl FromOCaml<DataType> for PolarsDataType {
     }
 }
 
-fn ocaml_list_to_vec<T: 'static + Clone>(mut list: OCaml<OCamlList<DynBox<T>>>) -> Vec<T> {
-    let mut ret = Vec::new();
-
-    while let Some((head, tail)) = list.uncons() {
-        ret.push((*Borrow::<T>::borrow(&head)).clone());
-        list = tail;
+struct Abstract<T>(T);
+unsafe impl<T: 'static + Clone> FromOCaml<DynBox<T>> for Abstract<T> {
+    fn from_ocaml(v: OCaml<DynBox<T>>) -> Self {
+        Abstract(Borrow::<T>::borrow(&v).clone())
     }
+}
 
-    ret
+fn unwrap_abstract_vec<T>(v: Vec<Abstract<T>>) -> Vec<T> {
+    v.into_iter().map(|Abstract(v)| v).collect()
 }
 
 fn box_result<'a, T: 'static, E: Display>(
@@ -84,7 +84,7 @@ fn expr_unary_op<'a>(
     expr: OCamlRef<'a, DynBox<Expr>>,
     f: impl Fn(Expr) -> Expr,
 ) -> OCaml<'a, DynBox<Expr>> {
-    let expr: Expr = Borrow::<Expr>::borrow(&expr.to_ocaml(cr)).clone();
+    let Abstract(expr) = expr.to_rust(cr);
     OCaml::box_value(cr, f(expr))
 }
 
@@ -94,8 +94,8 @@ fn expr_binary_op<'a>(
     other: OCamlRef<'a, DynBox<Expr>>,
     f: impl Fn(Expr, Expr) -> Expr,
 ) -> OCaml<'a, DynBox<Expr>> {
-    let expr: Expr = Borrow::<Expr>::borrow(&expr.to_ocaml(cr)).clone();
-    let other: Expr = Borrow::<Expr>::borrow(&other.to_ocaml(cr)).clone();
+    let Abstract(expr) = expr.to_rust(cr);
+    let Abstract(other) = other.to_rust(cr);
     OCaml::box_value(cr, f(expr, other))
 }
 
@@ -125,7 +125,7 @@ ocaml_export! {
     }
 
     fn rust_naive_date_to_naive_datetime(cr, date: OCamlRef<DynBox<NaiveDate>>) -> OCaml<Option<DynBox<NaiveDateTime>>> {
-        let date: NaiveDate = *Borrow::<NaiveDate>::borrow(&date.to_ocaml(cr));
+        let Abstract(date) = date.to_rust(cr);
 
         match date.and_hms_opt(0, 0, 0) {
             None => OCaml::none(),
@@ -188,7 +188,7 @@ ocaml_export! {
     }
 
     fn rust_expr_head(cr, expr: OCamlRef<DynBox<Expr>>, length: OCamlRef<Option<OCamlInt>>) -> OCaml<Option<DynBox<Expr>>> {
-        let expr: Expr = Borrow::<Expr>::borrow(&expr.to_ocaml(cr)).clone();
+        let Abstract(expr) = expr.to_rust(cr);
         let length: Option<i64> = length.to_rust(cr);
 
         match length {
@@ -226,22 +226,10 @@ ocaml_export! {
     }
 
     fn rust_expr_when_then(cr, when_then_clauses: OCamlRef<OCamlList<(DynBox<Expr>, DynBox<Expr>)>>, otherwise: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
-        let mut when_then_clauses = when_then_clauses.to_ocaml(cr);
-        let when_then_clauses = {
-            let mut ret = Vec::new();
-
-            while let Some((head, tail)) = when_then_clauses.uncons() {
-                let (when, then): (OCaml<DynBox<Expr>>, OCaml<DynBox<Expr>>) = head.to_tuple();
-                let when = Borrow::<Expr>::borrow(&when).clone();
-                let then = Borrow::<Expr>::borrow(&then).clone();
-                ret.push((when, then));
-                when_then_clauses = tail;
-            }
-
-            ret
-        };
-
-        let otherwise: Expr = Borrow::<Expr>::borrow(&otherwise.to_ocaml(cr)).clone();
+        let when_then_clauses: Vec<(Abstract<Expr>, Abstract<Expr>)> = when_then_clauses.to_rust(cr);
+        let when_then_clauses: Vec<(Expr,Expr)> =
+            when_then_clauses.into_iter().map(|(Abstract(when),Abstract(then))| (when,then)).collect();
+        let Abstract(otherwise) = otherwise.to_rust(cr);
 
         let mut ret = WhenThenClause::Empty;
 
@@ -399,11 +387,8 @@ ocaml_export! {
     fn rust_series_date_range(cr, name: OCamlRef<String>, start: OCamlRef<DynBox<NaiveDateTime>>, stop: OCamlRef<DynBox<NaiveDateTime>>, cast_to_date: OCamlRef<bool>) -> OCaml<Result<DynBox<Series>,String>> {
         let name: String = name.to_rust(cr);
 
-        let start: OCaml<DynBox<NaiveDateTime>> = start.to_ocaml(cr);
-        let start: NaiveDateTime = *Borrow::<NaiveDateTime>::borrow(&start);
-
-        let stop: OCaml<DynBox<NaiveDateTime>> = stop.to_ocaml(cr);
-        let stop: NaiveDateTime = *Borrow::<NaiveDateTime>::borrow(&stop);
+        let Abstract(start) = start.to_rust(cr);
+        let Abstract(stop) = stop.to_rust(cr);
 
         let cast_to_date: bool = cast_to_date.to_rust(cr);
 
@@ -429,13 +414,12 @@ ocaml_export! {
     }
 
     fn rust_series_to_string_hum(cr, series: OCamlRef<DynBox<Series>>) -> OCaml<String> {
-        let series: OCaml<DynBox<Series>> = series.to_ocaml(cr);
-        let series: &Series = Borrow::<Series>::borrow(&series);
-        ToString::to_string(series).to_ocaml(cr)
+        let Abstract(series) = series.to_rust(cr);
+        ToString::to_string(&series).to_ocaml(cr)
     }
 
     fn rust_data_frame_new(cr, series: OCamlRef<OCamlList<DynBox<Series>>>) -> OCaml<Result<DynBox<DataFrame>,String>> {
-        let series = ocaml_list_to_vec(series.to_ocaml(cr));
+        let series: Vec<Series> = unwrap_abstract_vec(series.to_rust(cr));
 
         match DataFrame::new(series) {
             Err(err) => {
@@ -449,14 +433,12 @@ ocaml_export! {
     }
 
     fn rust_data_frame_to_string_hum(cr, data_frame: OCamlRef<DynBox<DataFrame>>) -> OCaml<String> {
-        let data_frame: OCaml<DynBox<DataFrame>> = data_frame.to_ocaml(cr);
-        let data_frame: &DataFrame = Borrow::<DataFrame>::borrow(&data_frame);
+        let Abstract(data_frame) = data_frame.to_rust(cr);
         data_frame.to_string().to_ocaml(cr)
     }
 
     fn rust_data_frame_lazy(cr, data_frame: OCamlRef<DynBox<DataFrame>>) -> OCaml<DynBox<LazyFrame>> {
-        let data_frame: OCaml<DynBox<DataFrame>> = data_frame.to_ocaml(cr);
-        let data_frame: DataFrame = Borrow::<DataFrame>::borrow(&data_frame).clone();
+        let Abstract(data_frame) = data_frame.to_rust(cr);
         OCaml::box_value(cr, data_frame.lazy())
     }
 
@@ -469,10 +451,10 @@ ocaml_export! {
     }
 
     fn rust_lazy_frame_to_dot(cr, lazy_frame: OCamlRef<DynBox<LazyFrame>>) -> OCaml<Result<String,String>>{
-        let lazy_frame: OCaml<DynBox<LazyFrame>> = lazy_frame.to_ocaml(cr);
+        let Abstract(lazy_frame) = lazy_frame.to_rust(cr);
 
         // TODO: make configurable
-        match Borrow::<LazyFrame>::borrow(&lazy_frame).to_dot(false) {
+        match lazy_frame.to_dot(false) {
             Err(err) => {
                 Err::<String, _>(err.to_string()).to_ocaml(cr)
             },
@@ -483,18 +465,13 @@ ocaml_export! {
     }
 
     fn rust_lazy_frame_collect(cr, lazy_frame: OCamlRef<DynBox<LazyFrame>>)-> OCaml<Result<DynBox<DataFrame>, String>> {
-        let lazy_frame: OCaml<DynBox<LazyFrame>> = lazy_frame.to_ocaml(cr);
-        let lazy_frame = Borrow::<LazyFrame>::borrow(&lazy_frame).clone();
-
+        let Abstract(lazy_frame) = lazy_frame.to_rust(cr);
         box_result(cr, lazy_frame.collect())
     }
 
     fn rust_lazy_frame_select(cr, lazy_frame: OCamlRef<DynBox<LazyFrame>>, exprs: OCamlRef<OCamlList<DynBox<Expr>>>) -> OCaml<DynBox<LazyFrame>> {
-        let exprs = ocaml_list_to_vec(exprs.to_ocaml(cr));
-
-        let lazy_frame: OCaml<DynBox<LazyFrame>> = lazy_frame.to_ocaml(cr);
-        let lazy_frame: LazyFrame = Borrow::<LazyFrame>::borrow(&lazy_frame).clone();
-
+        let exprs = unwrap_abstract_vec(exprs.to_rust(cr));
+        let Abstract(lazy_frame) = lazy_frame.to_rust(cr);
         OCaml::box_value(cr, lazy_frame.select(&exprs))
     }
 }
