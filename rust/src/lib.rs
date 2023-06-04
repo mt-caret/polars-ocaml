@@ -62,6 +62,14 @@ unsafe impl<T: 'static + Clone> FromOCaml<DynBox<T>> for Abstract<T> {
     }
 }
 
+unsafe impl<T: 'static + Clone> ToOCaml<DynBox<T>> for Abstract<T> {
+    fn to_ocaml<'a>(&self, cr: &'a mut OCamlRuntime) -> OCaml<'a, DynBox<T>> {
+        // TODO: I don't fully understand why ToOCaml takes a &self, since that
+        // prevents us from using box_value without a clone() call.
+        OCaml::box_value(cr, self.0.clone())
+    }
+}
+
 fn unwrap_abstract_vec<T>(v: Vec<Abstract<T>>) -> Vec<T> {
     v.into_iter().map(|Abstract(v)| v).collect()
 }
@@ -193,16 +201,14 @@ ocaml_export! {
 
         match length {
             None => {
-                let expr: BoxRoot<DynBox<Expr>> = OCaml::box_value(cr, expr.head(None)).root();
-                Some(expr).to_ocaml(cr)
+                Some(Abstract(expr.head(None))).to_ocaml(cr)
             },
             Some(length) => {
                 match length.try_into().ok() {
                     // TODO: this should probably be an error instead of none
                     None => OCaml::none(),
                     Some(length) => {
-                        let expr: BoxRoot<DynBox<Expr>> = OCaml::box_value(cr, expr.head(Some(length))).root();
-                        Some(expr).to_ocaml(cr)
+                        Some(Abstract(expr.head(Some(length)))).to_ocaml(cr)
                     },
                 }
             }
@@ -393,24 +399,19 @@ ocaml_export! {
         let cast_to_date: bool = cast_to_date.to_rust(cr);
 
         let series =
-            date_range(&name, start, stop, Duration::parse("1d"), ClosedWindow::Both, TimeUnit::Milliseconds, None).and_then(|date_range| {
+            date_range(&name, start, stop, Duration::parse("1d"), ClosedWindow::Both, TimeUnit::Milliseconds, None)
+            .and_then(|date_range| {
                 let series = date_range.into_series();
                 if cast_to_date {
                     series.cast(&DataType::Date)
                 } else {
                     Ok(series)
                 }
-            });
+            })
+            .map(Abstract)
+            .map_err(|err| err.to_string());
 
-        match series {
-            Err(err) => {
-                Err::<BoxRoot<DynBox<Series>>, _>(err.to_string()).to_ocaml(cr)
-            },
-            Ok(series) => {
-                let series: BoxRoot<DynBox<Series>> = OCaml::box_value(cr, series).root();
-                Ok::<_, String>(series).to_ocaml(cr)
-            },
-        }
+        series.to_ocaml(cr)
     }
 
     fn rust_series_to_string_hum(cr, series: OCamlRef<DynBox<Series>>) -> OCaml<String> {
@@ -421,15 +422,7 @@ ocaml_export! {
     fn rust_data_frame_new(cr, series: OCamlRef<OCamlList<DynBox<Series>>>) -> OCaml<Result<DynBox<DataFrame>,String>> {
         let series: Vec<Series> = unwrap_abstract_vec(series.to_rust(cr));
 
-        match DataFrame::new(series) {
-            Err(err) => {
-                Err::<BoxRoot<DynBox<DataFrame>>, _>(err.to_string()).to_ocaml(cr)
-            },
-            Ok(data_frame) => {
-                let data_frame: BoxRoot<DynBox<DataFrame>> = OCaml::box_value(cr, data_frame).root();
-                Ok::<_, String>(data_frame).to_ocaml(cr)
-            }
-        }
+        DataFrame::new(series).map(Abstract).map_err(|err| err.to_string()).to_ocaml(cr)
     }
 
     fn rust_data_frame_to_string_hum(cr, data_frame: OCamlRef<DynBox<DataFrame>>) -> OCaml<String> {
@@ -454,14 +447,7 @@ ocaml_export! {
         let Abstract(lazy_frame) = lazy_frame.to_rust(cr);
 
         // TODO: make configurable
-        match lazy_frame.to_dot(false) {
-            Err(err) => {
-                Err::<String, _>(err.to_string()).to_ocaml(cr)
-            },
-            Ok(dot) => {
-                Ok::<_, String>(dot).to_ocaml(cr)
-            }
-        }
+        lazy_frame.to_dot(false).map_err(|err| err.to_string()).to_ocaml(cr)
     }
 
     fn rust_lazy_frame_collect(cr, lazy_frame: OCamlRef<DynBox<LazyFrame>>)-> OCaml<Result<DynBox<DataFrame>, String>> {
