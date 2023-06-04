@@ -1,11 +1,10 @@
 use chrono::naive::{NaiveDate, NaiveDateTime};
 use ocaml_interop::{
-    ocaml_export, ocaml_unpack_variant, BoxRoot, DynBox, FromOCaml, OCaml, OCamlBytes, OCamlFloat,
-    OCamlInt, OCamlList, OCamlRef, OCamlRuntime, ToOCaml,
+    ocaml_export, ocaml_unpack_variant, DynBox, FromOCaml, OCaml, OCamlBytes, OCamlFloat, OCamlInt,
+    OCamlList, OCamlRef, OCamlRuntime, ToOCaml,
 };
 use polars::prelude::prelude::*;
 use polars::prelude::*;
-use std::fmt::Display;
 use std::{borrow::Borrow, path::Path};
 
 struct PolarsTimeUnit(TimeUnit);
@@ -74,19 +73,6 @@ fn unwrap_abstract_vec<T>(v: Vec<Abstract<T>>) -> Vec<T> {
     v.into_iter().map(|Abstract(v)| v).collect()
 }
 
-fn box_result<'a, T: 'static, E: Display>(
-    cr: &'a mut &'a mut OCamlRuntime,
-    result: Result<T, E>,
-) -> OCaml<'a, Result<DynBox<T>, String>> {
-    match result {
-        Err(err) => Err::<BoxRoot<DynBox<_>>, _>(err.to_string()).to_ocaml(cr),
-        Ok(v) => {
-            let v: BoxRoot<DynBox<T>> = OCaml::box_value(cr, v).root();
-            Ok::<_, String>(v).to_ocaml(cr)
-        }
-    }
-}
-
 fn expr_unary_op<'a>(
     cr: &'a mut &'a mut OCamlRuntime,
     expr: OCamlRef<'a, DynBox<Expr>>,
@@ -118,30 +104,17 @@ ocaml_export! {
         let year: i32 = year.to_rust(cr);
         let month: Option<u32> = month.to_rust::<i32>(cr).try_into().ok();
         let day: Option<u32> = day.to_rust::<i32>(cr).try_into().ok();
-        match (month, day) {
-            (Some(month), Some(day)) => {
-                match NaiveDate::from_ymd_opt(year, month, day) {
-                    None => OCaml::none(),
-                    Some(date) => {
-                        let date: BoxRoot<DynBox<NaiveDate>> = OCaml::box_value(cr, date).root();
-                        Some(date).to_ocaml(cr)
-                    }
-                }
-            },
-            _ => OCaml::none()
-        }
+
+        month.zip(day)
+        .and_then(|(month, day)| NaiveDate::from_ymd_opt(year, month, day))
+        .map(Abstract)
+        .to_ocaml(cr)
     }
 
     fn rust_naive_date_to_naive_datetime(cr, date: OCamlRef<DynBox<NaiveDate>>) -> OCaml<Option<DynBox<NaiveDateTime>>> {
         let Abstract(date) = date.to_rust(cr);
 
-        match date.and_hms_opt(0, 0, 0) {
-            None => OCaml::none(),
-            Some(datetime) => {
-                let datetime: BoxRoot<DynBox<NaiveDateTime>> = OCaml::box_value(cr, datetime).root();
-                Some(datetime).to_ocaml(cr)
-            }
-        }
+        date.and_hms_opt(0, 0, 0).map(Abstract).to_ocaml(cr)
     }
 
     fn rust_expr_col(cr, name: OCamlRef<String>) -> OCaml<DynBox<Expr>> {
@@ -440,7 +413,9 @@ ocaml_export! {
         let path:String = path.to_rust(cr);
         let path:&Path = Path::new(&path);
 
-        box_result(cr, LazyFrame::scan_parquet(path, Default::default()))
+        LazyFrame::scan_parquet(path, Default::default())
+        .map(Abstract).map_err(|err| err.to_string())
+        .to_ocaml(cr)
     }
 
     fn rust_lazy_frame_to_dot(cr, lazy_frame: OCamlRef<DynBox<LazyFrame>>) -> OCaml<Result<String,String>>{
@@ -452,7 +427,9 @@ ocaml_export! {
 
     fn rust_lazy_frame_collect(cr, lazy_frame: OCamlRef<DynBox<LazyFrame>>)-> OCaml<Result<DynBox<DataFrame>, String>> {
         let Abstract(lazy_frame) = lazy_frame.to_rust(cr);
-        box_result(cr, lazy_frame.collect())
+        lazy_frame.collect()
+        .map(Abstract).map_err(|err| err.to_string())
+        .to_ocaml(cr)
     }
 
     fn rust_lazy_frame_select(cr, lazy_frame: OCamlRef<DynBox<LazyFrame>>, exprs: OCamlRef<OCamlList<DynBox<Expr>>>) -> OCaml<DynBox<LazyFrame>> {
