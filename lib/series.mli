@@ -16,9 +16,23 @@ external string_option
   -> t
   = "rust_series_new_string_option"
 
+val date : string -> Date.t list -> t
+val datetime : string -> Date.t list -> t
 val date_range : string -> start:Date.t -> stop:Date.t -> (t, string) result
 val date_range_exn : string -> start:Date.t -> stop:Date.t -> t
 val datetime_range : string -> start:Date.t -> stop:Date.t -> (t, string) result
 val datetime_range_exn : string -> start:Date.t -> stop:Date.t -> t
+val head : ?length:int -> t -> t
+val tail : ?length:int -> t -> t
+
+val sample_n
+  :  ?seed:int
+  -> t
+  -> n:int
+  -> with_replacement:bool
+  -> shuffle:bool
+  -> (t, string) result
+
+val sample_n_exn : ?seed:int -> t -> n:int -> with_replacement:bool -> shuffle:bool -> t
 external to_string_hum : t -> string = "rust_series_to_string_hum"
 val print : t -> unit

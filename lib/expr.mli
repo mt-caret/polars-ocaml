@@ -11,7 +11,9 @@ external float : float -> t = "rust_expr_float"
 external bool : bool -> t = "rust_expr_bool"
 external string : string -> t = "rust_expr_string"
 external sort : t -> descending:bool -> t = "rust_expr_sort"
-external head : t -> length:int option -> t = "rust_expr_head"
+val head : ?length:int -> t -> t
+val tail : ?length:int -> t -> t
+val sample_n : ?seed:int -> t -> n:int -> with_replacement:bool -> shuffle:bool -> t
 external filter : t -> predicate:t -> t = "rust_expr_filter"
 external sum : t -> t = "rust_expr_sum"
 external n_unique : t -> t = "rust_expr_n_unique"

@@ -1,3 +1,4 @@
+#![feature(try_blocks)]
 use chrono::naive::{NaiveDate, NaiveDateTime};
 use ocaml_interop::{
     ocaml_export, ocaml_unpack_variant, DynBox, FromOCaml, OCaml, OCamlBytes, OCamlFloat, OCamlInt,
@@ -102,18 +103,17 @@ enum WhenThenClause {
 ocaml_export! {
     fn rust_naive_date(cr, year: OCamlRef<OCamlInt>, month: OCamlRef<OCamlInt>, day: OCamlRef<OCamlInt>) -> OCaml<Option<DynBox<NaiveDate>>> {
         let year: i32 = year.to_rust(cr);
-        let month: Option<u32> = month.to_rust::<i32>(cr).try_into().ok();
-        let day: Option<u32> = day.to_rust::<i32>(cr).try_into().ok();
+        let month: i32 = month.to_rust(cr);
+        let day: i32 = day.to_rust(cr);
 
-        month.zip(day)
-        .and_then(|(month, day)| NaiveDate::from_ymd_opt(year, month, day))
-        .map(Abstract)
-        .to_ocaml(cr)
+        let result: Option<_> = try {
+            Abstract(NaiveDate::from_ymd_opt(year, month.try_into().ok()?, day.try_into().ok()?)?)
+        };
+        result.to_ocaml(cr)
     }
 
     fn rust_naive_date_to_naive_datetime(cr, date: OCamlRef<DynBox<NaiveDate>>) -> OCaml<Option<DynBox<NaiveDateTime>>> {
         let Abstract(date) = date.to_rust(cr);
-
         date.and_hms_opt(0, 0, 0).map(Abstract).to_ocaml(cr)
     }
 
@@ -168,24 +168,47 @@ ocaml_export! {
         expr_unary_op(cr, expr, |expr| expr.sort(descending))
     }
 
+    // TODO: the following functions are ~roughly the same between Expr, Series,
+    // and DataFrame; it would be nice if we could reduce the boilerplace around
+    // this:
+    // - head
+    // - tail
+    // - sample_n
+
     fn rust_expr_head(cr, expr: OCamlRef<DynBox<Expr>>, length: OCamlRef<Option<OCamlInt>>) -> OCaml<Option<DynBox<Expr>>> {
         let Abstract(expr) = expr.to_rust(cr);
         let length: Option<i64> = length.to_rust(cr);
 
-        match length {
-            None => {
-                Some(Abstract(expr.head(None))).to_ocaml(cr)
-            },
-            Some(length) => {
-                match length.try_into().ok() {
-                    // TODO: this should probably be an error instead of none
-                    None => OCaml::none(),
-                    Some(length) => {
-                        Some(Abstract(expr.head(Some(length)))).to_ocaml(cr)
-                    },
-                }
-            }
-        }
+        match length.map(|length| length.try_into().ok()) {
+            None => Some(Abstract(expr.head(None))),
+            Some(None) => None,
+            Some(Some(length)) => Some(Abstract(expr.head(Some(length)))),
+        }.to_ocaml(cr)
+    }
+
+    fn rust_expr_tail(cr, expr: OCamlRef<DynBox<Expr>>, length: OCamlRef<Option<OCamlInt>>) -> OCaml<Option<DynBox<Expr>>> {
+        let Abstract(expr) = expr.to_rust(cr);
+        let length: Option<i64> = length.to_rust(cr);
+
+        match length.map(|length| length.try_into().ok()) {
+            None => Some(Abstract(expr.tail(None))),
+            Some(None) => None,
+            Some(Some(length)) => Some(Abstract(expr.tail(Some(length)))),
+        }.to_ocaml(cr)
+    }
+
+    fn rust_expr_sample_n(cr, expr: OCamlRef<DynBox<Expr>>, n: OCamlRef<OCamlInt>, with_replacement: OCamlRef<bool>, shuffle: OCamlRef<bool>, seed: OCamlRef<Option<OCamlInt>>) -> OCaml<Option<DynBox<Expr>>> {
+        let result: Option<_> = try {
+            let Abstract(expr) = expr.to_rust(cr);
+            let n: usize = n.to_rust::<i64>(cr).try_into().ok()?;
+            let with_replacement: bool = with_replacement.to_rust(cr);
+            let shuffle: bool = shuffle.to_rust(cr);
+            let seed: Option<Result<u64,_>> = seed.to_rust::<Option<i64>>(cr).map(|seed| seed.try_into());
+            let seed: Option<u64> = seed.map_or(Ok(None), |seed| seed.map(Some)).ok()?;
+
+            Abstract(expr.sample_n(n, with_replacement, shuffle, seed))
+        };
+        result.to_ocaml(cr)
     }
 
     fn rust_expr_filter(cr, expr: OCamlRef<DynBox<Expr>>, predicate: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
@@ -363,6 +386,18 @@ ocaml_export! {
         OCaml::box_value(cr, Series::new(&name, values))
     }
 
+    fn rust_series_new_datetime(cr, name: OCamlRef<String>, values: OCamlRef<OCamlList<DynBox<NaiveDateTime>>>) -> OCaml<DynBox<Series>> {
+        let name: String = name.to_rust(cr);
+        let values = unwrap_abstract_vec(values.to_rust(cr));
+        OCaml::box_value(cr, Series::new(&name, values))
+    }
+
+    fn rust_series_new_date(cr, name: OCamlRef<String>, values: OCamlRef<OCamlList<DynBox<NaiveDate>>>) -> OCaml<DynBox<Series>> {
+        let name: String = name.to_rust(cr);
+        let values = unwrap_abstract_vec(values.to_rust(cr));
+        OCaml::box_value(cr, Series::new(&name, values))
+    }
+
     fn rust_series_date_range(cr, name: OCamlRef<String>, start: OCamlRef<DynBox<NaiveDateTime>>, stop: OCamlRef<DynBox<NaiveDateTime>>, cast_to_date: OCamlRef<bool>) -> OCaml<Result<DynBox<Series>,String>> {
         let name: String = name.to_rust(cr);
 
@@ -387,6 +422,43 @@ ocaml_export! {
         series.to_ocaml(cr)
     }
 
+    fn rust_series_head(cr, series: OCamlRef<DynBox<Series>>, length: OCamlRef<Option<OCamlInt>>) -> OCaml<Option<DynBox<Series>>> {
+        let Abstract(series) = series.to_rust(cr);
+        let length: Option<i64> = length.to_rust(cr);
+
+        match length.map(|length| length.try_into().ok()) {
+            None => Some(Abstract(series.head(None))),
+            Some(None) => None,
+            Some(Some(length)) => Some(Abstract(series.head(Some(length)))),
+        }.to_ocaml(cr)
+    }
+
+    fn rust_series_tail(cr, series: OCamlRef<DynBox<Series>>, length: OCamlRef<Option<OCamlInt>>) -> OCaml<Option<DynBox<Series>>> {
+        let Abstract(series) = series.to_rust(cr);
+        let length: Option<i64> = length.to_rust(cr);
+
+        match length.map(|length| length.try_into().ok()) {
+            None => Some(Abstract(series.tail(None))),
+            Some(None) => None,
+            Some(Some(length)) => Some(Abstract(series.tail(Some(length)))),
+        }.to_ocaml(cr)
+    }
+
+    fn rust_series_sample_n(cr, series: OCamlRef<DynBox<Series>>, n: OCamlRef<OCamlInt>, with_replacement: OCamlRef<bool>, shuffle: OCamlRef<bool>, seed: OCamlRef<Option<OCamlInt>>) -> OCaml<Option<Result<DynBox<Series>,String>>> {
+        let result: Option<_> = try {
+            let Abstract(series) = series.to_rust(cr);
+            let n: usize = n.to_rust::<i64>(cr).try_into().ok()?;
+            let with_replacement: bool = with_replacement.to_rust(cr);
+            let shuffle: bool = shuffle.to_rust(cr);
+            let seed: Option<Result<u64,_>> = seed.to_rust::<Option<i64>>(cr).map(|seed| seed.try_into());
+            let seed: Option<u64> = seed.map_or(Ok(None), |seed| seed.map(Some)).ok()?;
+
+            series.sample_n(n, with_replacement, shuffle, seed)
+            .map(Abstract).map_err(|err| err.to_string())
+        };
+        result.to_ocaml(cr)
+    }
+
     fn rust_series_to_string_hum(cr, series: OCamlRef<DynBox<Series>>) -> OCaml<String> {
         let Abstract(series) = series.to_rust(cr);
         ToString::to_string(&series).to_ocaml(cr)
@@ -398,14 +470,64 @@ ocaml_export! {
         DataFrame::new(series).map(Abstract).map_err(|err| err.to_string()).to_ocaml(cr)
     }
 
+   fn rust_data_frame_describe(cr, data_frame: OCamlRef<DynBox<DataFrame>>, percentiles: OCamlRef<Option<OCamlList<OCamlFloat>>>) -> OCaml<Result<DynBox<DataFrame>,String>> {
+        let Abstract(data_frame) = data_frame.to_rust(cr);
+        let percentiles: Option<Vec<f64>> = percentiles.to_rust(cr);
+
+        // TODO: I'm not sure why I can't do this with something like
+        // .map(|percentiles| percentiles.as_slice()
+        match percentiles {
+            None => data_frame.describe(None),
+            Some(percentiles) => data_frame.describe(Some(percentiles.as_slice()))
+        }
+        .map(Abstract).map_err(|err| err.to_string()).to_ocaml(cr)
+    }
+
+   fn rust_data_frame_lazy(cr, data_frame: OCamlRef<DynBox<DataFrame>>) -> OCaml<DynBox<LazyFrame>> {
+        let Abstract(data_frame) = data_frame.to_rust(cr);
+        OCaml::box_value(cr, data_frame.lazy())
+    }
+
+    fn rust_data_frame_head(cr, data_frame: OCamlRef<DynBox<DataFrame>>, length: OCamlRef<Option<OCamlInt>>) -> OCaml<Option<DynBox<DataFrame>>> {
+        let Abstract(data_frame) = data_frame.to_rust(cr);
+        let length: Option<i64> = length.to_rust(cr);
+
+        match length.map(|length| length.try_into().ok()) {
+            None => Some(Abstract(data_frame.head(None))),
+            Some(None) => None,
+            Some(Some(length)) => Some(Abstract(data_frame.head(Some(length)))),
+        }.to_ocaml(cr)
+    }
+
+    fn rust_data_frame_tail(cr, data_frame: OCamlRef<DynBox<DataFrame>>, length: OCamlRef<Option<OCamlInt>>) -> OCaml<Option<DynBox<DataFrame>>> {
+        let Abstract(data_frame) = data_frame.to_rust(cr);
+        let length: Option<i64> = length.to_rust(cr);
+
+        match length.map(|length| length.try_into().ok()) {
+            None => Some(Abstract(data_frame.tail(None))),
+            Some(None) => None,
+            Some(Some(length)) => Some(Abstract(data_frame.tail(Some(length)))),
+        }.to_ocaml(cr)
+    }
+
+    fn rust_data_frame_sample_n(cr, data_frame: OCamlRef<DynBox<DataFrame>>, n: OCamlRef<OCamlInt>, with_replacement: OCamlRef<bool>, shuffle: OCamlRef<bool>, seed: OCamlRef<Option<OCamlInt>>) -> OCaml<Option<Result<DynBox<DataFrame>,String>>> {
+        let result: Option<_> = try {
+            let Abstract(data_frame) = data_frame.to_rust(cr);
+            let n: usize = n.to_rust::<i64>(cr).try_into().ok()?;
+            let with_replacement: bool = with_replacement.to_rust(cr);
+            let shuffle: bool = shuffle.to_rust(cr);
+            let seed: Option<Result<u64,_>> = seed.to_rust::<Option<i64>>(cr).map(|seed| seed.try_into());
+            let seed: Option<u64> = seed.map_or(Ok(None), |seed| seed.map(Some)).ok()?;
+
+            data_frame.sample_n(n, with_replacement, shuffle, seed)
+            .map(Abstract).map_err(|err| err.to_string())
+        };
+        result.to_ocaml(cr)
+    }
+
     fn rust_data_frame_to_string_hum(cr, data_frame: OCamlRef<DynBox<DataFrame>>) -> OCaml<String> {
         let Abstract(data_frame) = data_frame.to_rust(cr);
         data_frame.to_string().to_ocaml(cr)
-    }
-
-    fn rust_data_frame_lazy(cr, data_frame: OCamlRef<DynBox<DataFrame>>) -> OCaml<DynBox<LazyFrame>> {
-        let Abstract(data_frame) = data_frame.to_rust(cr);
-        OCaml::box_value(cr, data_frame.lazy())
     }
 
     // TODO: properly return error type instead of a string
@@ -437,6 +559,8 @@ ocaml_export! {
         let Abstract(lazy_frame) = lazy_frame.to_rust(cr);
         OCaml::box_value(cr, lazy_frame.select(&exprs))
     }
+
+
 }
 
 #[cfg(test)]

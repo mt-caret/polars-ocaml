@@ -10,6 +10,18 @@ external bool : string -> bool list -> t = "rust_series_new_bool"
 external bool_option : string -> bool option list -> t = "rust_series_new_bool_option"
 external string : string -> string list -> t = "rust_series_new_string"
 
+external datetime
+  :  string
+  -> Utils.Naive_datetime.t list
+  -> t
+  = "rust_series_new_datetime"
+
+let datetime name dates = datetime name (List.map dates ~f:Utils.Naive_datetime.of_date)
+
+external date : string -> Utils.Naive_date.t list -> t = "rust_series_new_date"
+
+let date name dates = date name (List.map dates ~f:Utils.Naive_date.of_date)
+
 external string_option
   :  string
   -> string option list
@@ -25,12 +37,11 @@ external date_range
   = "rust_series_date_range"
 
 let date_range_castable name ~start ~stop ~cast_to_date =
-  let to_datetime date =
-    Utils.Naive_date.of_date date
-    |> Utils.Naive_datetime.of_naive_date
-    |> Option.value_exn ~here:[%here]
-  in
-  date_range name (to_datetime start) (to_datetime stop) ~cast_to_date
+  date_range
+    name
+    (Utils.Naive_datetime.of_date start)
+    (Utils.Naive_datetime.of_date stop)
+    ~cast_to_date
 ;;
 
 let date_range = date_range_castable ~cast_to_date:true
@@ -43,6 +54,33 @@ let datetime_range = date_range_castable ~cast_to_date:false
 
 let datetime_range_exn name ~start ~stop =
   datetime_range name ~start ~stop
+  |> Result.map_error ~f:Error.of_string
+  |> Or_error.ok_exn
+;;
+
+external head : t -> length:int option -> t option = "rust_series_head"
+
+let head ?length t = head t ~length |> Option.value_exn ~here:[%here]
+
+external tail : t -> length:int option -> t option = "rust_series_tail"
+
+let tail ?length t = tail t ~length |> Option.value_exn ~here:[%here]
+
+external sample_n
+  :  t
+  -> n:int
+  -> with_replacement:bool
+  -> shuffle:bool
+  -> seed:int option
+  -> (t, string) result option
+  = "rust_series_sample_n"
+
+let sample_n ?seed t ~n ~with_replacement ~shuffle =
+  sample_n t ~n ~with_replacement ~shuffle ~seed |> Option.value_exn ~here:[%here]
+;;
+
+let sample_n_exn ?seed t ~n ~with_replacement ~shuffle =
+  sample_n ?seed t ~n ~with_replacement ~shuffle
   |> Result.map_error ~f:Error.of_string
   |> Or_error.ok_exn
 ;;

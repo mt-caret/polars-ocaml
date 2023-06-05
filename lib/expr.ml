@@ -14,7 +14,27 @@ external float : float -> t = "rust_expr_float"
 external bool : bool -> t = "rust_expr_bool"
 external string : string -> t = "rust_expr_string"
 external sort : t -> descending:bool -> t = "rust_expr_sort"
-external head : t -> length:int option -> t = "rust_expr_head"
+external head : t -> length:int option -> t option = "rust_expr_head"
+
+let head ?length t = head t ~length |> Option.value_exn ~here:[%here]
+
+external tail : t -> length:int option -> t option = "rust_expr_tail"
+
+let tail ?length t = tail t ~length |> Option.value_exn ~here:[%here]
+
+external sample_n
+  :  t
+  -> n:int
+  -> with_replacement:bool
+  -> shuffle:bool
+  -> seed:int option
+  -> t option
+  = "rust_expr_sample_n"
+
+let sample_n ?seed t ~n ~with_replacement ~shuffle =
+  sample_n t ~n ~with_replacement ~shuffle ~seed |> Option.value_exn ~here:[%here]
+;;
+
 external filter : t -> predicate:t -> t = "rust_expr_filter"
 external sum : t -> t = "rust_expr_sum"
 external n_unique : t -> t = "rust_expr_n_unique"

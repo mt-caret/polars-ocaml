@@ -20,4 +20,10 @@ module Naive_datetime = struct
   type t
 
   external of_naive_date : Naive_date.t -> t option = "rust_naive_date_to_naive_datetime"
+
+  let of_naive_date naive_date =
+    of_naive_date naive_date |> Option.value_exn ~here:[%here]
+  ;;
+
+  let of_date date = Naive_date.of_date date |> of_naive_date
 end
