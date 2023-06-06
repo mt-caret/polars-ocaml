@@ -52,6 +52,7 @@ let sample_n_exn ?seed t ~n ~with_replacement ~shuffle =
   |> Or_error.ok_exn
 ;;
 
+external schema : t -> Schema.t = "rust_data_frame_schema"
 external to_string_hum : t -> string = "rust_data_frame_to_string_hum"
 
 let print t = print_endline (to_string_hum t)

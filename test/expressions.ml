@@ -412,7 +412,8 @@ let%expect_test "Casting" =
     ~exprs:
       Expr.
         [ col "date" |> Dt.strftime ~format:"%Y-%m-%d"
-        ; col "string" |> Str.strptime ~type_:(Datetime Microseconds) ~format:"%Y-%m-%d"
+        ; col "string"
+          |> Str.strptime ~type_:(Datetime (Microseconds, None)) ~format:"%Y-%m-%d"
         ]
   |> Data_frame.print;
   [%expect

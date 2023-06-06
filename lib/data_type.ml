@@ -1,8 +1,11 @@
+open! Core
+
 module Time_unit = struct
   type t =
     | Nanoseconds
     | Microseconds
     | Milliseconds
+  [@@deriving sexp, enumerate]
 end
 
 type t =
@@ -20,7 +23,10 @@ type t =
   | Utf8
   | Binary
   | Date
-  | Datetime of Time_unit.t
+  | Datetime of Time_unit.t * string option
+  | Duration of Time_unit.t
   | Time
+  | List of t
   | Null
   | Unknown
+[@@deriving sexp]

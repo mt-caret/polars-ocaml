@@ -1,8 +1,8 @@
 #![feature(try_blocks)]
 use chrono::naive::{NaiveDate, NaiveDateTime};
 use ocaml_interop::{
-    ocaml_export, ocaml_unpack_variant, DynBox, FromOCaml, OCaml, OCamlBytes, OCamlFloat, OCamlInt,
-    OCamlList, OCamlRef, OCamlRuntime, ToOCaml,
+    ocaml_alloc_tagged_block, ocaml_alloc_variant, ocaml_export, ocaml_unpack_variant, DynBox,
+    FromOCaml, OCaml, OCamlBytes, OCamlFloat, OCamlInt, OCamlList, OCamlRef, OCamlRuntime, ToOCaml,
 };
 use polars::prelude::prelude::*;
 use polars::prelude::*;
@@ -20,6 +20,19 @@ unsafe impl FromOCaml<TimeUnit> for PolarsTimeUnit {
             }
         };
         PolarsTimeUnit(result.expect("Failure when unpacking an OCaml<TimeUnit> variant into PolarsTimeUnit (unexpected tag value"))
+    }
+}
+
+unsafe impl ToOCaml<TimeUnit> for PolarsTimeUnit {
+    fn to_ocaml<'a>(&self, cr: &'a mut OCamlRuntime) -> OCaml<'a, TimeUnit> {
+        let PolarsTimeUnit(timeunit) = self;
+        ocaml_alloc_variant! {
+            cr, timeunit => {
+                TimeUnit::Nanoseconds,
+                TimeUnit::Microseconds,
+                TimeUnit::Milliseconds,
+            }
+        }
     }
 }
 
@@ -43,15 +56,66 @@ unsafe impl FromOCaml<DataType> for PolarsDataType {
                 DataType::Utf8,
                 DataType::Binary,
                 DataType::Date,
-                DataType::Datetime(timeunit: TimeUnit) => {
+                DataType::Datetime(timeunit: TimeUnit, timezone: Option<String>) => {
                     let PolarsTimeUnit(timeunit) = timeunit;
-                    DataType::Datetime(timeunit, None)},
+                    DataType::Datetime(timeunit, timezone)},
+                DataType::Duration(timeunit: TimeUnit) => {
+                    let PolarsTimeUnit(timeunit) = timeunit;
+                    DataType::Duration(timeunit)},
                 DataType::Time,
+                DataType::List(datatype: DataType) => {
+                    let PolarsDataType(datatype) = datatype;
+                    DataType::List(Box::new(datatype))
+                },
                 DataType::Null,
                 DataType::Unknown,
             }
         };
         PolarsDataType(result.expect("Failure when unpacking an OCaml<DataType> variant into PolarsDataType (unexpected tag value"))
+    }
+}
+
+unsafe fn ocaml_value<'a, T>(cr: &'a mut OCamlRuntime, n: i32) -> OCaml<'a, T> {
+    unsafe { OCaml::new(cr, OCaml::of_i32(n).raw()) }
+}
+
+unsafe impl ToOCaml<DataType> for PolarsDataType {
+    fn to_ocaml<'a>(&self, cr: &'a mut OCamlRuntime) -> OCaml<'a, DataType> {
+        let PolarsDataType(datatype) = self;
+        unsafe {
+            match datatype {
+                DataType::Boolean => ocaml_value(cr, 0),
+                DataType::UInt8 => ocaml_value(cr, 1),
+                DataType::UInt16 => ocaml_value(cr, 2),
+                DataType::UInt32 => ocaml_value(cr, 3),
+                DataType::UInt64 => ocaml_value(cr, 4),
+                DataType::Int8 => ocaml_value(cr, 5),
+                DataType::Int16 => ocaml_value(cr, 6),
+                DataType::Int32 => ocaml_value(cr, 7),
+                DataType::Int64 => ocaml_value(cr, 8),
+                DataType::Float32 => ocaml_value(cr, 9),
+                DataType::Float64 => ocaml_value(cr, 10),
+                DataType::Utf8 => ocaml_value(cr, 11),
+                DataType::Binary => ocaml_value(cr, 12),
+                DataType::Date => ocaml_value(cr, 13),
+                DataType::Datetime(timeunit, timezone) => {
+                    let timeunit = PolarsTimeUnit(*timeunit);
+                    let timezone = timezone.clone();
+                    ocaml_alloc_tagged_block!(cr, 0, timeunit : TimeUnit, timezone: Option<String>)
+                }
+                DataType::Duration(timeunit) => {
+                    let timeunit = PolarsTimeUnit(*timeunit);
+                    ocaml_alloc_tagged_block!(cr, 1,  timeunit: TimeUnit)
+                }
+                DataType::Time => ocaml_value(cr, 14),
+                DataType::List(datatype) => {
+                    let datatype = PolarsDataType(*datatype.clone());
+                    ocaml_alloc_tagged_block!(cr, 2,  datatype: DataType)
+                }
+                DataType::Null => ocaml_value(cr, 15),
+                DataType::Unknown => ocaml_value(cr, 16),
+            }
+        }
     }
 }
 
@@ -525,6 +589,11 @@ ocaml_export! {
         result.to_ocaml(cr)
     }
 
+    fn rust_data_frame_schema(cr, data_frame: OCamlRef<DynBox<DataFrame>>) -> OCaml<DynBox<Schema>> {
+        let Abstract(data_frame) = data_frame.to_rust(cr);
+        OCaml::box_value(cr, data_frame.schema())
+    }
+
     fn rust_data_frame_to_string_hum(cr, data_frame: OCamlRef<DynBox<DataFrame>>) -> OCaml<String> {
         let Abstract(data_frame) = data_frame.to_rust(cr);
         data_frame.to_string().to_ocaml(cr)
@@ -560,7 +629,32 @@ ocaml_export! {
         OCaml::box_value(cr, lazy_frame.select(&exprs))
     }
 
+    fn rust_lazy_frame_schema(cr, lazy_frame: OCamlRef<DynBox<LazyFrame>>) -> OCaml<Result<DynBox<Schema>,String>> {
+        let Abstract(lazy_frame) = lazy_frame.to_rust(cr);
+        lazy_frame.schema()
+        .map(|schema| Abstract((*schema).clone()))
+        .map_err(|err| err.to_string()).to_ocaml(cr)
+    }
 
+    fn rust_schema_create(cr, fields: OCamlRef<OCamlList<(String, DataType)>>) -> OCaml<DynBox<Schema>> {
+        let fields: Vec<(String, PolarsDataType)> = fields.to_rust(cr);
+        let schema: Schema =
+            fields
+            .into_iter()
+            .map(|(name, PolarsDataType(data_type))| Field::new(&name, data_type))
+            .collect();
+        OCaml::box_value(cr, schema)
+    }
+
+    fn rust_schema_to_fields(cr, schema: OCamlRef<DynBox<Schema>>) -> OCaml<OCamlList<(String, DataType)>> {
+        let Abstract(schema) = schema.to_rust(cr);
+        let fields: Vec<(String, PolarsDataType)> =
+            schema
+            .iter_fields()
+            .map(|Field { name, dtype }| (name.to_string(), PolarsDataType(dtype)))
+            .collect();
+        fields.to_ocaml(cr)
+    }
 }
 
 #[cfg(test)]
