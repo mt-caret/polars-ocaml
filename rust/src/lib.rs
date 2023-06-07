@@ -82,6 +82,8 @@ unsafe fn ocaml_value<'a, T>(cr: &'a mut OCamlRuntime, n: i32) -> OCaml<'a, T> {
 unsafe impl ToOCaml<DataType> for PolarsDataType {
     fn to_ocaml<'a>(&self, cr: &'a mut OCamlRuntime) -> OCaml<'a, DataType> {
         let PolarsDataType(datatype) = self;
+        // We expand out the macro here since we need to do some massaging of the
+        // values to get things into the right shape to convert to OCaml values
         unsafe {
             match datatype {
                 DataType::Boolean => ocaml_value(cr, 0),
