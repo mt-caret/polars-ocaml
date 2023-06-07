@@ -234,6 +234,18 @@ ocaml_export! {
         expr_unary_op(cr, expr, |expr| expr.sort(descending))
     }
 
+    fn rust_expr_first(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
+        expr_unary_op(cr, expr, |expr| expr.first())
+    }
+
+    fn rust_expr_last(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
+        expr_unary_op(cr, expr, |expr| expr.last())
+    }
+
+    fn rust_expr_reverse(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
+        expr_unary_op(cr, expr, |expr| expr.reverse())
+    }
+
     // TODO: the following functions are ~roughly the same between Expr, Series,
     // and DataFrame; it would be nice if we could reduce the boilerplace around
     // this:
@@ -285,12 +297,28 @@ ocaml_export! {
         expr_unary_op(cr, expr, |expr| expr.sum())
     }
 
+    fn rust_expr_mean(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
+        expr_unary_op(cr, expr, |expr| expr.mean())
+    }
+
+    fn rust_expr_count(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
+        expr_unary_op(cr, expr, |expr| expr.count())
+    }
+
     fn rust_expr_n_unique(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
         expr_unary_op(cr, expr, |expr| expr.n_unique())
     }
 
     fn rust_expr_approx_unique(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
         expr_unary_op(cr, expr, |expr| expr.approx_unique())
+    }
+
+    fn rust_expr_is_null(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
+        expr_unary_op(cr, expr, |expr| expr.is_null())
+    }
+
+    fn rust_expr_is_not_null(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
+        expr_unary_op(cr, expr, |expr| expr.is_not_null())
     }
 
     fn rust_expr_when_then(cr, when_then_clauses: OCamlRef<OCamlList<(DynBox<Expr>, DynBox<Expr>)>>, otherwise: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
@@ -625,10 +653,31 @@ ocaml_export! {
         .to_ocaml(cr)
     }
 
+    fn rust_lazy_frame_filter(cr, lazy_frame: OCamlRef<DynBox<LazyFrame>>, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<LazyFrame>> {
+        let Abstract(lazy_frame) = lazy_frame.to_rust(cr);
+        let Abstract(expr) = expr.to_rust(cr);
+        OCaml::box_value(cr, lazy_frame.filter(expr))
+    }
+
     fn rust_lazy_frame_select(cr, lazy_frame: OCamlRef<DynBox<LazyFrame>>, exprs: OCamlRef<OCamlList<DynBox<Expr>>>) -> OCaml<DynBox<LazyFrame>> {
         let exprs = unwrap_abstract_vec(exprs.to_rust(cr));
         let Abstract(lazy_frame) = lazy_frame.to_rust(cr);
         OCaml::box_value(cr, lazy_frame.select(&exprs))
+    }
+
+    fn rust_lazy_frame_with_columns(cr, lazy_frame: OCamlRef<DynBox<LazyFrame>>, exprs: OCamlRef<OCamlList<DynBox<Expr>>>) -> OCaml<DynBox<LazyFrame>> {
+        let exprs = unwrap_abstract_vec(exprs.to_rust(cr));
+        let Abstract(lazy_frame) = lazy_frame.to_rust(cr);
+        OCaml::box_value(cr, lazy_frame.with_columns(&exprs))
+    }
+
+    fn rust_lazy_frame_groupby(cr, lazy_frame: OCamlRef<DynBox<LazyFrame>>, is_stable: OCamlRef<bool>, by: OCamlRef<OCamlList<DynBox<Expr>>>, agg: OCamlRef<OCamlList<DynBox<Expr>>>) -> OCaml<DynBox<LazyFrame>> {
+        let is_stable = is_stable.to_rust(cr);
+        let by = unwrap_abstract_vec(by.to_rust(cr));
+        let agg = unwrap_abstract_vec(agg.to_rust(cr));
+        let Abstract(lazy_frame) = lazy_frame.to_rust(cr);
+        let groupby = if is_stable { lazy_frame.groupby_stable(by) } else { lazy_frame.groupby(by) };
+        OCaml::box_value(cr, groupby.agg(agg))
     }
 
     fn rust_lazy_frame_schema(cr, lazy_frame: OCamlRef<DynBox<LazyFrame>>) -> OCaml<Result<DynBox<Schema>,String>> {

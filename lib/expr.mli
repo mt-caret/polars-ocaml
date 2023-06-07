@@ -10,14 +10,21 @@ external int : int -> t = "rust_expr_int"
 external float : float -> t = "rust_expr_float"
 external bool : bool -> t = "rust_expr_bool"
 external string : string -> t = "rust_expr_string"
-external sort : t -> descending:bool -> t = "rust_expr_sort"
+val sort : ?descending:bool -> t -> t
+external first : t -> t = "rust_expr_first"
+external last : t -> t = "rust_expr_last"
+external reverse : t -> t = "rust_expr_reverse"
 val head : ?length:int -> t -> t
 val tail : ?length:int -> t -> t
 val sample_n : ?seed:int -> t -> n:int -> with_replacement:bool -> shuffle:bool -> t
 external filter : t -> predicate:t -> t = "rust_expr_filter"
 external sum : t -> t = "rust_expr_sum"
+external mean : t -> t = "rust_expr_mean"
+external count : t -> t = "rust_expr_count"
 external n_unique : t -> t = "rust_expr_n_unique"
 external approx_unique : t -> t = "rust_expr_approx_unique"
+external is_null : t -> t = "rust_expr_is_null"
+external is_not_null : t -> t = "rust_expr_is_not_null"
 external when_ : (t * t) list -> otherwise:t -> t = "rust_expr_when_then"
 external alias : t -> name:string -> t = "rust_expr_alias"
 external prefix : t -> prefix:string -> t = "rust_expr_prefix"

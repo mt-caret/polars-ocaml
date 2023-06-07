@@ -14,6 +14,12 @@ external float : float -> t = "rust_expr_float"
 external bool : bool -> t = "rust_expr_bool"
 external string : string -> t = "rust_expr_string"
 external sort : t -> descending:bool -> t = "rust_expr_sort"
+
+let sort ?(descending = false) t = sort t ~descending
+
+external first : t -> t = "rust_expr_first"
+external last : t -> t = "rust_expr_last"
+external reverse : t -> t = "rust_expr_reverse"
 external head : t -> length:int option -> t option = "rust_expr_head"
 
 let head ?length t = head t ~length |> Option.value_exn ~here:[%here]
@@ -37,8 +43,12 @@ let sample_n ?seed t ~n ~with_replacement ~shuffle =
 
 external filter : t -> predicate:t -> t = "rust_expr_filter"
 external sum : t -> t = "rust_expr_sum"
+external mean : t -> t = "rust_expr_mean"
+external count : t -> t = "rust_expr_count"
 external n_unique : t -> t = "rust_expr_n_unique"
 external approx_unique : t -> t = "rust_expr_approx_unique"
+external is_null : t -> t = "rust_expr_is_null"
+external is_not_null : t -> t = "rust_expr_is_not_null"
 external when_ : (t * t) list -> otherwise:t -> t = "rust_expr_when_then"
 external alias : t -> name:string -> t = "rust_expr_alias"
 external prefix : t -> prefix:string -> t = "rust_expr_prefix"

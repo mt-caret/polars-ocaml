@@ -9,6 +9,17 @@ val describe_exn : ?percentiles:float list -> t -> t
 external lazy_ : t -> Lazy_frame.t = "rust_data_frame_lazy"
 val select : t -> exprs:Expr.t list -> (t, string) result
 val select_exn : t -> exprs:Expr.t list -> t
+val with_columns : t -> exprs:Expr.t list -> (t, string) result
+val with_columns_exn : t -> exprs:Expr.t list -> t
+
+val groupby
+  :  ?is_stable:bool
+  -> t
+  -> by:Expr.t list
+  -> agg:Expr.t list
+  -> (t, string) result
+
+val groupby_exn : ?is_stable:bool -> t -> by:Expr.t list -> agg:Expr.t list -> t
 val head : ?length:int -> t -> t
 val tail : ?length:int -> t -> t
 

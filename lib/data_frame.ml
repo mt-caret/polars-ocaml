@@ -25,6 +25,22 @@ external lazy_ : t -> Lazy_frame.t = "rust_data_frame_lazy"
 let select t ~exprs = lazy_ t |> Lazy_frame.select ~exprs |> Lazy_frame.collect
 let select_exn t ~exprs = lazy_ t |> Lazy_frame.select ~exprs |> Lazy_frame.collect_exn
 
+let with_columns t ~exprs =
+  lazy_ t |> Lazy_frame.with_columns ~exprs |> Lazy_frame.collect
+;;
+
+let with_columns_exn t ~exprs =
+  lazy_ t |> Lazy_frame.with_columns ~exprs |> Lazy_frame.collect_exn
+;;
+
+let groupby ?is_stable t ~by ~agg =
+  lazy_ t |> Lazy_frame.groupby ?is_stable ~by ~agg |> Lazy_frame.collect
+;;
+
+let groupby_exn ?is_stable t ~by ~agg =
+  lazy_ t |> Lazy_frame.groupby ?is_stable ~by ~agg |> Lazy_frame.collect_exn
+;;
+
 external head : t -> length:int option -> t option = "rust_data_frame_head"
 
 let head ?length t = head t ~length |> Option.value_exn ~here:[%here]
