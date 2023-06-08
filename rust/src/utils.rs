@@ -132,3 +132,7 @@ unsafe impl<T: 'static + Clone> ToOCaml<DynBox<T>> for Abstract<T> {
         OCaml::box_value(cr, self.0.clone())
     }
 }
+
+pub fn unwrap_abstract_vec<T>(v: Vec<Abstract<T>>) -> Vec<T> {
+    v.into_iter().map(|Abstract(v)| v).collect()
+}
