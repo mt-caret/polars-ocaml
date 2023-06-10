@@ -11,6 +11,14 @@ ocaml_export! {
         DataFrame::new(series).map(Abstract).map_err(|err| err.to_string()).to_ocaml(cr)
     }
 
+    fn rust_data_frame_read_csv(cr, path: OCamlRef<String>) -> OCaml<Result<DynBox<DataFrame>,String>> {
+        let path: String = path.to_rust(cr);
+
+        CsvReader::from_path(&path)
+        .and_then(|csv_reader| csv_reader.finish())
+        .map(Abstract).map_err(|err| err.to_string()).to_ocaml(cr)
+    }
+
    fn rust_data_frame_describe(cr, data_frame: OCamlRef<DynBox<DataFrame>>, percentiles: OCamlRef<Option<OCamlList<OCamlFloat>>>) -> OCaml<Result<DynBox<DataFrame>,String>> {
         let Abstract(data_frame) = data_frame.to_rust(cr);
         let percentiles: Option<Vec<f64>> = percentiles.to_rust(cr);
@@ -27,6 +35,28 @@ ocaml_export! {
    fn rust_data_frame_lazy(cr, data_frame: OCamlRef<DynBox<DataFrame>>) -> OCaml<DynBox<LazyFrame>> {
         let Abstract(data_frame) = data_frame.to_rust(cr);
         OCaml::box_value(cr, data_frame.lazy())
+    }
+
+    fn rust_data_frame_column(cr, data_frame: OCamlRef<DynBox<DataFrame>>, name: OCamlRef<String>) -> OCaml<Result<DynBox<Series>,String>> {
+        let Abstract(data_frame) = data_frame.to_rust(cr);
+        let name: String = name.to_rust(cr);
+        data_frame.column(&name)
+        .map(|series| Abstract(series.clone()))
+        .map_err(|err| err.to_string())
+        .to_ocaml(cr)
+    }
+
+    fn rust_data_frame_columns(cr, data_frame: OCamlRef<DynBox<DataFrame>>, names: OCamlRef<OCamlList<String>>) -> OCaml<Result<OCamlList<DynBox<Series>>,String>> {
+        let Abstract(data_frame) = data_frame.to_rust(cr);
+        let names: Vec<String> = names.to_rust(cr);
+        data_frame.columns(&names)
+        .map(|series|
+            series
+            .into_iter()
+            .map(|series| Abstract(series.clone()))
+            .collect::<Vec<Abstract<_>>>())
+        .map_err(|err| err.to_string())
+        .to_ocaml(cr)
     }
 
     fn rust_data_frame_head(cr, data_frame: OCamlRef<DynBox<DataFrame>>, length: OCamlRef<Option<OCamlInt>>) -> OCaml<Option<DynBox<DataFrame>>> {

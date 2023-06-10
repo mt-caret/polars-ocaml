@@ -1,6 +1,8 @@
 (library
  (name polars_tests)
  (libraries core polars)
- (inline_tests)
+ (inline_tests
+  (deps
+   (glob_files ./data/*.csv)))
  (preprocess
   (pps ppx_jane)))

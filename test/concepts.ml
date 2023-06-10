@@ -102,6 +102,7 @@ let%expect_test "Data Structures" =
     └────────────┴──────────┴────────────┴──────────┘ |}]
 ;;
 
+(* Examples from https://pola-rs.github.io/polars-book/user-guide/concepts/contexts/ *)
 let%expect_test "Contexts" =
   let r = Random.State.make [||] in
   let df =
@@ -198,6 +199,11 @@ let%expect_test "Contexts" =
   let out =
     Data_frame.groupby_exn
       df
+      (* TODO: the default is false, which originally caused this test to be
+         nondeterministic (I assumed that this was unstable in the sense of an
+         unstable sort, not nondeterminism). Perhaps the default should be
+         is_stable=true? *)
+      ~is_stable:true
       ~by:Expr.[ col "groups" ]
       ~agg:
         Expr.
@@ -219,8 +225,39 @@ let%expect_test "Contexts" =
     │ ---    ┆ ---  ┆ ---   ┆ ---        ┆ ---            │
     │ str    ┆ i64  ┆ u32   ┆ f64        ┆ list[str]      │
     ╞════════╪══════╪═══════╪════════════╪════════════════╡
-    │ B      ┆ 8    ┆ 2     ┆ 3.147566   ┆ [null, "spam"] │
     │ A      ┆ 3    ┆ 2     ┆ 6.33934    ┆ ["ham", "foo"] │
+    │ B      ┆ 8    ┆ 2     ┆ 3.147566   ┆ [null, "spam"] │
     │ C      ┆ null ┆ 1     ┆ 0.156988   ┆ ["egg"]        │
     └────────┴──────┴───────┴────────────┴────────────────┘ |}]
+;;
+
+(* Examples from https://pola-rs.github.io/polars-book/user-guide/concepts/expressions/ *)
+let%expect_test "Contexts" =
+  ignore (fun df ->
+    Data_frame.column_exn df ~name:"foo" |> Series.sort |> Series.head ~length:2)
+;;
+
+(* Examples from https://pola-rs.github.io/polars-book/user-guide/concepts/lazy-vs-eager/ *)
+let%expect_test "Lazy / Eager API" =
+  (* eager API not included, since underlying Rust functions have been deprecated. *)
+  Lazy_frame.scan_csv_exn "./data/iris.csv"
+  |> Lazy_frame.filter ~predicate:Expr.(col "sepal_length" > int 5)
+  |> Lazy_frame.groupby
+       ~is_stable:true
+       ~by:Expr.[ col "species" ]
+       ~agg:Expr.[ col "sepal_width" |> Expr.mean ]
+  |> Lazy_frame.collect_exn
+  |> Data_frame.print;
+  [%expect
+    {|
+    shape: (3, 2)
+    ┌─────────────────┬─────────────┐
+    │ species         ┆ sepal_width │
+    │ ---             ┆ ---         │
+    │ str             ┆ f64         │
+    ╞═════════════════╪═════════════╡
+    │ Iris-setosa     ┆ 3.713636    │
+    │ Iris-versicolor ┆ 2.804255    │
+    │ Iris-virginica  ┆ 2.983673    │
+    └─────────────────┴─────────────┘ |}]
 ;;

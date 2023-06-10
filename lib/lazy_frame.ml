@@ -3,6 +3,17 @@ open! Core
 type t
 
 external scan_parquet : string -> (t, string) result = "rust_lazy_frame_scan_parquet"
+
+let scan_parquet_exn path =
+  scan_parquet path |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
+;;
+
+external scan_csv : string -> (t, string) result = "rust_lazy_frame_scan_csv"
+
+let scan_csv_exn path =
+  scan_csv path |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
+;;
+
 external to_dot : t -> (string, string) result = "rust_lazy_frame_to_dot"
 external collect : t -> (Data_frame0.t, string) result = "rust_lazy_frame_collect"
 

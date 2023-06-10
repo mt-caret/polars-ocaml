@@ -8,6 +8,12 @@ let create_exn series =
   create series |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
 ;;
 
+external read_csv : string -> (t, string) result = "rust_data_frame_read_csv"
+
+let read_csv_exn path =
+  read_csv path |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
+;;
+
 external describe
   :  t
   -> percentiles:float list option
@@ -39,6 +45,22 @@ let groupby ?is_stable t ~by ~agg =
 
 let groupby_exn ?is_stable t ~by ~agg =
   lazy_ t |> Lazy_frame.groupby ?is_stable ~by ~agg |> Lazy_frame.collect_exn
+;;
+
+external column : t -> name:string -> (Series.t, string) result = "rust_data_frame_column"
+
+let column_exn t ~name =
+  column t ~name |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
+;;
+
+external columns
+  :  t
+  -> names:string list
+  -> (Series.t list, string) result
+  = "rust_data_frame_column"
+
+let columns_exn t ~names =
+  columns t ~names |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
 ;;
 
 external head : t -> length:int option -> t option = "rust_data_frame_head"

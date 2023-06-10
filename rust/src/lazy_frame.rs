@@ -1,13 +1,21 @@
 use crate::utils::*;
-use ocaml_interop::{ocaml_export, DynBox, OCaml, OCamlBytes, OCamlList, OCamlRef, ToOCaml};
+use ocaml_interop::{ocaml_export, DynBox, OCaml, OCamlList, OCamlRef, ToOCaml};
 use polars::prelude::*;
 use std::path::Path;
 
 ocaml_export! {
+    fn rust_lazy_frame_scan_csv(cr, path: OCamlRef<String>) -> OCaml<Result<DynBox<LazyFrame>, String>>{
+        let path: String = path.to_rust(cr);
+
+        LazyCsvReader::new(path).finish()
+        .map(Abstract).map_err(|err| err.to_string())
+        .to_ocaml(cr)
+    }
+
     // TODO: properly return error type instead of a string
-    fn rust_lazy_frame_scan_parquet(cr, path: OCamlRef<OCamlBytes>) -> OCaml<Result<DynBox<LazyFrame>, String>>{
-        let path:String = path.to_rust(cr);
-        let path:&Path = Path::new(&path);
+    fn rust_lazy_frame_scan_parquet(cr, path: OCamlRef<String>) -> OCaml<Result<DynBox<LazyFrame>, String>>{
+        let path: String = path.to_rust(cr);
+        let path: &Path = Path::new(&path);
 
         LazyFrame::scan_parquet(path, Default::default())
         .map(Abstract).map_err(|err| err.to_string())

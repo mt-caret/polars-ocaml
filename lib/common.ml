@@ -1,4 +1,23 @@
 open! Core
+include Common_intf
+
+module Make_numeric (T : Numeric_basic) = struct
+  include T
+
+  let ( + ) = add
+  let ( - ) = sub
+  let ( * ) = mul
+  let ( / ) = div
+end
+
+module Make_logic (T : Logic_basic) = struct
+  include T
+
+  let ( ! ) = not
+  let ( && ) = and_
+  let ( || ) = or_
+  let ( lxor ) = xor
+end
 
 module Naive_date = struct
   type t

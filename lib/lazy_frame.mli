@@ -3,6 +3,9 @@ open! Core
 type t
 
 external scan_parquet : string -> (t, string) result = "rust_lazy_frame_scan_parquet"
+val scan_parquet_exn : string -> t
+external scan_csv : string -> (t, string) result = "rust_lazy_frame_scan_csv"
+val scan_csv_exn : string -> t
 external to_dot : t -> (string, string) result = "rust_lazy_frame_to_dot"
 external collect : t -> (Data_frame0.t, string) result = "rust_lazy_frame_collect"
 val collect_exn : t -> Data_frame0.t
