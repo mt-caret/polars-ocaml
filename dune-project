@@ -5,11 +5,11 @@
 (generate_opam_files true)
 
 (source
- (github username/reponame))
+ (github mt-caret/polars-ocaml))
 
-(authors "Author Name")
+(authors "mtakeda")
 
-(maintainers "Maintainer Name")
+(maintainers "mtakeda")
 
 (license LICENSE)
 
@@ -17,10 +17,8 @@
 
 (package
  (name polars_ocaml)
- (synopsis "A short synopsis")
- (description "A longer description")
+ (synopsis "OCaml bindings to the Polars dataframe library")
+ (description "OCaml bindings to the Polars dataframe library")
  (depends ocaml dune)
  (tags
   (topics "to describe" your project)))
-
-; See the complete stanza docs at https://dune.readthedocs.io/en/stable/dune-files.html#dune-project
