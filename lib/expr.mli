@@ -46,4 +46,14 @@ module Str : sig
     -> format:string
     -> t
     = "rust_expr_str_strptime"
+
+  external lengths : t -> t = "rust_expr_str_lengths"
+  external n_chars : t -> t = "rust_expr_str_n_chars"
+  val contains : ?literal:bool -> t -> pat:string -> t
+  external starts_with : t -> prefix:string -> t = "rust_expr_str_starts_with"
+  external ends_with : t -> suffix:string -> t = "rust_expr_str_ends_with"
+  val extract : t -> pat:string -> group:int -> t
+  external extract_all : t -> pat:string -> t = "rust_expr_str_extract_all"
+  val replace : ?literal:bool -> t -> pat:string -> with_:string -> t
+  val replace_all : ?literal:bool -> t -> pat:string -> with_:string -> t
 end

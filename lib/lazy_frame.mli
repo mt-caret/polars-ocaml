@@ -13,5 +13,6 @@ external filter : t -> predicate:Expr.t -> t = "rust_lazy_frame_filter"
 external select : t -> exprs:Expr.t list -> t = "rust_lazy_frame_select"
 external with_columns : t -> exprs:Expr.t list -> t = "rust_lazy_frame_with_columns"
 val groupby : ?is_stable:bool -> t -> by:Expr.t list -> agg:Expr.t list -> t
+external with_streaming : t -> toggle:bool -> t = "rust_lazy_frame_with_streaming"
 external schema : t -> (Schema.t, string) result = "rust_lazy_frame_schema"
 val schema_exn : t -> Schema.t

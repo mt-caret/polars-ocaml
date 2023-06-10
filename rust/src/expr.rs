@@ -26,6 +26,19 @@ fn expr_binary_op<'a>(
     OCaml::box_value(cr, f(expr, other))
 }
 
+fn expr_series_map<'a>(
+    cr: &'a mut &'a mut OCamlRuntime,
+    expr: OCamlRef<'a, DynBox<Expr>>,
+    f: impl Fn(Series) -> Result<Option<Series>, PolarsError>
+        + std::marker::Sync
+        + std::marker::Send
+        + 'static,
+    output_type: DataType,
+) -> OCaml<'a, DynBox<Expr>> {
+    let Abstract(expr) = expr.to_rust(cr);
+    OCaml::box_value(cr, expr.map(f, GetOutput::from_type(output_type)))
+}
+
 enum WhenThenClause {
     Empty,
     WhenThen(WhenThen),
@@ -270,7 +283,7 @@ ocaml_export! {
         expr_unary_op(cr, expr, |expr| expr.dt().to_string(&format))
     }
 
-    fn rust_expr_str_strptime(cr, expr: OCamlRef<DynBox<Expr>>, data_type: OCamlRef<DataType>, format:OCamlRef<String>)-> OCaml<DynBox<Expr>> {
+    fn rust_expr_str_strptime(cr, expr: OCamlRef<DynBox<Expr>>, data_type: OCamlRef<DataType>, format:OCamlRef<String>) -> OCaml<DynBox<Expr>> {
         let PolarsDataType(data_type): PolarsDataType = data_type.to_rust(cr);
         let format: String = format.to_rust(cr);
 
@@ -280,5 +293,87 @@ ocaml_export! {
             };
             expr.str().strptime(data_type.clone(), options)
         })
+    }
+
+    fn rust_expr_str_lengths(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
+        expr_series_map(cr, expr, |series| {
+            Ok(Some(series.utf8()?.str_lengths().into_series()))
+        }, DataType::UInt32)
+    }
+
+    fn rust_expr_str_n_chars(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
+        expr_series_map(cr, expr, |series| {
+            Ok(Some(series.utf8()?.str_n_chars().into_series()))
+        }, DataType::UInt32)
+    }
+
+    fn rust_expr_str_contains(cr, expr: OCamlRef<DynBox<Expr>>, pat: OCamlRef<String>, literal: OCamlRef<bool>) -> OCaml<DynBox<Expr>> {
+        let pat: String = pat.to_rust(cr);
+        let literal: bool = literal.to_rust(cr);
+        expr_series_map(cr, expr, move |series| {
+            let chunked = series.utf8()?;
+            let contains =
+                if literal { chunked.contains_literal(&pat) } else { chunked.contains(&pat, true) };
+            Ok(Some(contains?.into_series()))
+        }, DataType::Boolean)
+    }
+
+    fn rust_expr_str_starts_with(cr, expr: OCamlRef<DynBox<Expr>>, prefix: OCamlRef<String>) -> OCaml<DynBox<Expr>> {
+        let prefix: String = prefix.to_rust(cr);
+        expr_series_map(cr, expr, move |series| {
+            Ok(Some(series.utf8()?.starts_with(&prefix).into_series()))
+        }, DataType::Boolean)
+    }
+
+    fn rust_expr_str_ends_with(cr, expr: OCamlRef<DynBox<Expr>>, suffix: OCamlRef<String>) -> OCaml<DynBox<Expr>> {
+        let suffix: String = suffix.to_rust(cr);
+        expr_series_map(cr, expr, move |series| {
+            Ok(Some(series.utf8()?.ends_with(&suffix).into_series()))
+        }, DataType::Boolean)
+    }
+
+    fn rust_expr_str_extract(cr, expr: OCamlRef<DynBox<Expr>>, pat: OCamlRef<String>, group_index: OCamlRef<OCamlInt>) -> OCaml<Option<DynBox<Expr>>> {
+        let result: Option<_> = try {
+            let pat: String = pat.to_rust(cr);
+            let group_index: usize = group_index.to_rust::<i64>(cr).try_into().ok()?;
+
+            let Abstract(expr) = expr.to_rust(cr);
+            let f = move |series: Series| {
+                Ok(Some(series.utf8()?.extract(&pat, group_index)?.into_series()))
+            };
+            Abstract(expr.map(f, GetOutput::from_type(DataType::Utf8)))
+        };
+        result.to_ocaml(cr)
+    }
+
+    fn rust_expr_str_extract_all(cr, expr: OCamlRef<DynBox<Expr>>, pat: OCamlRef<String>) -> OCaml<DynBox<Expr>> {
+        let pat: String = pat.to_rust(cr);
+        expr_series_map(cr, expr, move |series| {
+            Ok(Some(series.utf8()?.extract_all(&pat)?.into_series()))
+        }, DataType::List(Box::new(DataType::Utf8)))
+    }
+
+    fn rust_expr_str_replace(cr, expr: OCamlRef<DynBox<Expr>>, pat: OCamlRef<String>, with: OCamlRef<String>, literal: OCamlRef<bool>) -> OCaml<DynBox<Expr>> {
+        let pat: String = pat.to_rust(cr);
+        let with: String = with.to_rust(cr);
+        let literal: bool = literal.to_rust(cr);
+        expr_series_map(cr, expr, move |series| {
+            let chunked = series.utf8()?;
+            let replaced =
+                if literal { chunked.replace_literal(&pat, &with, 1) } else { chunked.replace(&pat, &with) };
+            Ok(Some(replaced?.into_series()))
+        }, DataType::List(Box::new(DataType::Utf8)))
+    }
+
+    fn rust_expr_str_replace_all(cr, expr: OCamlRef<DynBox<Expr>>, pat: OCamlRef<String>, with: OCamlRef<String>, literal: OCamlRef<bool>) -> OCaml<DynBox<Expr>> {
+        let pat: String = pat.to_rust(cr);
+        let with: String = with.to_rust(cr);
+        let literal: bool = literal.to_rust(cr);
+        expr_series_map(cr, expr, move |series| {
+            let chunked = series.utf8()?;
+            let replaced =
+                if literal { chunked.replace_literal_all(&pat, &with) } else { chunked.replace_all(&pat, &with) };
+            Ok(Some(replaced?.into_series()))
+        }, DataType::List(Box::new(DataType::Utf8)))
     }
 }

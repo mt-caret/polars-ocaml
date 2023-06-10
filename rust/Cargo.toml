@@ -13,4 +13,4 @@ chrono = "0.4.26"
 expect-test = "1.4.1"
 ocaml = "0.22.4"
 ocaml-interop = "0.8.8"
-polars = { version = "0.30.0", features = [ "lazy", "dot_diagram", "parquet", "approx_unique", "dtype-date", "dtype-datetime", "dtype-i8", "dtype-i16", "dtype-u8", "dtype-u16", "random", "describe" ] }
+polars = { version = "0.30.0", features = [ "lazy", "dot_diagram", "parquet", "approx_unique", "dtype-date", "dtype-datetime", "dtype-i8", "dtype-i16", "dtype-u8", "dtype-u16", "random", "describe", "streaming" ] }

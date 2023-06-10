@@ -431,3 +431,129 @@ let%expect_test "Casting" =
     │ 2022-01-05 ┆ 2022-01-05 00:00:00 │
     └────────────┴─────────────────────┘ |}]
 ;;
+
+(* Examples from https://pola-rs.github.io/polars-book/user-guide/expressions/strings/ *)
+let%expect_test "Casting" =
+  let df =
+    Data_frame.create_exn
+      Series.
+        [ string_option "animal" [ Some "Crab"; Some "cat and dog"; Some "rab$bit"; None ]
+        ]
+  in
+  Data_frame.select_exn
+    df
+    ~exprs:
+      Expr.
+        [ col "animal" |> Str.lengths |> alias ~name:"byte_count"
+        ; col "animal" |> Str.n_chars |> alias ~name:"letter_count"
+        ]
+  |> Data_frame.print;
+  [%expect
+    {|
+    shape: (4, 2)
+    ┌────────────┬──────────────┐
+    │ byte_count ┆ letter_count │
+    │ ---        ┆ ---          │
+    │ u32        ┆ u32          │
+    ╞════════════╪══════════════╡
+    │ 4          ┆ 4            │
+    │ 11         ┆ 11           │
+    │ 7          ┆ 7            │
+    │ null       ┆ null         │
+    └────────────┴──────────────┘ |}];
+  Data_frame.select_exn
+    df
+    ~exprs:
+      Expr.
+        [ col "animal"
+        ; col "animal" |> Str.contains ~pat:"cat|bit" |> alias ~name:"regex"
+        ; col "animal" |> Str.contains ~pat:"rab$" ~literal:true |> alias ~name:"literal"
+        ; col "animal" |> Str.starts_with ~prefix:"rab" |> alias ~name:"starts_with"
+        ; col "animal" |> Str.ends_with ~suffix:"dog" |> alias ~name:"ends_with"
+        ]
+  |> Data_frame.print;
+  [%expect
+    {|
+    shape: (4, 5)
+    ┌─────────────┬───────┬─────────┬─────────────┬───────────┐
+    │ animal      ┆ regex ┆ literal ┆ starts_with ┆ ends_with │
+    │ ---         ┆ ---   ┆ ---     ┆ ---         ┆ ---       │
+    │ str         ┆ bool  ┆ bool    ┆ bool        ┆ bool      │
+    ╞═════════════╪═══════╪═════════╪═════════════╪═══════════╡
+    │ Crab        ┆ false ┆ false   ┆ false       ┆ false     │
+    │ cat and dog ┆ true  ┆ false   ┆ false       ┆ true      │
+    │ rab$bit     ┆ true  ┆ true    ┆ true        ┆ false     │
+    │ null        ┆ null  ┆ null    ┆ null        ┆ null      │
+    └─────────────┴───────┴─────────┴─────────────┴───────────┘ |}];
+  let df =
+    Data_frame.create_exn
+      Series.
+        [ string
+            "a"
+            [ "http://vote.com/ballon_dor?candidate=messi&ref=polars"
+            ; "http://vote.com/ballon_dor?candidat=jorginho&ref=polars"
+            ; "http://vote.com/ballon_dor?candidate=ronaldo&ref=polars"
+            ]
+        ]
+  in
+  Data_frame.select_exn
+    df
+    ~exprs:Expr.[ col "a" |> Str.extract ~pat:{|candidate=(\w+)|} ~group:1 ]
+  |> Data_frame.print;
+  [%expect
+    {|
+    shape: (3, 1)
+    ┌─────────┐
+    │ a       │
+    │ ---     │
+    │ str     │
+    ╞═════════╡
+    │ messi   │
+    │ null    │
+    │ ronaldo │
+    └─────────┘ |}];
+  let df =
+    Data_frame.create_exn Series.[ string "foo" [ "123 bla 45 asd"; "xyz 678 910t" ] ]
+  in
+  Data_frame.select_exn
+    df
+    ~exprs:
+      Expr.[ col "foo" |> Str.extract_all ~pat:{|(\d+)|} |> alias ~name:"extracted_nrs" ]
+  |> Data_frame.print;
+  [%expect
+    {|
+    shape: (2, 1)
+    ┌────────────────┐
+    │ extracted_nrs  │
+    │ ---            │
+    │ list[str]      │
+    ╞════════════════╡
+    │ ["123", "45"]  │
+    │ ["678", "910"] │
+    └────────────────┘ |}];
+  let df =
+    Data_frame.create_exn
+      Series.[ int "id" [ 1; 2 ]; string "text" [ "123abc"; "abc456" ] ]
+  in
+  Data_frame.with_columns_exn
+    df
+    ~exprs:
+      Expr.
+        [ col "text" |> Str.replace ~pat:{|abc\b|} ~with_:"ABC"
+        ; col "text"
+          |> Str.replace_all ~pat:"a" ~with_:"-" ~literal:true
+          |> alias ~name:"text_replace_all"
+        ]
+  |> Data_frame.print;
+  [%expect
+    {|
+    shape: (2, 3)
+    ┌─────┬────────┬──────────────────┐
+    │ id  ┆ text   ┆ text_replace_all │
+    │ --- ┆ ---    ┆ ---              │
+    │ i64 ┆ str    ┆ str              │
+    ╞═════╪════════╪══════════════════╡
+    │ 1   ┆ 123ABC ┆ 123-bc           │
+    │ 2   ┆ abc456 ┆ -bc456           │
+    └─────┴────────┴──────────────────┘ |}]
+;;

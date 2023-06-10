@@ -33,6 +33,7 @@ external groupby
 
 let groupby ?(is_stable = false) t ~by ~agg = groupby t ~is_stable ~by ~agg
 
+external with_streaming : t -> toggle:bool -> t = "rust_lazy_frame_with_streaming"
 external schema : t -> (Schema.t, string) result = "rust_lazy_frame_schema"
 
 let schema_exn t = schema t |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn

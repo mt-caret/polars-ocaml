@@ -261,3 +261,28 @@ let%expect_test "Lazy / Eager API" =
     │ Iris-virginica  ┆ 2.983673    │
     └─────────────────┴─────────────┘ |}]
 ;;
+
+(* Examples from https://pola-rs.github.io/polars-book/user-guide/concepts/streaming/ *)
+let%expect_test "Streaming" =
+  Lazy_frame.scan_csv_exn "./data/iris.csv"
+  |> Lazy_frame.filter ~predicate:Expr.(col "sepal_length" > int 5)
+  |> Lazy_frame.groupby
+       ~is_stable:true
+       ~by:Expr.[ col "species" ]
+       ~agg:Expr.[ col "sepal_width" |> Expr.mean ]
+  |> Lazy_frame.with_streaming ~toggle:true
+  |> Lazy_frame.collect_exn
+  |> Data_frame.print;
+  [%expect
+    {|
+    shape: (3, 2)
+    ┌─────────────────┬─────────────┐
+    │ species         ┆ sepal_width │
+    │ ---             ┆ ---         │
+    │ str             ┆ f64         │
+    ╞═════════════════╪═════════════╡
+    │ Iris-setosa     ┆ 3.713636    │
+    │ Iris-versicolor ┆ 2.804255    │
+    │ Iris-virginica  ┆ 2.983673    │
+    └─────────────────┴─────────────┘ |}]
+;;

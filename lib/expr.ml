@@ -88,4 +88,38 @@ module Str = struct
     -> format:string
     -> t
     = "rust_expr_str_strptime"
+
+  external lengths : t -> t = "rust_expr_str_lengths"
+  external n_chars : t -> t = "rust_expr_str_n_chars"
+  external contains : t -> pat:string -> literal:bool -> t = "rust_expr_str_contains"
+
+  let contains ?(literal = false) t ~pat = contains t ~pat ~literal
+
+  external starts_with : t -> prefix:string -> t = "rust_expr_str_starts_with"
+  external ends_with : t -> suffix:string -> t = "rust_expr_str_ends_with"
+  external extract : t -> pat:string -> group:int -> t option = "rust_expr_str_extract"
+
+  let extract t ~pat ~group = extract t ~pat ~group |> Option.value_exn ~here:[%here]
+
+  external extract_all : t -> pat:string -> t = "rust_expr_str_extract_all"
+
+  external replace
+    :  t
+    -> pat:string
+    -> with_:string
+    -> literal:bool
+    -> t
+    = "rust_expr_str_replace"
+
+  let replace ?(literal = false) t ~pat ~with_ = replace t ~pat ~with_ ~literal
+
+  external replace_all
+    :  t
+    -> pat:string
+    -> with_:string
+    -> literal:bool
+    -> t
+    = "rust_expr_str_replace_all"
+
+  let replace_all ?(literal = false) t ~pat ~with_ = replace_all t ~pat ~with_ ~literal
 end

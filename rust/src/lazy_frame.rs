@@ -63,6 +63,12 @@ ocaml_export! {
         OCaml::box_value(cr, groupby.agg(agg))
     }
 
+    fn rust_lazy_frame_with_streaming(cr, lazy_frame: OCamlRef<DynBox<LazyFrame>>, toggle: OCamlRef<bool>) -> OCaml<DynBox<LazyFrame>> {
+        let toggle = toggle.to_rust(cr);
+        let Abstract(lazy_frame) = lazy_frame.to_rust(cr);
+        OCaml::box_value(cr, lazy_frame.with_streaming(toggle))
+    }
+
     fn rust_lazy_frame_schema(cr, lazy_frame: OCamlRef<DynBox<LazyFrame>>) -> OCaml<Result<DynBox<Schema>,String>> {
         let Abstract(lazy_frame) = lazy_frame.to_rust(cr);
         lazy_frame.schema()
