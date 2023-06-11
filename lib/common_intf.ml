@@ -68,4 +68,14 @@ module type Common = sig
     val of_naive_date : Naive_date.t -> t
     val of_date : Core.Date.t -> t
   end
+
+  module For_testing : sig
+    external panic : string -> unit = "rust_test_panic"
+    external raise_exception : string -> unit = "rust_test_exception"
+
+    external install_panic_hook
+      :  suppress_backtrace:bool
+      -> unit
+      = "rust_install_panic_hook"
+  end
 end

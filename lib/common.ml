@@ -46,3 +46,13 @@ module Naive_datetime = struct
 
   let of_date date = Naive_date.of_date date |> of_naive_date
 end
+
+module For_testing = struct
+  external panic : string -> unit = "rust_test_panic"
+  external raise_exception : string -> unit = "rust_test_exception"
+
+  external install_panic_hook
+    :  suppress_backtrace:bool
+    -> unit
+    = "rust_install_panic_hook"
+end

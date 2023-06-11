@@ -40,4 +40,53 @@ ocaml_export! {
             .collect();
         fields.to_ocaml(cr)
     }
+
+    fn rust_test_panic(cr, error_message: OCamlRef<String>) -> OCaml<()> {
+        let error_message: String = error_message.to_rust(cr);
+        // TODO: quite hacky, but works for now
+        if true {
+            panic!("{}", error_message)
+        }
+        OCaml::unit()
+    }
+
+    fn rust_test_exception(cr, error_message: OCamlRef<String>) -> OCaml<()> {
+        let error_message: String = error_message.to_rust(cr);
+        let error_message =
+            std::ffi::CString::new(error_message).expect("CString::new failed");
+        unsafe {
+            ocaml_sys::caml_failwith(error_message.as_ptr());
+        }
+
+        OCaml::unit()
+    }
+
+    fn rust_install_panic_hook(cr, suppress_backtrace: OCamlRef<bool>) -> OCaml<()> {
+        let suppress_backtrace = suppress_backtrace.to_rust(cr);
+        std::panic::set_hook(Box::new(move |panic_info| {
+            let payload = panic_info.payload();
+            let message = if let Some(s) = payload.downcast_ref::<&str>() {
+                s.to_string()
+            } else if let Some(s) = payload.downcast_ref::<String>() {
+                s.to_string()
+            } else {
+                "Box<Any>".to_string()
+            };
+
+            let message =
+                if suppress_backtrace {
+                    format!("Rust panic: {}", message)
+                } else {
+                    let backtrace = std::backtrace::Backtrace::force_capture();
+                    format!("Rust panic: {}\nbacktrace:\n{}", message, backtrace.to_string())
+                };
+            let message =
+                std::ffi::CString::new(message).expect("CString::new failed");
+
+            unsafe {
+                ocaml_sys::caml_failwith(message.as_ptr());
+            }
+        }));
+        OCaml::unit()
+    }
 }

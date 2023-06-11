@@ -1,6 +1,6 @@
 (library
  (name polars_tests)
- (libraries core polars)
+ (libraries core expect_test_helpers_core polars)
  (inline_tests
   (deps
    (glob_files ./data/*.csv)))
