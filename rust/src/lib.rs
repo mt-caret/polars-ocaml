@@ -36,6 +36,28 @@ mod tests {
                 stop,
                 Duration::parse("1d"),
                 ClosedWindow::Both,
+                TimeUnit::Nanoseconds,
+                None,
+            )
+            .map(|date_range| date_range.into_series()),
+            expect![[r#"
+                Ok(shape: (5,)
+                Series: 'date' [datetime[ns]]
+                [
+                	2022-01-01 00:00:00
+                	2022-01-02 00:00:00
+                	2022-01-03 00:00:00
+                	2022-01-04 00:00:00
+                	2022-01-05 00:00:00
+                ])"#]],
+        );
+        check(
+            date_range(
+                "date",
+                start,
+                stop,
+                Duration::parse("1d"),
+                ClosedWindow::Both,
                 TimeUnit::Microseconds, // TODO: BUG!
                 None,
             )
