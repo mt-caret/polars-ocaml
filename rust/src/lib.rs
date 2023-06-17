@@ -86,6 +86,6 @@ mod tests {
             .collect()
             .unwrap();
 
-        expect![[]].assert_eq(&df.to_string());
+        expect![[r#""#]].assert_eq(&df.to_string());
     }
 }
