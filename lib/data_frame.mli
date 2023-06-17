@@ -44,6 +44,10 @@ val sample_n
   -> (t, string) result
 
 val sample_n_exn : ?seed:int -> t -> n:int -> with_replacement:bool -> shuffle:bool -> t
+external sum : t -> t = "rust_data_frame_sum"
+external mean : t -> t = "rust_data_frame_mean"
+external median : t -> t = "rust_data_frame_median"
+external null_count : t -> t = "rust_data_frame_null_count"
 external schema : t -> Schema.t = "rust_data_frame_schema"
 external to_string_hum : t -> string = "rust_data_frame_to_string_hum"
 val print : t -> unit

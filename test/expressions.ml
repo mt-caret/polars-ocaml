@@ -855,3 +855,164 @@ let%expect_test "Aggregation" =
     │ AZ    ┆ Ben Quayle       ┆ Coles Bashford ┆ Ann Kirkpatrick    ┆ F      │
     └───────┴──────────────────┴────────────────┴────────────────────┴────────┘ |}]
 ;;
+
+(* Examples from https://pola-rs.github.io/polars-book/user-guide/expressions/null/ *)
+let%expect_test "Missing data" =
+  let df = Data_frame.create_exn Series.[ int_option "value" [ Some 1; None ] ] in
+  Data_frame.print df;
+  [%expect
+    {|
+    shape: (2, 1)
+    ┌───────┐
+    │ value │
+    │ ---   │
+    │ i64   │
+    ╞═══════╡
+    │ 1     │
+    │ null  │
+    └───────┘ |}];
+  Data_frame.null_count df |> Data_frame.print;
+  [%expect
+    {|
+    shape: (1, 1)
+    ┌───────┐
+    │ value │
+    │ ---   │
+    │ u32   │
+    ╞═══════╡
+    │ 1     │
+    └───────┘ |}];
+  Data_frame.select_exn ~exprs:Expr.[ col "value" |> is_null ] df |> Data_frame.print;
+  [%expect
+    {|
+    shape: (2, 1)
+    ┌───────┐
+    │ value │
+    │ ---   │
+    │ bool  │
+    ╞═══════╡
+    │ false │
+    │ true  │
+    └───────┘ |}];
+  let df =
+    Data_frame.create_exn
+      Series.[ int "col1" [ 1; 2; 3 ]; int_option "col2" [ Some 1; None; Some 3 ] ]
+  in
+  Data_frame.print df;
+  [%expect
+    {|
+    shape: (3, 2)
+    ┌──────┬──────┐
+    │ col1 ┆ col2 │
+    │ ---  ┆ ---  │
+    │ i64  ┆ i64  │
+    ╞══════╪══════╡
+    │ 1    ┆ 1    │
+    │ 2    ┆ null │
+    │ 3    ┆ 3    │
+    └──────┴──────┘ |}];
+  let fill_literal_df =
+    Data_frame.with_columns_exn df ~exprs:Expr.[ col "col2" |> fill_null ~with_:(int 2) ]
+  in
+  Data_frame.print fill_literal_df;
+  [%expect
+    {|
+    shape: (3, 2)
+    ┌──────┬──────┐
+    │ col1 ┆ col2 │
+    │ ---  ┆ ---  │
+    │ i64  ┆ i64  │
+    ╞══════╪══════╡
+    │ 1    ┆ 1    │
+    │ 2    ┆ 2    │
+    │ 3    ┆ 3    │
+    └──────┴──────┘ |}];
+  let fill_forward_df =
+    Data_frame.with_columns_exn
+      df
+      ~exprs:Expr.[ col "col2" |> fill_null' ~strategy:(Forward None) ]
+  in
+  Data_frame.print fill_forward_df;
+  [%expect
+    {|
+    shape: (3, 2)
+    ┌──────┬──────┐
+    │ col1 ┆ col2 │
+    │ ---  ┆ ---  │
+    │ i64  ┆ i64  │
+    ╞══════╪══════╡
+    │ 1    ┆ 1    │
+    │ 2    ┆ 1    │
+    │ 3    ┆ 3    │
+    └──────┴──────┘ |}];
+  let fill_median_df =
+    Data_frame.with_columns_exn
+      df
+      ~exprs:Expr.[ col "col2" |> fill_null ~with_:(col "col2" |> median) ]
+  in
+  Data_frame.print fill_median_df;
+  [%expect
+    {|
+    shape: (3, 2)
+    ┌──────┬──────┐
+    │ col1 ┆ col2 │
+    │ ---  ┆ ---  │
+    │ i64  ┆ f64  │
+    ╞══════╪══════╡
+    │ 1    ┆ 1.0  │
+    │ 2    ┆ 2.0  │
+    │ 3    ┆ 3.0  │
+    └──────┴──────┘ |}];
+  let fill_interpolation_df =
+    Data_frame.with_columns_exn
+      df
+      ~exprs:Expr.[ col "col2" |> fill_null ~with_:(col "col2" |> interpolate) ]
+  in
+  Data_frame.print fill_interpolation_df;
+  [%expect
+    {|
+    shape: (3, 2)
+    ┌──────┬──────┐
+    │ col1 ┆ col2 │
+    │ ---  ┆ ---  │
+    │ i64  ┆ i64  │
+    ╞══════╪══════╡
+    │ 1    ┆ 1    │
+    │ 2    ┆ 2    │
+    │ 3    ┆ 3    │
+    └──────┴──────┘ |}];
+  let nan_df =
+    Data_frame.create_exn Series.[ float "value" [ 1.; Float.nan; Float.nan; 3. ] ]
+  in
+  Data_frame.print nan_df;
+  [%expect
+    {|
+    shape: (4, 1)
+    ┌───────┐
+    │ value │
+    │ ---   │
+    │ f64   │
+    ╞═══════╡
+    │ 1.0   │
+    │ NaN   │
+    │ NaN   │
+    │ 3.0   │
+    └───────┘ |}];
+  let mean_nan_df =
+    Data_frame.with_columns_exn
+      nan_df
+      ~exprs:Expr.[ col "value" |> fill_nan ~with_:(null ()) |> alias ~name:"value" ]
+    |> Data_frame.mean
+  in
+  Data_frame.print mean_nan_df;
+  [%expect
+    {|
+    shape: (1, 1)
+    ┌───────┐
+    │ value │
+    │ ---   │
+    │ f64   │
+    ╞═══════╡
+    │ 2.0   │
+    └───────┘ |}]
+;;

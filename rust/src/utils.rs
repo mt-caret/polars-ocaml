@@ -1,6 +1,7 @@
 use ocaml_interop::{
-    ocaml_alloc_tagged_block, ocaml_alloc_variant, ocaml_unpack_variant, DynBox, FromOCaml, OCaml,
-    OCamlInt, OCamlRuntime, ToOCaml,
+    ocaml_alloc_polymorphic_variant, ocaml_alloc_tagged_block, ocaml_alloc_variant,
+    ocaml_unpack_polymorphic_variant, ocaml_unpack_variant, DynBox, FromOCaml, OCaml, OCamlInt,
+    OCamlRuntime, ToOCaml,
 };
 use polars::prelude::*;
 use std::borrow::Borrow;
@@ -186,6 +187,33 @@ unsafe impl ToOCaml<FillNullStrategy> for PolarsFillNullStrategy {
                 FillNullStrategy::One => ocaml_value(cr, 4),
                 FillNullStrategy::MaxBound => ocaml_value(cr, 5),
                 FillNullStrategy::MinBound => ocaml_value(cr, 6),
+            }
+        }
+    }
+}
+
+pub struct PolarsInterpolationMethod(pub InterpolationMethod);
+
+unsafe impl FromOCaml<InterpolationMethod> for PolarsInterpolationMethod {
+    fn from_ocaml(v: OCaml<InterpolationMethod>) -> Self {
+        let result = ocaml_unpack_polymorphic_variant! {
+            v => {
+                Linear => InterpolationMethod::Linear,
+                Nearest => InterpolationMethod::Nearest,
+            }
+        };
+        PolarsInterpolationMethod(result.expect("Failure when unpacking an OCaml<InterpolationMethod> variant into PolarsInterpolationMethod (unexpected tag value"))
+    }
+}
+
+unsafe impl ToOCaml<InterpolationMethod> for PolarsInterpolationMethod {
+    fn to_ocaml<'a>(&self, cr: &'a mut OCamlRuntime) -> OCaml<'a, InterpolationMethod> {
+        let PolarsInterpolationMethod(interpolation_method) = self;
+
+        ocaml_alloc_polymorphic_variant! {
+            cr, interpolation_method => {
+                InterpolationMethod::Linear,
+                InterpolationMethod::Nearest,
             }
         }
     }

@@ -6,6 +6,7 @@ external col : string -> t = "rust_expr_col"
 external all : unit -> t = "rust_expr_all"
 external exclude : string -> t = "rust_expr_exclude"
 val cast : ?strict:bool -> t -> to_:Data_type.t -> t
+external null : unit -> t = "rust_expr_null"
 external int : int -> t = "rust_expr_int"
 external float : float -> t = "rust_expr_float"
 external bool : bool -> t = "rust_expr_bool"
@@ -21,12 +22,24 @@ val sample_n : ?seed:int -> t -> n:int -> with_replacement:bool -> shuffle:bool 
 external filter : t -> predicate:t -> t = "rust_expr_filter"
 external sum : t -> t = "rust_expr_sum"
 external mean : t -> t = "rust_expr_mean"
+external median : t -> t = "rust_expr_median"
 external count : t -> t = "rust_expr_count"
 external count_ : unit -> t = "rust_expr_count_"
 external n_unique : t -> t = "rust_expr_n_unique"
 external approx_unique : t -> t = "rust_expr_approx_unique"
+external null_count : t -> t = "rust_expr_null_count"
 external is_null : t -> t = "rust_expr_is_null"
 external is_not_null : t -> t = "rust_expr_is_not_null"
+external fill_null : t -> with_:t -> t = "rust_expr_fill_null"
+
+external fill_null'
+  :  t
+  -> strategy:Fill_null_strategy.t
+  -> t
+  = "rust_expr_fill_null_with_strategy"
+
+val interpolate : ?method_:[ `Linear | `Nearest ] -> t -> t
+external fill_nan : t -> with_:t -> t = "rust_expr_fill_nan"
 external when_ : (t * t) list -> otherwise:t -> t = "rust_expr_when_then"
 external alias : t -> name:string -> t = "rust_expr_alias"
 external prefix : t -> prefix:string -> t = "rust_expr_prefix"

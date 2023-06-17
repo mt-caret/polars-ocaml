@@ -99,6 +99,10 @@ let sample_n_exn ?seed t ~n ~with_replacement ~shuffle =
   |> Or_error.ok_exn
 ;;
 
+external sum : t -> t = "rust_data_frame_sum"
+external mean : t -> t = "rust_data_frame_mean"
+external median : t -> t = "rust_data_frame_median"
+external null_count : t -> t = "rust_data_frame_null_count"
 external schema : t -> Schema.t = "rust_data_frame_schema"
 external to_string_hum : t -> string = "rust_data_frame_to_string_hum"
 

@@ -104,6 +104,26 @@ ocaml_export! {
         result.to_ocaml(cr)
     }
 
+    fn rust_data_frame_sum(cr, data_frame: OCamlRef<DynBox<DataFrame>>) -> OCaml<DynBox<DataFrame>> {
+        let Abstract(data_frame) = data_frame.to_rust(cr);
+        Abstract(data_frame.sum()).to_ocaml(cr)
+    }
+
+    fn rust_data_frame_mean(cr, data_frame: OCamlRef<DynBox<DataFrame>>) -> OCaml<DynBox<DataFrame>> {
+        let Abstract(data_frame) = data_frame.to_rust(cr);
+        Abstract(data_frame.mean()).to_ocaml(cr)
+    }
+
+    fn rust_data_frame_median(cr, data_frame: OCamlRef<DynBox<DataFrame>>) -> OCaml<DynBox<DataFrame>> {
+        let Abstract(data_frame) = data_frame.to_rust(cr);
+        Abstract(data_frame.median()).to_ocaml(cr)
+    }
+
+    fn rust_data_frame_null_count(cr, data_frame: OCamlRef<DynBox<DataFrame>>) -> OCaml<DynBox<DataFrame>> {
+        let Abstract(data_frame) = data_frame.to_rust(cr);
+        Abstract(data_frame.null_count()).to_ocaml(cr)
+    }
+
     fn rust_data_frame_schema(cr, data_frame: OCamlRef<DynBox<DataFrame>>) -> OCaml<DynBox<Schema>> {
         let Abstract(data_frame) = data_frame.to_rust(cr);
         OCaml::box_value(cr, data_frame.schema())
