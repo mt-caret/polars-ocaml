@@ -33,6 +33,23 @@ external groupby
 
 let groupby ?(is_stable = false) t ~by ~agg = groupby t ~is_stable ~by ~agg
 
+external sort
+  :  t
+  -> by_column:string
+  -> descending:bool option
+  -> nulls_last:bool option
+  -> multithreaded:bool option
+  -> t
+  = "rust_lazy_frame_sort"
+
+external limit : t -> n:int -> t option = "rust_lazy_frame_limit"
+
+let limit t ~n = limit t ~n |> Option.value_exn ~here:[%here]
+
+let sort ?descending ?nulls_last t ~by_column =
+  sort t ~by_column ~descending ~nulls_last ~multithreaded:(Some false)
+;;
+
 external with_streaming : t -> toggle:bool -> t = "rust_lazy_frame_with_streaming"
 external schema : t -> (Schema.t, string) result = "rust_lazy_frame_schema"
 

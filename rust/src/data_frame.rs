@@ -11,11 +11,19 @@ ocaml_export! {
         DataFrame::new(series).map(Abstract).map_err(|err| err.to_string()).to_ocaml(cr)
     }
 
-    fn rust_data_frame_read_csv(cr, path: OCamlRef<String>) -> OCaml<Result<DynBox<DataFrame>,String>> {
+    fn rust_data_frame_read_csv(cr, path: OCamlRef<String>, schema: OCamlRef<Option<DynBox<Schema>>>, try_parse_dates: OCamlRef<Option<bool>>) -> OCaml<Result<DynBox<DataFrame>,String>> {
         let path: String = path.to_rust(cr);
+        let schema = schema.to_rust::<Option<Abstract<Schema>>>(cr).map(|Abstract(schema)| Arc::new(schema));
+        let try_parse_dates: Option<bool> = try_parse_dates.to_rust(cr);
 
         CsvReader::from_path(&path)
-        .and_then(|csv_reader| csv_reader.finish())
+        .and_then(|csv_reader| {
+            let csv_reader = csv_reader.with_dtypes(schema);
+            match try_parse_dates {
+                None => csv_reader,
+                Some(try_parse_dates) => csv_reader.with_try_parse_dates(try_parse_dates),
+            }.finish()
+        })
         .map(Abstract).map_err(|err| err.to_string()).to_ocaml(cr)
     }
 

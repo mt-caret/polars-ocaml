@@ -557,3 +557,301 @@ let%expect_test "Casting" =
     │ 2   ┆ abc456 ┆ -bc456           │
     └─────┴────────┴──────────────────┘ |}]
 ;;
+
+(* TODO: Below example demonstrates SEGV *)
+(* let%expect_test "segv test case" =
+  for _ = 0 to 300 do
+    let dataset =
+      Data_frame.read_csv_exn "./data/legislators-historical.csv"
+      |> Data_frame.head ~length:1000
+    in
+    let df =
+      Data_frame.lazy_ dataset
+      |> Lazy_frame.groupby
+           ~is_stable:true
+           ~by:Expr.[ col "state" ]
+           ~agg:Expr.[ sum (col "party" = string "some_string") ]
+      |> Lazy_frame.collect_exn
+    in
+    ignore df
+  done
+;; *)
+
+(* Examples from https://pola-rs.github.io/polars-book/user-guide/expressions/aggregation/ *)
+let%expect_test "Aggregation" =
+  let schema =
+    Schema.create
+      [ "first_name", Utf8
+      ; "gender", Utf8
+      ; "type", Utf8
+      ; "state", Utf8
+      ; "party", Utf8
+      ; "birthday", Date
+      ]
+  in
+  let dataset =
+    Data_frame.read_csv_exn
+      ~schema
+      ~try_parse_dates:true
+      "./data/legislators-historical.csv"
+  in
+  Data_frame.print dataset;
+  [%expect
+    {|
+    shape: (12_136, 36)
+    ┌────────────┬──────────┬───────────┬────────┬───┬────────────┬────────────┬──────────┬────────────┐
+    │ last_name  ┆ first_na ┆ middle_na ┆ suffix ┆ … ┆ ballotpedi ┆ washington ┆ icpsr_id ┆ wikipedia_ │
+    │ ---        ┆ me       ┆ me        ┆ ---    ┆   ┆ a_id       ┆ _post_id   ┆ ---      ┆ id         │
+    │ str        ┆ ---      ┆ ---       ┆ str    ┆   ┆ ---        ┆ ---        ┆ i64      ┆ ---        │
+    │            ┆ str      ┆ str       ┆        ┆   ┆ str        ┆ str        ┆          ┆ str        │
+    ╞════════════╪══════════╪═══════════╪════════╪═══╪════════════╪════════════╪══════════╪════════════╡
+    │ Bassett    ┆ Richard  ┆ null      ┆ null   ┆ … ┆ null       ┆ null       ┆ 507      ┆ Richard    │
+    │            ┆          ┆           ┆        ┆   ┆            ┆            ┆          ┆ Bassett    │
+    │            ┆          ┆           ┆        ┆   ┆            ┆            ┆          ┆ (Delaware  │
+    │            ┆          ┆           ┆        ┆   ┆            ┆            ┆          ┆ politi…    │
+    │ Bland      ┆ Theodori ┆ null      ┆ null   ┆ … ┆ null       ┆ null       ┆ 786      ┆ Theodorick │
+    │            ┆ ck       ┆           ┆        ┆   ┆            ┆            ┆          ┆ Bland (con │
+    │            ┆          ┆           ┆        ┆   ┆            ┆            ┆          ┆ gressman)  │
+    │ Burke      ┆ Aedanus  ┆ null      ┆ null   ┆ … ┆ null       ┆ null       ┆ 1260     ┆ Aedanus    │
+    │            ┆          ┆           ┆        ┆   ┆            ┆            ┆          ┆ Burke      │
+    │ Carroll    ┆ Daniel   ┆ null      ┆ null   ┆ … ┆ null       ┆ null       ┆ 1538     ┆ Daniel     │
+    │            ┆          ┆           ┆        ┆   ┆            ┆            ┆          ┆ Carroll    │
+    │ …          ┆ …        ┆ …         ┆ …      ┆ … ┆ …          ┆ …          ┆ …        ┆ …          │
+    │ Flores     ┆ Mayra    ┆ null      ┆ null   ┆ … ┆ Mayra      ┆ null       ┆ null     ┆ Mayra      │
+    │            ┆          ┆           ┆        ┆   ┆ Flores     ┆            ┆          ┆ Flores     │
+    │ Sempolinsk ┆ Joseph   ┆ null      ┆ null   ┆ … ┆ Joe Sempol ┆ null       ┆ null     ┆ Joe Sempol │
+    │ i          ┆          ┆           ┆        ┆   ┆ inski      ┆            ┆          ┆ inski      │
+    │ Inhofe     ┆ James    ┆ M.        ┆ null   ┆ … ┆ Jim Inhofe ┆ null       ┆ 15424    ┆ Jim Inhofe │
+    │ Sasse      ┆ Benjamin ┆ Eric      ┆ null   ┆ … ┆ Ben Sasse  ┆ null       ┆ 41503    ┆ Ben Sasse  │
+    └────────────┴──────────┴───────────┴────────┴───┴────────────┴────────────┴──────────┴────────────┘ |}];
+  let df =
+    Data_frame.lazy_ dataset
+    |> Lazy_frame.groupby
+         ~is_stable:true
+         ~by:Expr.[ col "first_name" ]
+         ~agg:
+           Expr.
+             [ col "first_name" |> count |> alias ~name:"count"
+             ; col "gender"
+             ; col "last_name" |> first
+             ]
+    |> Lazy_frame.sort ~descending:true ~nulls_last:true ~by_column:"count"
+    |> Lazy_frame.limit ~n:5
+    |> Lazy_frame.collect_exn
+  in
+  Data_frame.print df;
+  [%expect
+    {|
+    shape: (5, 4)
+    ┌────────────┬───────┬───────────────────┬───────────┐
+    │ first_name ┆ count ┆ gender            ┆ last_name │
+    │ ---        ┆ ---   ┆ ---               ┆ ---       │
+    │ str        ┆ u32   ┆ list[str]         ┆ str       │
+    ╞════════════╪═══════╪═══════════════════╪═══════════╡
+    │ John       ┆ 1256  ┆ ["M", "M", … "M"] ┆ Walker    │
+    │ William    ┆ 1022  ┆ ["M", "M", … "M"] ┆ Few       │
+    │ James      ┆ 714   ┆ ["M", "M", … "M"] ┆ Armstrong │
+    │ Thomas     ┆ 454   ┆ ["M", "M", … "M"] ┆ Tucker    │
+    │ Charles    ┆ 439   ┆ ["M", "M", … "M"] ┆ Carroll   │
+    └────────────┴───────┴───────────────────┴───────────┘ |}];
+  let df =
+    Data_frame.lazy_ dataset
+    |> Lazy_frame.groupby
+         ~is_stable:true
+         ~by:Expr.[ col "state" ]
+         ~agg:
+           Expr.
+             [ (* The original guide uses [sum] here instead of [mean], but
+                using [sum] here seems to cause panics within polars:
+                https://github.com/pola-rs/polars/issues/9408 *)
+               col "party" = string "Anti-Administration" |> mean |> alias ~name:"anti"
+             ; col "party" = string "Pro-Administration" |> mean |> alias ~name:"pro"
+             ]
+    |> Lazy_frame.sort ~by_column:"pro" ~descending:true ~nulls_last:false
+    |> Lazy_frame.limit ~n:5
+    |> Lazy_frame.collect_exn
+  in
+  Data_frame.print df;
+  [%expect
+    {|
+
+    shape: (5, 3)
+    ┌───────┬──────────┬──────────┐
+    │ state ┆ anti     ┆ pro      │
+    │ ---   ┆ ---      ┆ ---      │
+    │ str   ┆ f64      ┆ f64      │
+    ╞═══════╪══════════╪══════════╡
+    │ PI    ┆ null     ┆ null     │
+    │ OL    ┆ null     ┆ null     │
+    │ CT    ┆ 0.0      ┆ 0.013216 │
+    │ NJ    ┆ 0.0      ┆ 0.008547 │
+    │ NC    ┆ 0.002865 ┆ 0.005731 │
+    └───────┴──────────┴──────────┘ |}];
+  let df =
+    Data_frame.lazy_ dataset
+    |> Lazy_frame.groupby
+         ~is_stable:true
+         ~by:Expr.[ col "state"; col "party" ]
+         ~agg:Expr.[ col "party" |> count |> alias ~name:"count" ]
+    |> Lazy_frame.filter
+         ~predicate:
+           Expr.(
+             col "party" = string "Anti-Administration"
+             || col "party" = string "Pro-Administration")
+    |> Lazy_frame.sort ~by_column:"count" ~descending:true ~nulls_last:true
+    |> Lazy_frame.limit ~n:5
+    |> Lazy_frame.collect_exn
+  in
+  Data_frame.print df;
+  [%expect
+    {|
+
+    shape: (5, 3)
+    ┌───────┬─────────────────────┬───────┐
+    │ state ┆ party               ┆ count │
+    │ ---   ┆ ---                 ┆ ---   │
+    │ str   ┆ str                 ┆ u32   │
+    ╞═══════╪═════════════════════╪═══════╡
+    │ VA    ┆ Anti-Administration ┆ 3     │
+    │ CT    ┆ Pro-Administration  ┆ 3     │
+    │ NJ    ┆ Pro-Administration  ┆ 3     │
+    │ NC    ┆ Pro-Administration  ┆ 2     │
+    │ SC    ┆ Pro-Administration  ┆ 1     │
+    └───────┴─────────────────────┴───────┘ |}];
+  let compute_age = Expr.(int 2022 - (col "birthday" |> Dt.year)) in
+  let avg_birthday gender =
+    Expr.(
+      filter compute_age ~predicate:(col "gender" = string gender)
+      |> mean
+      |> alias ~name:[%string {|avg %{gender} birthday|}])
+  in
+  let df =
+    Data_frame.lazy_ dataset
+    |> Lazy_frame.groupby
+         ~is_stable:true
+         ~by:Expr.[ col "state" ]
+         ~agg:
+           Expr.
+             [ avg_birthday "M"
+             ; avg_birthday "F"
+             ; col "gender" = string "M" |> sum |> alias ~name:"# male"
+             ; col "gender" = string "F" |> sum |> alias ~name:"# female"
+             ]
+    |> Lazy_frame.limit ~n:5
+    |> Lazy_frame.collect_exn
+  in
+  Data_frame.print df;
+  [%expect
+    {|
+
+    shape: (5, 5)
+    ┌───────┬────────────────┬────────────────┬────────┬──────────┐
+    │ state ┆ avg M birthday ┆ avg F birthday ┆ # male ┆ # female │
+    │ ---   ┆ ---            ┆ ---            ┆ ---    ┆ ---      │
+    │ str   ┆ f64            ┆ f64            ┆ u32    ┆ u32      │
+    ╞═══════╪════════════════╪════════════════╪════════╪══════════╡
+    │ DE    ┆ 182.593407     ┆ null           ┆ 97     ┆ 0        │
+    │ VA    ┆ 192.542781     ┆ 66.2           ┆ 430    ┆ 5        │
+    │ SC    ┆ 184.018349     ┆ 122.8          ┆ 247    ┆ 5        │
+    │ MD    ┆ 188.280899     ┆ 94.375         ┆ 298    ┆ 8        │
+    │ PA    ┆ 180.724846     ┆ 92.857143      ┆ 1050   ┆ 7        │
+    └───────┴────────────────┴────────────────┴────────┴──────────┘ |}];
+  let get_person = Expr.(col "first_name" + string " " + col "last_name") in
+  let df =
+    Data_frame.lazy_ dataset
+    |> Lazy_frame.sort ~by_column:"birthday" ~descending:true ~nulls_last:true
+    |> Lazy_frame.groupby
+         ~is_stable:true
+         ~by:Expr.[ col "state" ]
+         ~agg:
+           Expr.
+             [ get_person |> first |> alias ~name:"youngest"
+             ; get_person |> last |> alias ~name:"oldest"
+             ]
+    |> Lazy_frame.limit ~n:5
+    |> Lazy_frame.collect_exn
+  in
+  Data_frame.print df;
+  [%expect
+    {|
+
+    shape: (5, 3)
+    ┌───────┬──────────────────┬───────────────────────┐
+    │ state ┆ youngest         ┆ oldest                │
+    │ ---   ┆ ---              ┆ ---                   │
+    │ str   ┆ str              ┆ str                   │
+    ╞═══════╪══════════════════╪═══════════════════════╡
+    │ NC    ┆ Madison Cawthorn ┆ John Ashe             │
+    │ IA    ┆ Abby Finkenauer  ┆ Bernhart Henn         │
+    │ MI    ┆ Peter Meijer     ┆ Edward Bradley        │
+    │ CA    ┆ Katie Hill       ┆ Edward Gilbert        │
+    │ NY    ┆ Mondaire Jones   ┆ Cornelius Schoonmaker │
+    └───────┴──────────────────┴───────────────────────┘ |}];
+  let df =
+    Data_frame.lazy_ dataset
+    |> Lazy_frame.sort ~by_column:"birthday" ~descending:true ~nulls_last:true
+    |> Lazy_frame.groupby
+         ~is_stable:true
+         ~by:Expr.[ col "state" ]
+         ~agg:
+           Expr.
+             [ get_person |> first |> alias ~name:"youngest"
+             ; get_person |> last |> alias ~name:"oldest"
+             ; get_person |> sort |> first |> alias ~name:"alphabetical_first"
+             ]
+    |> Lazy_frame.limit ~n:5
+    |> Lazy_frame.collect_exn
+  in
+  Data_frame.print df;
+  [%expect
+    {|
+
+    shape: (5, 4)
+    ┌───────┬──────────────────┬───────────────────────┬────────────────────┐
+    │ state ┆ youngest         ┆ oldest                ┆ alphabetical_first │
+    │ ---   ┆ ---              ┆ ---                   ┆ ---                │
+    │ str   ┆ str              ┆ str                   ┆ str                │
+    ╞═══════╪══════════════════╪═══════════════════════╪════════════════════╡
+    │ NC    ┆ Madison Cawthorn ┆ John Ashe             ┆ Abraham Rencher    │
+    │ IA    ┆ Abby Finkenauer  ┆ Bernhart Henn         ┆ Abby Finkenauer    │
+    │ MI    ┆ Peter Meijer     ┆ Edward Bradley        ┆ Aaron Bliss        │
+    │ CA    ┆ Katie Hill       ┆ Edward Gilbert        ┆ Aaron Sargent      │
+    │ NY    ┆ Mondaire Jones   ┆ Cornelius Schoonmaker ┆ A. Foster          │
+    └───────┴──────────────────┴───────────────────────┴────────────────────┘ |}];
+  let df =
+    Data_frame.lazy_ dataset
+    |> Lazy_frame.sort ~by_column:"birthday" ~descending:true ~nulls_last:true
+    |> Lazy_frame.groupby
+         ~is_stable:true
+         ~by:Expr.[ col "state" ]
+         ~agg:
+           Expr.
+             [ get_person |> first |> alias ~name:"youngest"
+             ; get_person |> last |> alias ~name:"oldest"
+             ; get_person |> sort |> first |> alias ~name:"alphabetical_first"
+             ; col "gender"
+               |> sort_by ~by:[ col "first_name" ]
+               |> first
+               |> alias ~name:"gender"
+             ]
+    |> Lazy_frame.sort ~by_column:"state"
+    |> Lazy_frame.limit ~n:5
+    |> Lazy_frame.collect_exn
+  in
+  Data_frame.print df;
+  [%expect
+    {|
+
+    shape: (5, 5)
+    ┌───────┬──────────────────┬────────────────┬────────────────────┬────────┐
+    │ state ┆ youngest         ┆ oldest         ┆ alphabetical_first ┆ gender │
+    │ ---   ┆ ---              ┆ ---            ┆ ---                ┆ ---    │
+    │ str   ┆ str              ┆ str            ┆ str                ┆ str    │
+    ╞═══════╪══════════════════╪════════════════╪════════════════════╪════════╡
+    │ AK    ┆ Mark Begich      ┆ Thomas Cale    ┆ Anthony Dimond     ┆ M      │
+    │ AL    ┆ Martha Roby      ┆ John McKee     ┆ Albert Goodwyn     ┆ M      │
+    │ AR    ┆ Tim Griffin      ┆ Archibald Yell ┆ Albert Rust        ┆ M      │
+    │ AS    ┆ Eni Faleomavaega ┆ Fofó Sunia     ┆ Eni Faleomavaega   ┆ M      │
+    │ AZ    ┆ Ben Quayle       ┆ Coles Bashford ┆ Ann Kirkpatrick    ┆ F      │
+    └───────┴──────────────────┴────────────────┴────────────────────┴────────┘ |}]
+;;

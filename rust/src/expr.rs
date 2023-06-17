@@ -9,7 +9,7 @@ use crate::utils::*;
 fn expr_unary_op<'a>(
     cr: &'a mut &'a mut OCamlRuntime,
     expr: OCamlRef<'a, DynBox<Expr>>,
-    f: impl Fn(Expr) -> Expr,
+    f: impl FnOnce(Expr) -> Expr,
 ) -> OCaml<'a, DynBox<Expr>> {
     let Abstract(expr) = expr.to_rust(cr);
     OCaml::box_value(cr, f(expr))
@@ -19,7 +19,7 @@ fn expr_binary_op<'a>(
     cr: &'a mut &'a mut OCamlRuntime,
     expr: OCamlRef<'a, DynBox<Expr>>,
     other: OCamlRef<'a, DynBox<Expr>>,
-    f: impl Fn(Expr, Expr) -> Expr,
+    f: impl FnOnce(Expr, Expr) -> Expr,
 ) -> OCaml<'a, DynBox<Expr>> {
     let Abstract(expr) = expr.to_rust(cr);
     let Abstract(other) = other.to_rust(cr);
@@ -97,6 +97,13 @@ ocaml_export! {
         expr_unary_op(cr, expr, |expr| expr.sort(descending))
     }
 
+    fn rust_expr_sort_by(cr, expr: OCamlRef<DynBox<Expr>>, descending: OCamlRef<bool>, by: OCamlRef<OCamlList<DynBox<Expr>>>, ) -> OCaml<DynBox<Expr>> {
+        let by = unwrap_abstract_vec(by.to_rust(cr));
+        let descending: bool = descending.to_rust(cr);
+        let descending = vec![descending; by.len()];
+        expr_unary_op(cr, expr, |expr| expr.sort_by(by, descending))
+    }
+
     fn rust_expr_first(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
         expr_unary_op(cr, expr, |expr| expr.first())
     }
@@ -166,6 +173,11 @@ ocaml_export! {
 
     fn rust_expr_count(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
         expr_unary_op(cr, expr, |expr| expr.count())
+    }
+
+    fn rust_expr_count_(cr, unit: OCamlRef<()>) -> OCaml<DynBox<Expr>> {
+        let () = unit.to_rust(cr);
+        OCaml::box_value(cr, count())
     }
 
     fn rust_expr_n_unique(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
@@ -281,6 +293,18 @@ ocaml_export! {
     fn rust_expr_dt_strftime(cr, expr: OCamlRef<DynBox<Expr>>, format:OCamlRef<String>)-> OCaml<DynBox<Expr>> {
         let format: String = format.to_rust(cr);
         expr_unary_op(cr, expr, |expr| expr.dt().to_string(&format))
+    }
+
+    fn rust_expr_dt_year(cr, expr: OCamlRef<DynBox<Expr>>)-> OCaml<DynBox<Expr>> {
+        expr_unary_op(cr, expr, |expr| expr.dt().year())
+    }
+
+    fn rust_expr_dt_month(cr, expr: OCamlRef<DynBox<Expr>>)-> OCaml<DynBox<Expr>> {
+        expr_unary_op(cr, expr, |expr| expr.dt().month())
+    }
+
+    fn rust_expr_dt_day(cr, expr: OCamlRef<DynBox<Expr>>)-> OCaml<DynBox<Expr>> {
+        expr_unary_op(cr, expr, |expr| expr.dt().day())
     }
 
     fn rust_expr_str_strptime(cr, expr: OCamlRef<DynBox<Expr>>, data_type: OCamlRef<DataType>, format:OCamlRef<String>) -> OCaml<DynBox<Expr>> {

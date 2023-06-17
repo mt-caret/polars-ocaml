@@ -8,10 +8,19 @@ let create_exn series =
   create series |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
 ;;
 
-external read_csv : string -> (t, string) result = "rust_data_frame_read_csv"
+external read_csv
+  :  string
+  -> schema:Schema.t option
+  -> try_parse_dates:bool option
+  -> (t, string) result
+  = "rust_data_frame_read_csv"
 
-let read_csv_exn path =
-  read_csv path |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
+let read_csv ?schema ?try_parse_dates path = read_csv path ~schema ~try_parse_dates
+
+let read_csv_exn ?schema ?try_parse_dates path =
+  read_csv ?schema ?try_parse_dates path
+  |> Result.map_error ~f:Error.of_string
+  |> Or_error.ok_exn
 ;;
 
 external describe

@@ -18,6 +18,10 @@ module T = struct
 
   let sort ?(descending = false) t = sort t ~descending
 
+  external sort_by : t -> descending:bool -> by:t list -> t = "rust_expr_sort_by"
+
+  let sort_by ?(descending = false) t ~by = sort_by t ~descending ~by
+
   external first : t -> t = "rust_expr_first"
   external last : t -> t = "rust_expr_last"
   external reverse : t -> t = "rust_expr_reverse"
@@ -46,6 +50,7 @@ module T = struct
   external sum : t -> t = "rust_expr_sum"
   external mean : t -> t = "rust_expr_mean"
   external count : t -> t = "rust_expr_count"
+  external count_ : unit -> t = "rust_expr_count_"
   external n_unique : t -> t = "rust_expr_n_unique"
   external approx_unique : t -> t = "rust_expr_approx_unique"
   external is_null : t -> t = "rust_expr_is_null"
@@ -79,6 +84,9 @@ include Common.Make_numeric (T)
 
 module Dt = struct
   external strftime : t -> format:string -> t = "rust_expr_dt_strftime"
+  external year : t -> t = "rust_expr_dt_year"
+  external month : t -> t = "rust_expr_dt_month"
+  external day : t -> t = "rust_expr_dt_day"
 end
 
 module Str = struct

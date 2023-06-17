@@ -11,6 +11,7 @@ external float : float -> t = "rust_expr_float"
 external bool : bool -> t = "rust_expr_bool"
 external string : string -> t = "rust_expr_string"
 val sort : ?descending:bool -> t -> t
+val sort_by : ?descending:bool -> t -> by:t list -> t
 external first : t -> t = "rust_expr_first"
 external last : t -> t = "rust_expr_last"
 external reverse : t -> t = "rust_expr_reverse"
@@ -21,6 +22,7 @@ external filter : t -> predicate:t -> t = "rust_expr_filter"
 external sum : t -> t = "rust_expr_sum"
 external mean : t -> t = "rust_expr_mean"
 external count : t -> t = "rust_expr_count"
+external count_ : unit -> t = "rust_expr_count_"
 external n_unique : t -> t = "rust_expr_n_unique"
 external approx_unique : t -> t = "rust_expr_approx_unique"
 external is_null : t -> t = "rust_expr_is_null"
@@ -37,6 +39,9 @@ include Common.Numeric with type t := t
 
 module Dt : sig
   external strftime : t -> format:string -> t = "rust_expr_dt_strftime"
+  external year : t -> t = "rust_expr_dt_year"
+  external month : t -> t = "rust_expr_dt_month"
+  external day : t -> t = "rust_expr_dt_day"
 end
 
 module Str : sig

@@ -4,8 +4,8 @@ type t = Data_frame0.t
 
 external create : Series.t list -> (t, string) result = "rust_data_frame_new"
 val create_exn : Series.t list -> t
-external read_csv : string -> (t, string) result = "rust_data_frame_read_csv"
-val read_csv_exn : string -> t
+val read_csv : ?schema:Schema.t -> ?try_parse_dates:bool -> string -> (t, string) result
+val read_csv_exn : ?schema:Schema.t -> ?try_parse_dates:bool -> string -> t
 val describe : ?percentiles:float list -> t -> (t, string) result
 val describe_exn : ?percentiles:float list -> t -> t
 external lazy_ : t -> Lazy_frame.t = "rust_data_frame_lazy"
