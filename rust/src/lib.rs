@@ -70,4 +70,22 @@ mod tests {
                 ])"#]],
         )
     }
+
+    #[test]
+    fn lazy_groupby_issue() {
+        let dataset = CsvReader::from_path("../test/data/legislators-historical.csv")
+            .unwrap()
+            .finish()
+            .unwrap()
+            .head(Some(1000));
+
+        let df = dataset
+            .lazy()
+            .groupby_stable(vec![col("state")])
+            .agg(vec![col("party").eq(lit("some_string")).sum()])
+            .collect()
+            .unwrap();
+
+        expect![[]].assert_eq(&df.to_string());
+    }
 }
