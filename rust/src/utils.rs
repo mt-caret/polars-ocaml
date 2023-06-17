@@ -1,9 +1,17 @@
 use ocaml_interop::{
     ocaml_alloc_tagged_block, ocaml_alloc_variant, ocaml_unpack_variant, DynBox, FromOCaml, OCaml,
-    OCamlRuntime, ToOCaml,
+    OCamlInt, OCamlRuntime, ToOCaml,
 };
 use polars::prelude::*;
 use std::borrow::Borrow;
+
+pub unsafe fn ocaml_failwith(error_message: &str) -> ! {
+    let error_message = std::ffi::CString::new(error_message).expect("CString::new failed");
+    unsafe {
+        ocaml_sys::caml_failwith(error_message.as_ptr());
+    }
+    unreachable!("caml_failwith should never return")
+}
 
 pub struct PolarsTimeUnit(pub TimeUnit);
 
@@ -113,6 +121,71 @@ unsafe impl ToOCaml<DataType> for PolarsDataType {
                 }
                 DataType::Null => ocaml_value(cr, 15),
                 DataType::Unknown => ocaml_value(cr, 16),
+            }
+        }
+    }
+}
+
+pub struct PolarsFillNullStrategy(pub FillNullStrategy);
+
+unsafe impl FromOCaml<FillNullStrategy> for PolarsFillNullStrategy {
+    fn from_ocaml(v: OCaml<FillNullStrategy>) -> Self {
+        let result = ocaml_unpack_variant! {
+            v => {
+                FillNullStrategy::Backward(upto: Option<OCamlInt>) => {
+                    let upto_: Option<i64> = upto;
+                    let upto: Option<Option<u32>> = upto_.map(|upto| TryInto::<u32>::try_into(upto).ok());
+                    match upto {
+                        None => FillNullStrategy::Backward(None),
+                        Some(None) => unsafe { ocaml_failwith(&format!("Failed conversion to u32 {:?}", upto_)) },
+                        Some(upto) => FillNullStrategy::Backward(upto),
+                    }
+                },
+                FillNullStrategy::Forward(upto: Option<OCamlInt>) => {
+                    let upto_: Option<i64> = upto;
+                    let upto: Option<Option<u32>> = upto_.map(|upto| TryInto::<u32>::try_into(upto).ok());
+                    match upto {
+                        None => FillNullStrategy::Forward(None),
+                        Some(None) => unsafe { ocaml_failwith(&format!("Failed conversion to u32 {:?}", upto_)) },
+                        Some(upto) => FillNullStrategy::Forward(upto),
+                    }
+                },
+                FillNullStrategy::Mean,
+                FillNullStrategy::Min,
+                FillNullStrategy::Max,
+                FillNullStrategy::Zero,
+                FillNullStrategy::One,
+                FillNullStrategy::MaxBound,
+                FillNullStrategy::MinBound,
+            }
+        };
+        PolarsFillNullStrategy(result.expect("Failure when unpacking an OCaml<FillNullStrategy> variant into PolarsFillNullStrategy (unexpected tag value"))
+    }
+}
+
+unsafe impl ToOCaml<FillNullStrategy> for PolarsFillNullStrategy {
+    fn to_ocaml<'a>(&self, cr: &'a mut OCamlRuntime) -> OCaml<'a, FillNullStrategy> {
+        let PolarsFillNullStrategy(fill_null_strategy) = self;
+
+        // We expand out the macro here since we need to do some massaging of the
+        // values to get things into the right shape to convert to OCaml values
+        unsafe {
+            match fill_null_strategy {
+                FillNullStrategy::Backward(upto) => {
+                    let upto = upto.map(|upto| upto as i64);
+                    ocaml_alloc_tagged_block!(cr, 0, upto : Option<OCamlInt>)
+                }
+                FillNullStrategy::Forward(upto) => {
+                    let upto = upto.map(|upto| upto as i64);
+                    ocaml_alloc_tagged_block!(cr, 1, upto : Option<OCamlInt>)
+                }
+                FillNullStrategy::Mean => ocaml_value(cr, 0),
+                FillNullStrategy::Min => ocaml_value(cr, 1),
+                FillNullStrategy::Max => ocaml_value(cr, 2),
+                FillNullStrategy::Zero => ocaml_value(cr, 3),
+                FillNullStrategy::One => ocaml_value(cr, 4),
+                FillNullStrategy::MaxBound => ocaml_value(cr, 5),
+                FillNullStrategy::MinBound => ocaml_value(cr, 6),
             }
         }
     }

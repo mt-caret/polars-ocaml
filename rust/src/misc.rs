@@ -43,21 +43,22 @@ ocaml_export! {
 
     fn rust_test_panic(cr, error_message: OCamlRef<String>) -> OCaml<()> {
         let error_message: String = error_message.to_rust(cr);
-        // TODO: quite hacky, but works for now
+
+        // see rust_test_exception
         if true {
-            panic!("{}", error_message)
+            panic!("{}", error_message);
         }
         OCaml::unit()
     }
 
     fn rust_test_exception(cr, error_message: OCamlRef<String>) -> OCaml<()> {
         let error_message: String = error_message.to_rust(cr);
-        let error_message =
-            std::ffi::CString::new(error_message).expect("CString::new failed");
-        unsafe {
-            ocaml_sys::caml_failwith(error_message.as_ptr());
-        }
 
+        // ideally we would put #[allow(unused_unsafe)] here, but that causes
+        // VSCode to get confused and warn on all code in the ocaml_export! macro.
+        if true {
+            unsafe { ocaml_failwith(&error_message) }
+        }
         OCaml::unit()
     }
 
@@ -88,5 +89,11 @@ ocaml_export! {
             }
         }));
         OCaml::unit()
+    }
+
+    fn rust_test_fill_null_strategy(cr, fill_null_strategy: OCamlRef<FillNullStrategy>) -> OCaml<FillNullStrategy> {
+        let PolarsFillNullStrategy(fill_null_strategy) = fill_null_strategy.to_rust(cr);
+
+        PolarsFillNullStrategy(fill_null_strategy).to_ocaml(cr)
     }
 }
