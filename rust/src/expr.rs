@@ -52,6 +52,11 @@ ocaml_export! {
         OCaml::box_value(cr, col(&name))
     }
 
+    fn rust_expr_cols(cr, names: OCamlRef<OCamlList<String>>) -> OCaml<DynBox<Expr>> {
+        let names: Vec<String> = names.to_rust(cr);
+        OCaml::box_value(cr, cols(&names))
+    }
+
     fn rust_expr_all(cr, unit: OCamlRef<()>) -> OCaml<DynBox<Expr>> {
         let _: () = unit.to_rust(cr);
         OCaml::box_value(cr, all())
@@ -196,6 +201,12 @@ ocaml_export! {
 
     fn rust_expr_approx_unique(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
         expr_unary_op(cr, expr, |expr| expr.approx_unique())
+    }
+
+    fn rust_expr_over(cr, expr: OCamlRef<DynBox<Expr>>, partition_by: OCamlRef<OCamlList<DynBox<Expr>>>, mapping_strategy: OCamlRef<WindowMapping>) -> OCaml<DynBox<Expr>> {
+        let PolarsWindowMapping(mapping_strategy) = mapping_strategy.to_rust(cr);
+        let partition_by: Vec<_> = unwrap_abstract_vec(partition_by.to_rust(cr));
+        expr_unary_op(cr, expr, |expr| expr.over_with_options(&partition_by, WindowOptions { mapping: mapping_strategy }))
     }
 
     fn rust_expr_null_count(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {

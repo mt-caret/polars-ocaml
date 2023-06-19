@@ -1,9 +1,9 @@
 use ocaml_interop::{
     ocaml_alloc_polymorphic_variant, ocaml_alloc_tagged_block, ocaml_alloc_variant,
-    ocaml_unpack_polymorphic_variant, ocaml_unpack_variant, DynBox, FromOCaml, OCaml, OCamlInt,
-    OCamlRuntime, ToOCaml,
+    ocaml_unpack_polymorphic_variant, ocaml_unpack_variant, polymorphic_variant_tag_hash, DynBox,
+    FromOCaml, OCaml, OCamlInt, OCamlRuntime, ToOCaml,
 };
-use polars::prelude::*;
+use polars::{lazy::dsl::WindowMapping, prelude::*};
 use std::borrow::Borrow;
 
 pub unsafe fn ocaml_failwith(error_message: &str) -> ! {
@@ -214,6 +214,37 @@ unsafe impl ToOCaml<InterpolationMethod> for PolarsInterpolationMethod {
             cr, interpolation_method => {
                 InterpolationMethod::Linear,
                 InterpolationMethod::Nearest,
+            }
+        }
+    }
+}
+
+pub struct PolarsWindowMapping(pub WindowMapping);
+
+unsafe impl FromOCaml<WindowMapping> for PolarsWindowMapping {
+    fn from_ocaml(v: OCaml<WindowMapping>) -> Self {
+        let result = ocaml_unpack_polymorphic_variant! {
+            v => {
+                Groups_to_rows => WindowMapping::GroupsToRows,
+                Explode => WindowMapping::Explode,
+                Join => WindowMapping::Join,
+            }
+        };
+        PolarsWindowMapping(result.expect("Failure when unpacking an OCaml<WindowMapping> variant into PolarsWindowMapping (unexpected tag value"))
+    }
+}
+
+unsafe impl ToOCaml<WindowMapping> for PolarsWindowMapping {
+    fn to_ocaml<'a>(&self, cr: &'a mut OCamlRuntime) -> OCaml<'a, WindowMapping> {
+        let PolarsWindowMapping(window_mapping) = self;
+
+        unsafe {
+            match window_mapping {
+                WindowMapping::GroupsToRows => {
+                    OCaml::new(cr, polymorphic_variant_tag_hash!(Groups_to_rows))
+                }
+                WindowMapping::Explode => OCaml::new(cr, polymorphic_variant_tag_hash!(Explode)),
+                WindowMapping::Join => OCaml::new(cr, polymorphic_variant_tag_hash!(Join)),
             }
         }
     }

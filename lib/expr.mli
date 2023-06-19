@@ -3,6 +3,7 @@ open! Core
 type t
 
 external col : string -> t = "rust_expr_col"
+external cols : string list -> t = "rust_expr_cols"
 external all : unit -> t = "rust_expr_all"
 external exclude : string -> t = "rust_expr_exclude"
 val cast : ?strict:bool -> t -> to_:Data_type.t -> t
@@ -27,6 +28,13 @@ external count : t -> t = "rust_expr_count"
 external count_ : unit -> t = "rust_expr_count_"
 external n_unique : t -> t = "rust_expr_n_unique"
 external approx_unique : t -> t = "rust_expr_approx_unique"
+
+val over
+  :  ?mapping_strategy:[ `Groups_to_rows | `Explode | `Join ]
+  -> t
+  -> partition_by:t list
+  -> t
+
 external null_count : t -> t = "rust_expr_null_count"
 external is_null : t -> t = "rust_expr_is_null"
 external is_not_null : t -> t = "rust_expr_is_not_null"

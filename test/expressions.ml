@@ -1016,3 +1016,162 @@ let%expect_test "Missing data" =
     │ 2.0   │
     └───────┘ |}]
 ;;
+
+(* Examples from https://pola-rs.github.io/polars-book/user-guide/expressions/window/ *)
+let%expect_test "Window functions" =
+  let df = Data_frame.read_csv_exn "./data/pokemon.csv" in
+  Data_frame.print (Data_frame.head df);
+  [%expect
+    {|
+    shape: (10, 13)
+    ┌─────┬───────────────────────────┬────────┬────────┬───┬─────────┬───────┬────────────┬───────────┐
+    │ #   ┆ Name                      ┆ Type 1 ┆ Type 2 ┆ … ┆ Sp. Def ┆ Speed ┆ Generation ┆ Legendary │
+    │ --- ┆ ---                       ┆ ---    ┆ ---    ┆   ┆ ---     ┆ ---   ┆ ---        ┆ ---       │
+    │ i64 ┆ str                       ┆ str    ┆ str    ┆   ┆ i64     ┆ i64   ┆ i64        ┆ bool      │
+    ╞═════╪═══════════════════════════╪════════╪════════╪═══╪═════════╪═══════╪════════════╪═══════════╡
+    │ 1   ┆ Bulbasaur                 ┆ Grass  ┆ Poison ┆ … ┆ 65      ┆ 45    ┆ 1          ┆ false     │
+    │ 2   ┆ Ivysaur                   ┆ Grass  ┆ Poison ┆ … ┆ 80      ┆ 60    ┆ 1          ┆ false     │
+    │ 3   ┆ Venusaur                  ┆ Grass  ┆ Poison ┆ … ┆ 100     ┆ 80    ┆ 1          ┆ false     │
+    │ 3   ┆ VenusaurMega Venusaur     ┆ Grass  ┆ Poison ┆ … ┆ 120     ┆ 80    ┆ 1          ┆ false     │
+    │ …   ┆ …                         ┆ …      ┆ …      ┆ … ┆ …       ┆ …     ┆ …          ┆ …         │
+    │ 6   ┆ Charizard                 ┆ Fire   ┆ Flying ┆ … ┆ 85      ┆ 100   ┆ 1          ┆ false     │
+    │ 6   ┆ CharizardMega Charizard X ┆ Fire   ┆ Dragon ┆ … ┆ 85      ┆ 100   ┆ 1          ┆ false     │
+    │ 6   ┆ CharizardMega Charizard Y ┆ Fire   ┆ Flying ┆ … ┆ 115     ┆ 100   ┆ 1          ┆ false     │
+    │ 7   ┆ Squirtle                  ┆ Water  ┆ null   ┆ … ┆ 64      ┆ 43    ┆ 1          ┆ false     │
+    └─────┴───────────────────────────┴────────┴────────┴───┴─────────┴───────┴────────────┴───────────┘ |}];
+  let out =
+    Data_frame.select_exn
+      df
+      ~exprs:
+        Expr.
+          [ col "Type 1"
+          ; col "Type 2"
+          ; col "Attack"
+            |> mean
+            |> over ~partition_by:[ col "Type 1" ]
+            |> alias ~name:"avg_attack_by_type"
+          ; col "Defense"
+            |> mean
+            |> over ~partition_by:[ col "Type 1"; col "Type 2" ]
+            |> alias ~name:"avg_defense_by_type_combination"
+          ; col "Attack" |> mean |> alias ~name:"avg_attack"
+          ]
+  in
+  Data_frame.print out;
+  [%expect
+    {|
+    shape: (163, 5)
+    ┌─────────┬────────┬────────────────────┬─────────────────────────────────┬────────────┐
+    │ Type 1  ┆ Type 2 ┆ avg_attack_by_type ┆ avg_defense_by_type_combination ┆ avg_attack │
+    │ ---     ┆ ---    ┆ ---                ┆ ---                             ┆ ---        │
+    │ str     ┆ str    ┆ f64                ┆ f64                             ┆ f64        │
+    ╞═════════╪════════╪════════════════════╪═════════════════════════════════╪════════════╡
+    │ Grass   ┆ Poison ┆ 72.923077          ┆ 67.8                            ┆ 75.349693  │
+    │ Grass   ┆ Poison ┆ 72.923077          ┆ 67.8                            ┆ 75.349693  │
+    │ Grass   ┆ Poison ┆ 72.923077          ┆ 67.8                            ┆ 75.349693  │
+    │ Grass   ┆ Poison ┆ 72.923077          ┆ 67.8                            ┆ 75.349693  │
+    │ …       ┆ …      ┆ …                  ┆ …                               ┆ …          │
+    │ Dragon  ┆ null   ┆ 94.0               ┆ 55.0                            ┆ 75.349693  │
+    │ Dragon  ┆ null   ┆ 94.0               ┆ 55.0                            ┆ 75.349693  │
+    │ Dragon  ┆ Flying ┆ 94.0               ┆ 95.0                            ┆ 75.349693  │
+    │ Psychic ┆ null   ┆ 53.875             ┆ 51.428571                       ┆ 75.349693  │
+    └─────────┴────────┴────────────────────┴─────────────────────────────────┴────────────┘ |}];
+  let filtered =
+    Data_frame.lazy_ df
+    |> Lazy_frame.filter ~predicate:Expr.(col "Type 2" = string "Psychic")
+    |> Lazy_frame.select ~exprs:Expr.[ col "Name"; col "Type 1"; col "Speed" ]
+    |> Lazy_frame.collect_exn
+  in
+  Data_frame.print filtered;
+  [%expect
+    {|
+    shape: (7, 3)
+    ┌─────────────────────┬────────┬───────┐
+    │ Name                ┆ Type 1 ┆ Speed │
+    │ ---                 ┆ ---    ┆ ---   │
+    │ str                 ┆ str    ┆ i64   │
+    ╞═════════════════════╪════════╪═══════╡
+    │ Slowpoke            ┆ Water  ┆ 15    │
+    │ Slowbro             ┆ Water  ┆ 30    │
+    │ SlowbroMega Slowbro ┆ Water  ┆ 30    │
+    │ Exeggcute           ┆ Grass  ┆ 40    │
+    │ Exeggutor           ┆ Grass  ┆ 55    │
+    │ Starmie             ┆ Water  ┆ 115   │
+    │ Jynx                ┆ Ice    ┆ 95    │
+    └─────────────────────┴────────┴───────┘ |}];
+  let out =
+    filtered
+    |> Data_frame.lazy_
+    |> Lazy_frame.with_columns
+         ~exprs:
+           Expr.
+             [ cols [ "Name"; "Speed" ]
+               |> sort_by ~descending:true ~by:[ col "Speed" ]
+               |> over ~partition_by:[ col "Type 1" ]
+             ]
+    |> Lazy_frame.collect_exn
+  in
+  Data_frame.print out;
+  [%expect
+    {|
+    shape: (7, 3)
+    ┌─────────────────────┬────────┬───────┐
+    │ Name                ┆ Type 1 ┆ Speed │
+    │ ---                 ┆ ---    ┆ ---   │
+    │ str                 ┆ str    ┆ i64   │
+    ╞═════════════════════╪════════╪═══════╡
+    │ Starmie             ┆ Water  ┆ 115   │
+    │ Slowbro             ┆ Water  ┆ 30    │
+    │ SlowbroMega Slowbro ┆ Water  ┆ 30    │
+    │ Exeggutor           ┆ Grass  ┆ 55    │
+    │ Exeggcute           ┆ Grass  ┆ 40    │
+    │ Slowpoke            ┆ Water  ┆ 15    │
+    │ Jynx                ┆ Ice    ┆ 95    │
+    └─────────────────────┴────────┴───────┘ |}];
+  let out =
+    Data_frame.lazy_ df
+    |> Lazy_frame.sort ~by_column:"Type 1"
+    |> Lazy_frame.select
+         ~exprs:
+           Expr.
+             [ col "Type 1"
+               |> head ~length:3
+               |> over ~mapping_strategy:`Explode ~partition_by:[ col "Type 1" ]
+             ; col "Name"
+               |> sort_by ~by:[ col "Speed" ]
+               |> head ~length:3
+               |> over ~mapping_strategy:`Explode ~partition_by:[ col "Type 1" ]
+               |> alias ~name:"fastest/group"
+             ; col "Name"
+               |> sort_by ~by:[ col "Attack" ]
+               |> head ~length:3
+               |> over ~mapping_strategy:`Explode ~partition_by:[ col "Type 1" ]
+               |> alias ~name:"strongest/group"
+             ; col "Name"
+               |> sort
+               |> head ~length:3
+               |> over ~mapping_strategy:`Explode ~partition_by:[ col "Type 1" ]
+               |> alias ~name:"sorted_by_alphabet"
+             ]
+    |> Lazy_frame.collect_exn
+  in
+  Data_frame.print out;
+  [%expect
+    {|
+    shape: (43, 4)
+    ┌────────┬─────────────────────┬─────────────────┬─────────────────────────┐
+    │ Type 1 ┆ fastest/group       ┆ strongest/group ┆ sorted_by_alphabet      │
+    │ ---    ┆ ---                 ┆ ---             ┆ ---                     │
+    │ str    ┆ str                 ┆ str             ┆ str                     │
+    ╞════════╪═════════════════════╪═════════════════╪═════════════════════════╡
+    │ Bug    ┆ Paras               ┆ Metapod         ┆ Beedrill                │
+    │ Bug    ┆ Metapod             ┆ Kakuna          ┆ BeedrillMega Beedrill   │
+    │ Bug    ┆ Parasect            ┆ Caterpie        ┆ Butterfree              │
+    │ Dragon ┆ Dratini             ┆ Dratini         ┆ Dragonair               │
+    │ …      ┆ …                   ┆ …               ┆ …                       │
+    │ Rock   ┆ Omanyte             ┆ Omastar         ┆ Geodude                 │
+    │ Water  ┆ Slowpoke            ┆ Magikarp        ┆ Blastoise               │
+    │ Water  ┆ Slowbro             ┆ Tentacool       ┆ BlastoiseMega Blastoise │
+    │ Water  ┆ SlowbroMega Slowbro ┆ Horsea          ┆ Cloyster                │
+    └────────┴─────────────────────┴─────────────────┴─────────────────────────┘ |}]
+;;
