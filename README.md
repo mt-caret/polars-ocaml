@@ -9,6 +9,8 @@ polars-ocaml is a project to provide idiomatic OCaml bindings to the Polars data
 Currently very much WIP; see progress of examples ported from the Polars user guide
 in the test directory.
 
+Note that the current code assumes that the OCaml version is 4.14.1.
+
 ## license
 
 This project is licensed under the terms of the MIT license, with the exception of the following files:
