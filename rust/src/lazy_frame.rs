@@ -88,6 +88,13 @@ ocaml_export! {
         result.to_ocaml(cr)
     }
 
+    fn rust_lazy_frame_explode(cr, lazy_frame: OCamlRef<DynBox<LazyFrame>>, columns: OCamlRef<OCamlList<DynBox<Expr>>>) -> OCaml<DynBox<LazyFrame>> {
+        let Abstract(lazy_frame) = lazy_frame.to_rust(cr);
+        let columns = unwrap_abstract_vec(columns.to_rust(cr));
+
+        Abstract(lazy_frame.explode(&columns)).to_ocaml(cr)
+    }
+
     fn rust_lazy_frame_with_streaming(cr, lazy_frame: OCamlRef<DynBox<LazyFrame>>, toggle: OCamlRef<bool>) -> OCaml<DynBox<LazyFrame>> {
         let toggle = toggle.to_rust(cr);
         let Abstract(lazy_frame) = lazy_frame.to_rust(cr);

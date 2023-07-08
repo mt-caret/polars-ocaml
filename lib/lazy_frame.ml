@@ -50,6 +50,7 @@ let sort ?descending ?nulls_last t ~by_column =
   sort t ~by_column ~descending ~nulls_last ~multithreaded:(Some false)
 ;;
 
+external explode : t -> columns:Expr.t list -> t = "rust_lazy_frame_explode"
 external with_streaming : t -> toggle:bool -> t = "rust_lazy_frame_with_streaming"
 external schema : t -> (Schema.t, string) result = "rust_lazy_frame_schema"
 

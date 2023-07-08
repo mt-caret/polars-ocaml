@@ -250,6 +250,40 @@ unsafe impl ToOCaml<WindowMapping> for PolarsWindowMapping {
     }
 }
 
+pub struct PolarsRankMethod(pub RankMethod);
+
+unsafe impl FromOCaml<RankMethod> for PolarsRankMethod {
+    fn from_ocaml(v: OCaml<RankMethod>) -> Self {
+        let result = ocaml_unpack_polymorphic_variant! {
+            v => {
+                Average => RankMethod::Average,
+                Min => RankMethod::Min,
+                Max => RankMethod::Max,
+                Dense => RankMethod::Dense,
+                Ordinal => RankMethod::Ordinal,
+                Random => RankMethod::Random,
+            }
+        };
+        PolarsRankMethod(result.expect("Failure when unpacking an OCaml<RankMethod> variant into PolarsRankMethod (unexpected tag value"))
+    }
+}
+
+unsafe impl ToOCaml<RankMethod> for PolarsRankMethod {
+    fn to_ocaml<'a>(&self, cr: &'a mut OCamlRuntime) -> OCaml<'a, RankMethod> {
+        let PolarsRankMethod(rank_method) = self;
+        ocaml_alloc_polymorphic_variant! {
+            cr, rank_method => {
+                RankMethod::Average,
+                RankMethod::Min,
+                RankMethod::Max,
+                RankMethod::Dense,
+                RankMethod::Ordinal,
+                RankMethod::Random,
+            }
+        }
+    }
+}
+
 pub struct Abstract<T>(pub T);
 unsafe impl<T: 'static + Clone> FromOCaml<DynBox<T>> for Abstract<T> {
     fn from_ocaml(v: OCaml<DynBox<T>>) -> Self {

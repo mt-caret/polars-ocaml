@@ -27,6 +27,19 @@ fn expr_binary_op<'a>(
     OCaml::box_value(cr, f(expr, other))
 }
 
+fn expr_ternary_op<'a>(
+    cr: &'a mut &'a mut OCamlRuntime,
+    expr: OCamlRef<'a, DynBox<Expr>>,
+    other: OCamlRef<'a, DynBox<Expr>>,
+    other2: OCamlRef<'a, DynBox<Expr>>,
+    f: impl FnOnce(Expr, Expr, Expr) -> Expr,
+) -> OCaml<'a, DynBox<Expr>> {
+    let Abstract(expr) = expr.to_rust(cr);
+    let Abstract(other) = other.to_rust(cr);
+    let Abstract(other2) = other2.to_rust(cr);
+    OCaml::box_value(cr, f(expr, other, other2))
+}
+
 fn expr_series_map<'a>(
     cr: &'a mut &'a mut OCamlRuntime,
     expr: OCamlRef<'a, DynBox<Expr>>,
@@ -203,10 +216,19 @@ ocaml_export! {
         expr_unary_op(cr, expr, |expr| expr.approx_unique())
     }
 
+    fn rust_expr_explode(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
+        expr_unary_op(cr, expr, |expr| expr.explode())
+    }
+
     fn rust_expr_over(cr, expr: OCamlRef<DynBox<Expr>>, partition_by: OCamlRef<OCamlList<DynBox<Expr>>>, mapping_strategy: OCamlRef<WindowMapping>) -> OCaml<DynBox<Expr>> {
         let PolarsWindowMapping(mapping_strategy) = mapping_strategy.to_rust(cr);
         let partition_by: Vec<_> = unwrap_abstract_vec(partition_by.to_rust(cr));
         expr_unary_op(cr, expr, |expr| expr.over_with_options(&partition_by, WindowOptions { mapping: mapping_strategy }))
+    }
+
+    fn rust_expr_concat_list(cr, exprs: OCamlRef<OCamlList<DynBox<Expr>>>) -> OCaml<Result<DynBox<Expr>,String>> {
+        let exprs: Vec<_> = unwrap_abstract_vec(exprs.to_rust(cr));
+        concat_list(exprs).map(Abstract).map_err(|e| e.to_string()).to_ocaml(cr)
     }
 
     fn rust_expr_null_count(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
@@ -237,6 +259,20 @@ ocaml_export! {
 
     fn rust_expr_fill_nan(cr, expr: OCamlRef<DynBox<Expr>>, with: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
         expr_binary_op(cr, expr, with, |expr, with| expr.fill_nan(with))
+    }
+
+    fn rust_expr_rank(cr, expr: OCamlRef<DynBox<Expr>>, method: OCamlRef<RankMethod>, descending: OCamlRef<bool>, seed: OCamlRef<Option<OCamlInt>>) -> OCaml<Option<DynBox<Expr>>> {
+        let result: Option<_> = try {
+            let Abstract(expr) = expr.to_rust(cr);
+            let PolarsRankMethod(method) = method.to_rust(cr);
+            let descending: bool = descending.to_rust(cr);
+            let seed: Option<Result<u64,_>> = seed.to_rust::<Option<i64>>(cr).map(|seed| seed.try_into());
+            let seed: Option<u64> = seed.map_or(Ok(None), |seed| seed.map(Some)).ok()?;
+
+            Abstract(expr.rank(RankOptions { method, descending }, seed))
+        };
+
+        result.to_ocaml(cr)
     }
 
     fn rust_expr_when_then(cr, when_then_clauses: OCamlRef<OCamlList<(DynBox<Expr>, DynBox<Expr>)>>, otherwise: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
@@ -275,6 +311,16 @@ ocaml_export! {
     fn rust_expr_suffix(cr, expr: OCamlRef<DynBox<Expr>>, suffix: OCamlRef<String>) -> OCaml<DynBox<Expr>> {
         let suffix: String = suffix.to_rust(cr);
         expr_unary_op(cr, expr, |expr| expr.suffix(&suffix))
+    }
+
+    fn rust_expr_round(cr, expr: OCamlRef<DynBox<Expr>>, decimals: OCamlRef<OCamlInt>) -> OCaml<Option<DynBox<Expr>>> {
+        let result: Option<_> = try {
+            let decimals: u32 = decimals.to_rust::<i64>(cr).try_into().ok()?;
+
+            let Abstract(expr) = expr.to_rust(cr);
+            Abstract(expr.round(decimals))
+        };
+        result.to_ocaml(cr)
     }
 
     fn rust_expr_eq(cr, expr: OCamlRef<DynBox<Expr>>, other: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
@@ -348,6 +394,12 @@ ocaml_export! {
 
     fn rust_expr_dt_day(cr, expr: OCamlRef<DynBox<Expr>>)-> OCaml<DynBox<Expr>> {
         expr_unary_op(cr, expr, |expr| expr.dt().day())
+    }
+
+    fn rust_expr_str_split(cr, expr: OCamlRef<DynBox<Expr>>, by: OCamlRef<String>, inclusive: OCamlRef<bool>) -> OCaml<DynBox<Expr>> {
+        let by: String = by.to_rust(cr);
+        let inclusive = inclusive.to_rust(cr);
+        expr_unary_op(cr, expr, |expr| if inclusive { expr.str().split_inclusive(&by) } else { expr.str().split(&by) })
     }
 
     fn rust_expr_str_strptime(cr, expr: OCamlRef<DynBox<Expr>>, data_type: OCamlRef<DataType>, format:OCamlRef<String>) -> OCaml<DynBox<Expr>> {
@@ -442,5 +494,30 @@ ocaml_export! {
                 if literal { chunked.replace_literal_all(&pat, &with) } else { chunked.replace_all(&pat, &with) };
             Ok(Some(replaced?.into_series()))
         }, GetOutput::from_type(DataType::List(Box::new(DataType::Utf8))))
+    }
+
+    fn rust_expr_list_lengths(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
+        expr_unary_op(cr, expr, |expr| expr.list().lengths())
+    }
+
+    fn rust_expr_list_slice(cr, expr: OCamlRef<DynBox<Expr>>, offset: OCamlRef<DynBox<Expr>>, length: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
+        expr_ternary_op(cr, expr, offset, length, |expr, offset, length| expr.list().slice(offset, length))
+    }
+
+    fn rust_expr_list_head(cr, expr: OCamlRef<DynBox<Expr>>, n: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
+        expr_binary_op(cr, expr, n, |expr, n| expr.list().head(n))
+    }
+
+    fn rust_expr_list_tail(cr, expr: OCamlRef<DynBox<Expr>>, n: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
+        expr_binary_op(cr, expr, n, |expr, n| expr.list().tail(n))
+    }
+
+    fn rust_expr_list_sum(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
+        expr_unary_op(cr, expr, |expr| expr.list().sum())
+    }
+
+    fn rust_expr_list_eval(cr, expr: OCamlRef<DynBox<Expr>>, other: OCamlRef<DynBox<Expr>>, parallel: OCamlRef<bool>) -> OCaml<DynBox<Expr>> {
+        let parallel = parallel.to_rust(cr);
+        expr_binary_op(cr, expr, other, |expr, other| expr.list().eval(other, parallel))
     }
 }

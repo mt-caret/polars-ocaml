@@ -6,6 +6,7 @@ external col : string -> t = "rust_expr_col"
 external cols : string list -> t = "rust_expr_cols"
 external all : unit -> t = "rust_expr_all"
 external exclude : string -> t = "rust_expr_exclude"
+val element : unit -> t
 val cast : ?strict:bool -> t -> to_:Data_type.t -> t
 external null : unit -> t = "rust_expr_null"
 external int : int -> t = "rust_expr_int"
@@ -28,6 +29,7 @@ external count : t -> t = "rust_expr_count"
 external count_ : unit -> t = "rust_expr_count_"
 external n_unique : t -> t = "rust_expr_n_unique"
 external approx_unique : t -> t = "rust_expr_approx_unique"
+external explode : t -> t = "rust_expr_explode"
 
 val over
   :  ?mapping_strategy:[ `Groups_to_rows | `Explode | `Join ]
@@ -35,6 +37,7 @@ val over
   -> partition_by:t list
   -> t
 
+val concat_list : t Nonempty_list.t -> t
 external null_count : t -> t = "rust_expr_null_count"
 external is_null : t -> t = "rust_expr_is_null"
 external is_not_null : t -> t = "rust_expr_is_not_null"
@@ -48,10 +51,19 @@ external fill_null'
 
 val interpolate : ?method_:[ `Linear | `Nearest ] -> t -> t
 external fill_nan : t -> with_:t -> t = "rust_expr_fill_nan"
+
+val rank
+  :  ?method_:[ `Average | `Dense | `Max | `Min | `Ordinal | `Random ]
+  -> ?descending:bool
+  -> ?seed:int
+  -> t
+  -> t
+
 external when_ : (t * t) list -> otherwise:t -> t = "rust_expr_when_then"
 external alias : t -> name:string -> t = "rust_expr_alias"
 external prefix : t -> prefix:string -> t = "rust_expr_prefix"
 external suffix : t -> suffix:string -> t = "rust_expr_suffix"
+val round : t -> decimals:int -> t
 external equal : t -> t -> t = "rust_expr_eq"
 
 include Common.Compare with type t := t
@@ -66,6 +78,8 @@ module Dt : sig
 end
 
 module Str : sig
+  val split : ?inclusive:bool -> t -> by:string -> t
+
   external strptime
     :  t
     -> type_:Data_type.t
@@ -82,4 +96,13 @@ module Str : sig
   external extract_all : t -> pat:string -> t = "rust_expr_str_extract_all"
   val replace : ?literal:bool -> t -> pat:string -> with_:string -> t
   val replace_all : ?literal:bool -> t -> pat:string -> with_:string -> t
+end
+
+module List : sig
+  external lengths : t -> t = "rust_expr_list_lengths"
+  external slice : t -> offset:t -> length:t -> t = "rust_expr_list_slice"
+  external head : t -> n:t -> t = "rust_expr_list_head"
+  external tail : t -> n:t -> t = "rust_expr_list_tail"
+  external sum : t -> t = "rust_expr_list_sum"
+  val eval : ?parallel:bool -> t -> expr:t -> t
 end

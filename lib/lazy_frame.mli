@@ -15,6 +15,7 @@ external with_columns : t -> exprs:Expr.t list -> t = "rust_lazy_frame_with_colu
 val groupby : ?is_stable:bool -> t -> by:Expr.t list -> agg:Expr.t list -> t
 val sort : ?descending:bool -> ?nulls_last:bool -> t -> by_column:string -> t
 val limit : t -> n:int -> t
+external explode : t -> columns:Expr.t list -> t = "rust_lazy_frame_explode"
 external with_streaming : t -> toggle:bool -> t = "rust_lazy_frame_with_streaming"
 external schema : t -> (Schema.t, string) result = "rust_lazy_frame_schema"
 val schema_exn : t -> Schema.t

@@ -14,4 +14,4 @@ expect-test = "1.4.1"
 ocaml = "0.22.4"
 ocaml-interop = "0.8.8"
 ocaml-sys = "0.23.0"
-polars = { version = "0.30.0", features = [ "lazy", "dot_diagram", "parquet", "approx_unique", "dtype-date", "dtype-datetime", "dtype-i8", "dtype-i16", "dtype-u8", "dtype-u16", "random", "describe", "streaming", "interpolate" ] }
+polars = { version = "0.30.0", features = [ "lazy", "dot_diagram", "parquet", "approx_unique", "dtype-date", "dtype-datetime", "dtype-i8", "dtype-i16", "dtype-u8", "dtype-u16", "random", "describe", "streaming", "interpolate", "list_eval", "rank", "round_series" ] }

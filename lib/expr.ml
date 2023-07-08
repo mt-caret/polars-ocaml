@@ -7,6 +7,9 @@ module T = struct
   external cols : string list -> t = "rust_expr_cols"
   external all : unit -> t = "rust_expr_all"
   external exclude : string -> t = "rust_expr_exclude"
+
+  let element () = col ""
+
   external cast : t -> to_:Data_type.t -> strict:bool -> t = "rust_expr_cast"
 
   let cast ?(strict = true) t ~to_ = cast t ~to_ ~strict
@@ -56,6 +59,7 @@ module T = struct
   external count_ : unit -> t = "rust_expr_count_"
   external n_unique : t -> t = "rust_expr_n_unique"
   external approx_unique : t -> t = "rust_expr_approx_unique"
+  external explode : t -> t = "rust_expr_explode"
 
   external over
     :  t
@@ -66,6 +70,17 @@ module T = struct
 
   let over ?(mapping_strategy = `Groups_to_rows) t ~partition_by =
     over t ~partition_by ~mapping_strategy
+  ;;
+
+  external concat_list : t list -> (t, string) result = "rust_expr_concat_list"
+
+  let concat_list ts =
+    Nonempty_list.to_list ts
+    |> concat_list
+    |> Result.map_error ~f:Error.of_string
+    (* Currently the only way time that rust_expr_concat_list will return an
+       Error is when the argument is an empty list, so this should never raise *)
+    |> Or_error.ok_exn
   ;;
 
   external null_count : t -> t = "rust_expr_null_count"
@@ -88,10 +103,27 @@ module T = struct
   let interpolate ?(method_ = `Linear) t = interpolate t ~method_
 
   external fill_nan : t -> with_:t -> t = "rust_expr_fill_nan"
+
+  external rank
+    :  t
+    -> method_:[ `Average | `Min | `Max | `Dense | `Ordinal | `Random ]
+    -> descending:bool
+    -> seed:int option
+    -> t option
+    = "rust_expr_rank"
+
+  let rank ?(method_ = `Dense) ?(descending = false) ?seed t =
+    rank t ~method_ ~descending ~seed |> Option.value_exn ~here:[%here]
+  ;;
+
   external when_ : (t * t) list -> otherwise:t -> t = "rust_expr_when_then"
   external alias : t -> name:string -> t = "rust_expr_alias"
   external prefix : t -> prefix:string -> t = "rust_expr_prefix"
   external suffix : t -> suffix:string -> t = "rust_expr_suffix"
+  external round : t -> decimals:int -> t option = "rust_expr_round"
+
+  let round t ~decimals = round t ~decimals |> Option.value_exn ~here:[%here]
+
   external equal : t -> t -> t = "rust_expr_eq"
 
   let ( = ) = equal
@@ -123,6 +155,10 @@ module Dt = struct
 end
 
 module Str = struct
+  external split : t -> by:string -> inclusive:bool -> t = "rust_expr_str_split"
+
+  let split ?(inclusive = false) t ~by = split t ~by ~inclusive
+
   external strptime
     :  t
     -> type_:Data_type.t
@@ -163,4 +199,15 @@ module Str = struct
     = "rust_expr_str_replace_all"
 
   let replace_all ?(literal = false) t ~pat ~with_ = replace_all t ~pat ~with_ ~literal
+end
+
+module List = struct
+  external lengths : t -> t = "rust_expr_list_lengths"
+  external slice : t -> offset:t -> length:t -> t = "rust_expr_list_slice"
+  external head : t -> n:t -> t = "rust_expr_list_head"
+  external tail : t -> n:t -> t = "rust_expr_list_tail"
+  external sum : t -> t = "rust_expr_list_sum"
+  external eval : t -> expr:t -> parallel:bool -> t = "rust_expr_list_eval"
+
+  let eval ?(parallel = false) t ~expr = eval t ~expr ~parallel
 end

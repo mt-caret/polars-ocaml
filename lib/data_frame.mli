@@ -48,6 +48,14 @@ external sum : t -> t = "rust_data_frame_sum"
 external mean : t -> t = "rust_data_frame_mean"
 external median : t -> t = "rust_data_frame_median"
 external null_count : t -> t = "rust_data_frame_null_count"
+
+external explode
+  :  t
+  -> columns:string list
+  -> (t, string) result
+  = "rust_data_frame_explode"
+
+val explode_exn : t -> columns:string list -> t
 external schema : t -> Schema.t = "rust_data_frame_schema"
 external to_string_hum : t -> string = "rust_data_frame_to_string_hum"
 val print : t -> unit

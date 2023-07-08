@@ -1175,3 +1175,224 @@ let%expect_test "Window functions" =
     │ Water  ┆ SlowbroMega Slowbro ┆ Horsea          ┆ Cloyster                │
     └────────┴─────────────────────┴─────────────────┴─────────────────────────┘ |}]
 ;;
+
+(* Examples from https://pola-rs.github.io/polars-book/user-guide/expressions/lists/ *)
+let%expect_test "Lists and Arrays" =
+  let weather =
+    Data_frame.create_exn
+      Series.
+        [ string
+            "station"
+            (List.range 1 6 |> List.map ~f:(fun i -> [%string "Station %{i#Int}"]))
+        ; string
+            "temperatures"
+            [ "20 5 5 E1 7 13 19 9 6 20"
+            ; "18 8 16 11 23 E2 8 E2 E2 E2 90 70 40"
+            ; "19 24 E9 16 6 12 10 22"
+            ; "E2 E0 15 7 8 10 E1 24 17 13 6"
+            ; "14 8 E0 16 22 24 E1"
+            ]
+        ]
+  in
+  Data_frame.print weather;
+  [%expect
+    {|
+    shape: (5, 2)
+    ┌───────────┬───────────────────────────────────┐
+    │ station   ┆ temperatures                      │
+    │ ---       ┆ ---                               │
+    │ str       ┆ str                               │
+    ╞═══════════╪═══════════════════════════════════╡
+    │ Station 1 ┆ 20 5 5 E1 7 13 19 9 6 20          │
+    │ Station 2 ┆ 18 8 16 11 23 E2 8 E2 E2 E2 90 7… │
+    │ Station 3 ┆ 19 24 E9 16 6 12 10 22            │
+    │ Station 4 ┆ E2 E0 15 7 8 10 E1 24 17 13 6     │
+    │ Station 5 ┆ 14 8 E0 16 22 24 E1               │
+    └───────────┴───────────────────────────────────┘ |}];
+  Data_frame.with_columns_exn
+    weather
+    ~exprs:Expr.[ col "temperatures" |> Str.split ~by:" " ]
+  |> Data_frame.print;
+  [%expect
+    {|
+    shape: (5, 2)
+    ┌───────────┬──────────────────────┐
+    │ station   ┆ temperatures         │
+    │ ---       ┆ ---                  │
+    │ str       ┆ list[str]            │
+    ╞═══════════╪══════════════════════╡
+    │ Station 1 ┆ ["20", "5", … "20"]  │
+    │ Station 2 ┆ ["18", "8", … "40"]  │
+    │ Station 3 ┆ ["19", "24", … "22"] │
+    │ Station 4 ┆ ["E2", "E0", … "6"]  │
+    │ Station 5 ┆ ["14", "8", … "E1"]  │
+    └───────────┴──────────────────────┘ |}];
+  Data_frame.with_columns_exn
+    weather
+    ~exprs:Expr.[ col "temperatures" |> Str.split ~by:" " ]
+  |> Data_frame.explode_exn ~columns:[ "temperatures" ]
+  |> Data_frame.print;
+  [%expect
+    {|
+    shape: (49, 2)
+    ┌───────────┬──────────────┐
+    │ station   ┆ temperatures │
+    │ ---       ┆ ---          │
+    │ str       ┆ str          │
+    ╞═══════════╪══════════════╡
+    │ Station 1 ┆ 20           │
+    │ Station 1 ┆ 5            │
+    │ Station 1 ┆ 5            │
+    │ Station 1 ┆ E1           │
+    │ …         ┆ …            │
+    │ Station 5 ┆ 16           │
+    │ Station 5 ┆ 22           │
+    │ Station 5 ┆ 24           │
+    │ Station 5 ┆ E1           │
+    └───────────┴──────────────┘ |}];
+  Data_frame.with_columns_exn
+    weather
+    ~exprs:Expr.[ col "temperatures" |> Str.split ~by:" " ]
+  |> Data_frame.with_columns_exn
+       ~exprs:
+         Expr.
+           [ col "temperatures" |> List.head ~n:(int 3) |> alias ~name:"top3"
+           ; col "temperatures"
+             |> List.slice ~offset:(int (-3)) ~length:(int 3)
+             |> alias ~name:"bottom_3"
+           ; col "temperatures" |> List.lengths |> alias ~name:"obs"
+           ]
+  |> Data_frame.print;
+  [%expect
+    {|
+    shape: (5, 5)
+    ┌───────────┬──────────────────────┬────────────────────┬────────────────────┬─────┐
+    │ station   ┆ temperatures         ┆ top3               ┆ bottom_3           ┆ obs │
+    │ ---       ┆ ---                  ┆ ---                ┆ ---                ┆ --- │
+    │ str       ┆ list[str]            ┆ list[str]          ┆ list[str]          ┆ u32 │
+    ╞═══════════╪══════════════════════╪════════════════════╪════════════════════╪═════╡
+    │ Station 1 ┆ ["20", "5", … "20"]  ┆ ["20", "5", "5"]   ┆ ["9", "6", "20"]   ┆ 10  │
+    │ Station 2 ┆ ["18", "8", … "40"]  ┆ ["18", "8", "16"]  ┆ ["90", "70", "40"] ┆ 13  │
+    │ Station 3 ┆ ["19", "24", … "22"] ┆ ["19", "24", "E9"] ┆ ["12", "10", "22"] ┆ 8   │
+    │ Station 4 ┆ ["E2", "E0", … "6"]  ┆ ["E2", "E0", "15"] ┆ ["17", "13", "6"]  ┆ 11  │
+    │ Station 5 ┆ ["14", "8", … "E1"]  ┆ ["14", "8", "E0"]  ┆ ["22", "24", "E1"] ┆ 7   │
+    └───────────┴──────────────────────┴────────────────────┴────────────────────┴─────┘ |}];
+  Data_frame.with_columns_exn
+    weather
+    ~exprs:
+      Expr.
+        [ col "temperatures"
+          |> Str.split ~by:" "
+          |> List.eval ~expr:(element () |> cast ~strict:false ~to_:Int64 |> is_null)
+          |> List.sum
+          |> alias ~name:"errors"
+        ]
+  |> Data_frame.print;
+  [%expect
+    {|
+    shape: (5, 3)
+    ┌───────────┬───────────────────────────────────┬────────┐
+    │ station   ┆ temperatures                      ┆ errors │
+    │ ---       ┆ ---                               ┆ ---    │
+    │ str       ┆ str                               ┆ u32    │
+    ╞═══════════╪═══════════════════════════════════╪════════╡
+    │ Station 1 ┆ 20 5 5 E1 7 13 19 9 6 20          ┆ 1      │
+    │ Station 2 ┆ 18 8 16 11 23 E2 8 E2 E2 E2 90 7… ┆ 4      │
+    │ Station 3 ┆ 19 24 E9 16 6 12 10 22            ┆ 1      │
+    │ Station 4 ┆ E2 E0 15 7 8 10 E1 24 17 13 6     ┆ 3      │
+    │ Station 5 ┆ 14 8 E0 16 22 24 E1               ┆ 2      │
+    └───────────┴───────────────────────────────────┴────────┘ |}];
+  Data_frame.with_columns_exn
+    weather
+    ~exprs:
+      Expr.
+        [ col "temperatures"
+          |> Str.split ~by:" "
+          |> List.eval ~expr:(element () |> Str.contains ~pat:"(?i)[a-z]")
+          |> List.sum
+          |> alias ~name:"errors"
+        ]
+  |> Data_frame.print;
+  [%expect
+    {|
+    shape: (5, 3)
+    ┌───────────┬───────────────────────────────────┬────────┐
+    │ station   ┆ temperatures                      ┆ errors │
+    │ ---       ┆ ---                               ┆ ---    │
+    │ str       ┆ str                               ┆ u32    │
+    ╞═══════════╪═══════════════════════════════════╪════════╡
+    │ Station 1 ┆ 20 5 5 E1 7 13 19 9 6 20          ┆ 1      │
+    │ Station 2 ┆ 18 8 16 11 23 E2 8 E2 E2 E2 90 7… ┆ 4      │
+    │ Station 3 ┆ 19 24 E9 16 6 12 10 22            ┆ 1      │
+    │ Station 4 ┆ E2 E0 15 7 8 10 E1 24 17 13 6     ┆ 3      │
+    │ Station 5 ┆ 14 8 E0 16 22 24 E1               ┆ 2      │
+    └───────────┴───────────────────────────────────┴────────┘ |}];
+  let weather_by_day =
+    Data_frame.create_exn
+      Series.
+        [ string
+            "station"
+            (List.range 1 11 |> List.map ~f:(fun i -> [%string "Station %{i#Int}"]))
+        ; int "day_1" [ 17; 11; 8; 22; 9; 21; 20; 8; 8; 17 ]
+        ; int "day_2" [ 15; 11; 10; 8; 7; 14; 18; 21; 15; 13 ]
+        ; int "day_3" [ 16; 15; 24; 24; 8; 23; 19; 23; 16; 10 ]
+        ]
+  in
+  Data_frame.print weather_by_day;
+  [%expect
+    {|
+    shape: (10, 4)
+    ┌────────────┬───────┬───────┬───────┐
+    │ station    ┆ day_1 ┆ day_2 ┆ day_3 │
+    │ ---        ┆ ---   ┆ ---   ┆ ---   │
+    │ str        ┆ i64   ┆ i64   ┆ i64   │
+    ╞════════════╪═══════╪═══════╪═══════╡
+    │ Station 1  ┆ 17    ┆ 15    ┆ 16    │
+    │ Station 2  ┆ 11    ┆ 11    ┆ 15    │
+    │ Station 3  ┆ 8     ┆ 10    ┆ 24    │
+    │ Station 4  ┆ 22    ┆ 8     ┆ 24    │
+    │ …          ┆ …     ┆ …     ┆ …     │
+    │ Station 7  ┆ 20    ┆ 18    ┆ 19    │
+    │ Station 8  ┆ 8     ┆ 21    ┆ 23    │
+    │ Station 9  ┆ 8     ┆ 15    ┆ 16    │
+    │ Station 10 ┆ 17    ┆ 13    ┆ 10    │
+    └────────────┴───────┴───────┴───────┘ |}];
+  let rank_pct =
+    Expr.(
+      (element ()
+       |> rank ~descending:true
+       |> (* Division by default doesn't convert into floats so an explicit
+          cast is required. *)
+       cast ~to_:Float64)
+      / (col "*" |> count)
+      |> round ~decimals:2)
+  in
+  Data_frame.with_columns_exn
+    weather_by_day
+    ~exprs:Expr.[ concat_list [ exclude "station" ] |> alias ~name:"all_temps" ]
+  |> Data_frame.select_exn
+       ~exprs:
+         Expr.
+           [ exclude "all_temps"
+           ; col "all_temps" |> List.eval ~expr:rank_pct |> alias ~name:"temps_rank"
+           ]
+  |> Data_frame.print;
+  [%expect
+    {|
+    shape: (10, 5)
+    ┌────────────┬───────┬───────┬───────┬────────────────────┐
+    │ station    ┆ day_1 ┆ day_2 ┆ day_3 ┆ temps_rank         │
+    │ ---        ┆ ---   ┆ ---   ┆ ---   ┆ ---                │
+    │ str        ┆ i64   ┆ i64   ┆ i64   ┆ list[f64]          │
+    ╞════════════╪═══════╪═══════╪═══════╪════════════════════╡
+    │ Station 1  ┆ 17    ┆ 15    ┆ 16    ┆ [0.33, 1.0, 0.67]  │
+    │ Station 2  ┆ 11    ┆ 11    ┆ 15    ┆ [0.67, 0.67, 0.33] │
+    │ Station 3  ┆ 8     ┆ 10    ┆ 24    ┆ [1.0, 0.67, 0.33]  │
+    │ Station 4  ┆ 22    ┆ 8     ┆ 24    ┆ [0.67, 1.0, 0.33]  │
+    │ …          ┆ …     ┆ …     ┆ …     ┆ …                  │
+    │ Station 7  ┆ 20    ┆ 18    ┆ 19    ┆ [0.33, 1.0, 0.67]  │
+    │ Station 8  ┆ 8     ┆ 21    ┆ 23    ┆ [1.0, 0.67, 0.33]  │
+    │ Station 9  ┆ 8     ┆ 15    ┆ 16    ┆ [1.0, 0.67, 0.33]  │
+    │ Station 10 ┆ 17    ┆ 13    ┆ 10    ┆ [0.33, 0.67, 1.0]  │
+    └────────────┴───────┴───────┴───────┴────────────────────┘ |}]
+;;

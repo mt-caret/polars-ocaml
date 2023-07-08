@@ -124,6 +124,16 @@ ocaml_export! {
         Abstract(data_frame.null_count()).to_ocaml(cr)
     }
 
+    fn rust_data_frame_explode(cr, data_frame: OCamlRef<DynBox<DataFrame>>, columns: OCamlRef<OCamlList<String>>) -> OCaml<Result<DynBox<DataFrame>, String>> {
+        let Abstract(data_frame) = data_frame.to_rust(cr);
+        let columns: Vec<String> = columns.to_rust(cr);
+
+        data_frame.explode(columns)
+        .map(Abstract)
+        .map_err(|err| err.to_string())
+        .to_ocaml(cr)
+    }
+
     fn rust_data_frame_schema(cr, data_frame: OCamlRef<DynBox<DataFrame>>) -> OCaml<DynBox<Schema>> {
         let Abstract(data_frame) = data_frame.to_rust(cr);
         OCaml::box_value(cr, data_frame.schema())
