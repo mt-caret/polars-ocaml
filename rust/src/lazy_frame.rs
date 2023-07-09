@@ -63,6 +63,15 @@ ocaml_export! {
         OCaml::box_value(cr, groupby.agg(agg))
     }
 
+    fn rust_lazy_frame_join(cr, lazy_frame: OCamlRef<DynBox<LazyFrame>>, other: OCamlRef<DynBox<LazyFrame>>, left_on: OCamlRef<OCamlList<DynBox<Expr>>>, right_on: OCamlRef<OCamlList<DynBox<Expr>>>, how: OCamlRef<JoinType>) -> OCaml<DynBox<LazyFrame>> {
+        let left_on = unwrap_abstract_vec(left_on.to_rust(cr));
+        let right_on = unwrap_abstract_vec(right_on.to_rust(cr));
+        let PolarsJoinType(how) = how.to_rust(cr);
+        let Abstract(lazy_frame) = lazy_frame.to_rust(cr);
+        let Abstract(other) = other.to_rust(cr);
+        OCaml::box_value(cr, lazy_frame.join(other, &left_on, &right_on, how))
+    }
+
     fn rust_lazy_frame_sort(cr, lazy_frame: OCamlRef<DynBox<LazyFrame>>, by_column: OCamlRef<String>, descending: OCamlRef<Option<bool>>, nulls_last: OCamlRef<Option<bool>>, multithreaded: OCamlRef<Option<bool>>) -> OCaml<DynBox<LazyFrame>> {
         let by_column: String = by_column.to_rust(cr);
         let descending: Option<bool> = descending.to_rust(cr);

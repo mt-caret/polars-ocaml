@@ -59,14 +59,16 @@ module type Common = sig
     type t
 
     external create : year:int -> month:int -> day:int -> t option = "rust_naive_date"
-    val of_date : Core.Date.t -> t
+    val of_date : Date.t -> t
+    val of_string : string -> t
   end
 
   module Naive_datetime : sig
     type t
 
-    val of_naive_date : Naive_date.t -> t
-    val of_date : Core.Date.t -> t
+    val of_naive_date : ?hour:int -> ?min:int -> ?sec:int -> Naive_date.t -> t
+    val of_date : ?hour:int -> ?min:int -> ?sec:int -> Date.t -> t
+    val of_string : string -> t
   end
 
   module For_testing : sig

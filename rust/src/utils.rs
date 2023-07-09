@@ -1,9 +1,10 @@
 use ocaml_interop::{
     ocaml_alloc_polymorphic_variant, ocaml_alloc_tagged_block, ocaml_alloc_variant,
     ocaml_unpack_polymorphic_variant, ocaml_unpack_variant, polymorphic_variant_tag_hash, DynBox,
-    FromOCaml, OCaml, OCamlInt, OCamlRuntime, ToOCaml,
+    FromOCaml, OCaml, OCamlInt, OCamlList, OCamlRuntime, ToOCaml,
 };
 use polars::{lazy::dsl::WindowMapping, prelude::*};
+use smartstring::{LazyCompact, SmartString};
 use std::borrow::Borrow;
 
 pub unsafe fn ocaml_failwith(error_message: &str) -> ! {
@@ -281,6 +282,63 @@ unsafe impl ToOCaml<RankMethod> for PolarsRankMethod {
                 RankMethod::Random,
             }
         }
+    }
+}
+
+pub struct PolarsJoinType(pub JoinType);
+unsafe impl FromOCaml<JoinType> for PolarsJoinType {
+    fn from_ocaml(v: OCaml<JoinType>) -> Self {
+        let result = ocaml_unpack_variant! {
+            v => {
+                JoinType::Left,
+                JoinType::Inner,
+                JoinType::Outer,
+                JoinType::AsOf(dummy: ()) => {
+                    // We don't actually care about the value of dummy, we just
+                    // need to make sure that the variant is treated as a
+                    // block, not a value.
+                    let () = dummy;
+
+                    unsafe {
+                        let strategy = v.field::<AsofStrategy>(0);
+                        let strategy = ocaml_unpack_polymorphic_variant! {
+                            strategy => {
+                                Backward => AsofStrategy::Backward,
+                                Forward => AsofStrategy::Forward,
+                                Nearest => AsofStrategy::Nearest,
+                            }
+                        };
+                        let strategy = strategy.expect(
+                            "Failure when unpacking an OCaml<AsofStrategy> variant (unexpected tag value",
+                        );
+
+                        let tolerance: Option<String> = v.field::<Option<String>>(1).to_rust();
+                        let tolerance = tolerance.map(SmartString::from);
+
+                        let left_by: Option<Vec<String>> = v.field::<Option<OCamlList<String>>>(2).to_rust();
+                        let left_by: Option<Vec<SmartString<LazyCompact>>> =
+                            left_by.map(|left_by| left_by.into_iter().map(SmartString::from).collect());
+
+                        let right_by: Option<Vec<String>> = v.field::<Option<OCamlList<String>>>(3).to_rust();
+                        let right_by: Option<Vec<SmartString<LazyCompact>>> =
+                            right_by.map(|right_by| right_by.into_iter().map(SmartString::from).collect());
+
+                        JoinType::AsOf(AsOfOptions {
+                            strategy,
+                            tolerance: None,
+                            tolerance_str: tolerance,
+                            left_by,
+                            right_by,
+                        })
+                    }
+                },
+                JoinType::Cross,
+                JoinType::Semi,
+                JoinType::Anti,
+            }
+        };
+
+        PolarsJoinType(result.expect("Failure when unpacking an OCaml<JoinType> variant into PolarsJoinType (unexpected tag value"))
     }
 }
 

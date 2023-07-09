@@ -16,9 +16,24 @@ ocaml_export! {
         result.to_ocaml(cr)
     }
 
-    fn rust_naive_date_to_naive_datetime(cr, date: OCamlRef<DynBox<NaiveDate>>) -> OCaml<Option<DynBox<NaiveDateTime>>> {
+    fn rust_naive_date_to_naive_datetime(cr, date: OCamlRef<DynBox<NaiveDate>>, hour: OCamlRef<Option<OCamlInt>>, min: OCamlRef<Option<OCamlInt>>, sec: OCamlRef<Option<OCamlInt>>) -> OCaml<Option<DynBox<NaiveDateTime>>> {
         let Abstract(date) = date.to_rust(cr);
-        date.and_hms_opt(0, 0, 0).map(Abstract).to_ocaml(cr)
+
+        let result: Option<_> = try {
+            let hour: u32 = hour.to_rust::<Option<i64>>(cr).unwrap_or(0).try_into().ok()?;
+            let min: u32 = min.to_rust::<Option<i64>>(cr).unwrap_or(0).try_into().ok()?;
+            let sec: u32 = sec.to_rust::<Option<i64>>(cr).unwrap_or(0).try_into().ok()?;
+
+            Abstract(date.and_hms_opt(hour, min, sec)?)
+        };
+
+        result.to_ocaml(cr)
+    }
+
+    fn rust_naive_datetime_to_string(cr, datetime: OCamlRef<DynBox<NaiveDateTime>>) -> OCaml<String> {
+        let Abstract(datetime) = datetime.to_rust(cr);
+
+        datetime.to_string().to_ocaml(cr)
     }
 
     fn rust_schema_create(cr, fields: OCamlRef<OCamlList<(String, DataType)>>) -> OCaml<DynBox<Schema>> {

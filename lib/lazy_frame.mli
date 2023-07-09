@@ -13,6 +13,16 @@ external filter : t -> predicate:Expr.t -> t = "rust_lazy_frame_filter"
 external select : t -> exprs:Expr.t list -> t = "rust_lazy_frame_select"
 external with_columns : t -> exprs:Expr.t list -> t = "rust_lazy_frame_with_columns"
 val groupby : ?is_stable:bool -> t -> by:Expr.t list -> agg:Expr.t list -> t
+val join : t -> other:t -> on:Expr.t list -> how:Join_type.t -> t
+
+val join'
+  :  t
+  -> other:t
+  -> left_on:Expr.t list
+  -> right_on:Expr.t list
+  -> how:Join_type.t
+  -> t
+
 val sort : ?descending:bool -> ?nulls_last:bool -> t -> by_column:string -> t
 val limit : t -> n:int -> t
 external explode : t -> columns:Expr.t list -> t = "rust_lazy_frame_explode"

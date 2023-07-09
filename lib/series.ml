@@ -23,7 +23,7 @@ module T = struct
     -> t
     = "rust_series_new_datetime"
 
-  let datetime name dates =
+  let datetime' name dates =
     datetime name (List.map dates ~f:Common.Naive_datetime.of_date)
   ;;
 

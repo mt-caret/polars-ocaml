@@ -33,6 +33,18 @@ external groupby
 
 let groupby ?(is_stable = false) t ~by ~agg = groupby t ~is_stable ~by ~agg
 
+external join_
+  :  t
+  -> other:t
+  -> left_on:Expr.t list
+  -> right_on:Expr.t list
+  -> how:Join_type.t
+  -> t
+  = "rust_lazy_frame_join"
+
+let join t ~other ~on ~how = join_ t ~other ~left_on:on ~right_on:on ~how
+let join' = join_
+
 external sort
   :  t
   -> by_column:string

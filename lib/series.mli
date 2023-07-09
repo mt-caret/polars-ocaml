@@ -17,7 +17,8 @@ external string_option
   = "rust_series_new_string_option"
 
 val date : string -> Date.t list -> t
-val datetime : string -> Date.t list -> t
+val datetime : string -> Common.Naive_datetime.t list -> t
+val datetime' : string -> Date.t list -> t
 val date_range : string -> start:Date.t -> stop:Date.t -> (t, string) result
 val date_range_exn : string -> start:Date.t -> stop:Date.t -> t
 val datetime_range : string -> start:Date.t -> stop:Date.t -> (t, string) result
