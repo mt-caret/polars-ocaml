@@ -1,6 +1,7 @@
 use crate::utils::*;
 use ocaml_interop::{ocaml_export, DynBox, OCaml, OCamlInt, OCamlList, OCamlRef, ToOCaml};
 use polars::prelude::*;
+use smartstring::{LazyCompact, SmartString};
 use std::path::Path;
 
 ocaml_export! {
@@ -102,6 +103,28 @@ ocaml_export! {
         diag_concat_lf(&lazy_frames, rechunk, parallel).map(Abstract).map_err(|err| err.to_string()).to_ocaml(cr)
     }
 
+    fn rust_lazy_frame_melt(cr,
+        lazy_frame: OCamlRef<DynBox<LazyFrame>>,
+        id_vars: OCamlRef<OCamlList<String>>,
+        value_vars: OCamlRef<OCamlList<String>>,
+        variable_name: OCamlRef<Option<String>>,
+        value_name: OCamlRef<Option<String>>,
+        streamable: OCamlRef<bool>,
+    ) -> OCaml<DynBox<LazyFrame>> {
+        let Abstract(lazy_frame) = lazy_frame.to_rust(cr);
+
+        let id_vars: Vec<SmartString<LazyCompact>> = id_vars.to_rust::<Vec<String>>(cr).into_iter().map(|s| s.into()).collect();
+        let value_vars: Vec<SmartString<LazyCompact>> = value_vars.to_rust::<Vec<String>>(cr).into_iter().map(|s| s.into()).collect();
+        let variable_name: Option<SmartString<LazyCompact>> = variable_name.to_rust::<Option<String>>(cr).map(|s| s.into());
+        let value_name: Option<SmartString<LazyCompact>> = value_name.to_rust::<Option<String>>(cr).map(|s| s.into());
+        let streamable: bool = streamable.to_rust(cr);
+
+        let melt_args = MeltArgs {
+            id_vars, value_vars, variable_name, value_name, streamable
+        };
+        Abstract(lazy_frame.melt(melt_args)).to_ocaml(cr)
+    }
+
     fn rust_lazy_frame_limit(cr, lazy_frame: OCamlRef<DynBox<LazyFrame>>, n: OCamlRef<OCamlInt>) -> OCaml<Option<DynBox<LazyFrame>>> {
         let result: Option<_> = try {
             let n = n.to_rust::<i64>(cr).try_into().ok()?;
@@ -131,4 +154,20 @@ ocaml_export! {
         .map_err(|err| err.to_string()).to_ocaml(cr)
     }
 
+}
+
+#[no_mangle]
+pub extern "C" fn rust_lazy_frame_melt_bytecode(
+    argv: *const ocaml_interop::RawOCaml,
+) -> ocaml_interop::RawOCaml {
+    unsafe {
+        rust_lazy_frame_melt(
+            *argv.offset(0),
+            *argv.offset(1),
+            *argv.offset(2),
+            *argv.offset(3),
+            *argv.offset(4),
+            *argv.offset(5),
+        )
+    }
 }

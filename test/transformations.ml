@@ -464,3 +464,46 @@ let%expect_test "Pivots" =
     │ C   ┆ null ┆ null ┆ null ┆ null ┆ 2    │
     └─────┴──────┴──────┴──────┴──────┴──────┘ |}]
 ;;
+
+(* Examples from https://pola-rs.github.io/polars-book/user-guide/transformations/melt/ *)
+let%expect_test "Melt" =
+  let df =
+    Data_frame.create_exn
+      Series.
+        [ string "A" [ "a"; "b"; "a" ]
+        ; int "B" [ 1; 3; 5 ]
+        ; int "C" [ 10; 11; 12 ]
+        ; int "D" [ 2; 4; 6 ]
+        ]
+  in
+  Data_frame.print df;
+  [%expect
+    {|
+    shape: (3, 4)
+    ┌─────┬─────┬─────┬─────┐
+    │ A   ┆ B   ┆ C   ┆ D   │
+    │ --- ┆ --- ┆ --- ┆ --- │
+    │ str ┆ i64 ┆ i64 ┆ i64 │
+    ╞═════╪═════╪═════╪═════╡
+    │ a   ┆ 1   ┆ 10  ┆ 2   │
+    │ b   ┆ 3   ┆ 11  ┆ 4   │
+    │ a   ┆ 5   ┆ 12  ┆ 6   │
+    └─────┴─────┴─────┴─────┘ |}];
+  Data_frame.melt_exn df ~id_vars:[ "A"; "B" ] ~value_vars:[ "C"; "D" ]
+  |> Data_frame.print;
+  [%expect
+    {|
+    shape: (6, 4)
+    ┌─────┬─────┬──────────┬───────┐
+    │ A   ┆ B   ┆ variable ┆ value │
+    │ --- ┆ --- ┆ ---      ┆ ---   │
+    │ str ┆ i64 ┆ str      ┆ i64   │
+    ╞═════╪═════╪══════════╪═══════╡
+    │ a   ┆ 1   ┆ C        ┆ 10    │
+    │ b   ┆ 3   ┆ C        ┆ 11    │
+    │ a   ┆ 5   ┆ C        ┆ 12    │
+    │ a   ┆ 1   ┆ D        ┆ 2     │
+    │ b   ┆ 3   ┆ D        ┆ 4     │
+    │ a   ┆ 5   ┆ D        ┆ 6     │
+    └─────┴─────┴──────────┴───────┘ |}]
+;;

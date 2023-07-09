@@ -77,6 +77,24 @@ val pivot_exn
   -> columns:string list
   -> t
 
+val melt
+  :  ?variable_name:string
+  -> ?value_name:string
+  -> ?streamable:bool
+  -> t
+  -> id_vars:string list
+  -> value_vars:string list
+  -> (t, string) result
+
+val melt_exn
+  :  ?variable_name:string
+  -> ?value_name:string
+  -> ?streamable:bool
+  -> t
+  -> id_vars:string list
+  -> value_vars:string list
+  -> t
+
 val head : ?length:int -> t -> t
 val tail : ?length:int -> t -> t
 

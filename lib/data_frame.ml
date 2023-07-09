@@ -145,6 +145,26 @@ let pivot_exn ?agg_expr ?sort_columns ?separator ?stable t ~values ~index ~colum
   |> Or_error.ok_exn
 ;;
 
+external melt
+  :  t
+  -> id_vars:string list
+  -> value_vars:string list
+  -> variable_name:string option
+  -> value_name:string option
+  -> streamable:bool
+  -> (t, string) result
+  = "rust_data_frame_melt_bytecode" "rust_data_frame_melt"
+
+let melt ?variable_name ?value_name ?(streamable = false) t ~id_vars ~value_vars =
+  melt t ~id_vars ~value_vars ~variable_name ~value_name ~streamable
+;;
+
+let melt_exn ?variable_name ?value_name ?streamable t ~id_vars ~value_vars =
+  melt ?variable_name ?value_name ?streamable t ~id_vars ~value_vars
+  |> Result.map_error ~f:Error.of_string
+  |> Or_error.ok_exn
+;;
+
 external head : t -> length:int option -> t option = "rust_data_frame_head"
 
 let head ?length t = head t ~length |> Option.value_exn ~here:[%here]

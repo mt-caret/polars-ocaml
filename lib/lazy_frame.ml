@@ -65,6 +65,20 @@ let concat ?(how = `Vertical) ?(rechunk = false) ?(parallel = false) ts =
   | `Diagonal -> diagonal_concat ts ~rechunk ~parallel
 ;;
 
+external melt
+  :  t
+  -> id_vars:string list
+  -> value_vars:string list
+  -> variable_name:string option
+  -> value_name:string option
+  -> streamable:bool
+  -> t
+  = "rust_lazy_frame_melt_bytecode" "rust_lazy_frame_melt"
+
+let melt ?variable_name ?value_name ?(streamable = false) t ~id_vars ~value_vars =
+  melt t ~id_vars ~value_vars ~variable_name ~value_name ~streamable
+;;
+
 external sort
   :  t
   -> by_column:string

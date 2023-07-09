@@ -30,6 +30,15 @@ val concat
   -> t list
   -> t
 
+val melt
+  :  ?variable_name:string
+  -> ?value_name:string
+  -> ?streamable:bool
+  -> t
+  -> id_vars:string list
+  -> value_vars:string list
+  -> t
+
 val sort : ?descending:bool -> ?nulls_last:bool -> t -> by_column:string -> t
 val limit : t -> n:int -> t
 external explode : t -> columns:Expr.t list -> t = "rust_lazy_frame_explode"
