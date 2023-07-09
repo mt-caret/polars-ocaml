@@ -98,6 +98,53 @@ let concat_exn ?how ts =
   concat ?how ts |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
 ;;
 
+external pivot
+  :  t
+  -> values:string list
+  -> index:string list
+  -> columns:string list
+  -> sort_columns:bool
+  -> agg_expr:Expr.t option
+  -> separator:string option
+  -> stable:bool
+  -> (t, string) result
+  = "rust_data_frame_pivot_bytecode" "rust_data_frame_pivot"
+
+let pivot
+  ?agg_expr
+  ?(sort_columns = false)
+  ?separator
+  ?(stable = true)
+  t
+  ~values
+  ~index
+  ~columns
+  =
+  let agg_expr =
+    Option.map
+      agg_expr
+      ~f:
+        Expr.(
+          function
+          | `First -> element () |> first
+          | `Sum -> element () |> sum
+          | `Max -> element () |> max
+          | `Min -> element () |> min
+          | `Mean -> element () |> mean
+          | `Median -> element () |> median
+          | `Last -> element () |> last
+          | `Count -> count_ ()
+          | `Expr expr -> expr)
+  in
+  pivot t ~values ~index ~columns ~sort_columns ~agg_expr ~separator ~stable
+;;
+
+let pivot_exn ?agg_expr ?sort_columns ?separator ?stable t ~values ~index ~columns =
+  pivot ?agg_expr ?sort_columns ?separator ?stable t ~values ~index ~columns
+  |> Result.map_error ~f:Error.of_string
+  |> Or_error.ok_exn
+;;
+
 external head : t -> length:int option -> t option = "rust_data_frame_head"
 
 let head ?length t = head t ~length |> Option.value_exn ~here:[%here]

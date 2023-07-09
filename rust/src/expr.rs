@@ -199,6 +199,14 @@ ocaml_export! {
         expr_unary_op(cr, expr, |expr| expr.median())
     }
 
+    fn rust_expr_max(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
+        expr_unary_op(cr, expr, |expr| expr.max())
+    }
+
+    fn rust_expr_min(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
+        expr_unary_op(cr, expr, |expr| expr.min())
+    }
+
     fn rust_expr_count(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
         expr_unary_op(cr, expr, |expr| expr.count())
     }

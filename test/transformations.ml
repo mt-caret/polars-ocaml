@@ -395,3 +395,72 @@ let%expect_test "Concatenation" =
     │ 2   ┆ null ┆ 4    │
     └─────┴──────┴──────┘ |}]
 ;;
+
+(* Examples from https://pola-rs.github.io/polars-book/user-guide/transformations/pivots/ *)
+let%expect_test "Pivots" =
+  let df =
+    Data_frame.create_exn
+      Series.
+        [ string "foo" [ "A"; "A"; "B"; "B"; "C" ]
+        ; int "N" [ 1; 2; 2; 4; 2 ]
+        ; string "bar" [ "k"; "l"; "m"; "n"; "o" ]
+        ]
+  in
+  Data_frame.print df;
+  [%expect
+    {|
+    shape: (5, 3)
+    ┌─────┬─────┬─────┐
+    │ foo ┆ N   ┆ bar │
+    │ --- ┆ --- ┆ --- │
+    │ str ┆ i64 ┆ str │
+    ╞═════╪═════╪═════╡
+    │ A   ┆ 1   ┆ k   │
+    │ A   ┆ 2   ┆ l   │
+    │ B   ┆ 2   ┆ m   │
+    │ B   ┆ 4   ┆ n   │
+    │ C   ┆ 2   ┆ o   │
+    └─────┴─────┴─────┘ |}];
+  let out =
+    Data_frame.pivot_exn
+      df
+      ~agg_expr:`First
+      ~index:[ "foo" ]
+      ~columns:[ "bar" ]
+      ~values:[ "N" ]
+  in
+  Data_frame.print out;
+  [%expect
+    {|
+    shape: (3, 6)
+    ┌─────┬──────┬──────┬──────┬──────┬──────┐
+    │ foo ┆ k    ┆ l    ┆ m    ┆ n    ┆ o    │
+    │ --- ┆ ---  ┆ ---  ┆ ---  ┆ ---  ┆ ---  │
+    │ str ┆ i64  ┆ i64  ┆ i64  ┆ i64  ┆ i64  │
+    ╞═════╪══════╪══════╪══════╪══════╪══════╡
+    │ A   ┆ 1    ┆ 2    ┆ null ┆ null ┆ null │
+    │ B   ┆ null ┆ null ┆ 2    ┆ 4    ┆ null │
+    │ C   ┆ null ┆ null ┆ null ┆ null ┆ 2    │
+    └─────┴──────┴──────┴──────┴──────┴──────┘ |}];
+  let out =
+    Data_frame.pivot_exn
+      (Data_frame.lazy_ df |> Lazy_frame.collect_exn)
+      ~agg_expr:`First
+      ~index:[ "foo" ]
+      ~columns:[ "bar" ]
+      ~values:[ "N" ]
+  in
+  Data_frame.print out;
+  [%expect
+    {|
+    shape: (3, 6)
+    ┌─────┬──────┬──────┬──────┬──────┬──────┐
+    │ foo ┆ k    ┆ l    ┆ m    ┆ n    ┆ o    │
+    │ --- ┆ ---  ┆ ---  ┆ ---  ┆ ---  ┆ ---  │
+    │ str ┆ i64  ┆ i64  ┆ i64  ┆ i64  ┆ i64  │
+    ╞═════╪══════╪══════╪══════╪══════╪══════╡
+    │ A   ┆ 1    ┆ 2    ┆ null ┆ null ┆ null │
+    │ B   ┆ null ┆ null ┆ 2    ┆ 4    ┆ null │
+    │ C   ┆ null ┆ null ┆ null ┆ null ┆ 2    │
+    └─────┴──────┴──────┴──────┴──────┴──────┘ |}]
+;;

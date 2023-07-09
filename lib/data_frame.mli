@@ -34,6 +34,49 @@ external columns
 val columns_exn : t -> names:string list -> Series.t list
 val concat : ?how:[ `Diagonal | `Horizontal | `Vertical ] -> t list -> (t, string) result
 val concat_exn : ?how:[ `Diagonal | `Horizontal | `Vertical ] -> t list -> t
+
+val pivot
+  :  ?agg_expr:
+       [ `Count
+       | `Expr of Expr.t
+       | `First
+       | `Last
+       | `Max
+       | `Mean
+       | `Median
+       | `Min
+       | `Sum
+       ]
+  -> ?sort_columns:bool
+  -> ?separator:string
+  -> ?stable:bool
+  -> t
+  -> values:string list
+  -> index:string list
+  -> columns:string list
+  -> (t, string) result
+
+val pivot_exn
+  :  ?agg_expr:
+       [ `Count
+       | `Expr of Expr.t
+       | `First
+       | `Last
+       | `Max
+       | `Mean
+       | `Median
+       | `Min
+       | `Sum
+       ]
+  -> ?sort_columns:bool
+  -> ?separator:string
+  -> ?stable:bool
+  -> t
+  -> values:string list
+  -> index:string list
+  -> columns:string list
+  -> t
+
 val head : ?length:int -> t -> t
 val tail : ?length:int -> t -> t
 

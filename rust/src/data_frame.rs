@@ -94,6 +94,35 @@ ocaml_export! {
         polars::functions::diag_concat_df(&data_frames).map(Abstract).map_err(|err| err.to_string()).to_ocaml(cr)
     }
 
+    fn rust_data_frame_pivot(cr,
+        data_frame: OCamlRef<DynBox<DataFrame>>,
+        values: OCamlRef<OCamlList<String>>,
+        index: OCamlRef<OCamlList<String>>,
+        columns: OCamlRef<OCamlList<String>>,
+        sort_columns: OCamlRef<bool>,
+        agg_expr: OCamlRef<Option<DynBox<Expr>>>,
+        separator: OCamlRef<Option<String>>,
+        stable: OCamlRef<bool>
+    )
+    -> OCaml<Result<DynBox<DataFrame>,String>> {
+        let Abstract(data_frame) = data_frame.to_rust(cr);
+
+        let values: Vec<String> = values.to_rust(cr);
+        let index: Vec<String> = index.to_rust(cr);
+        let columns: Vec<String> = columns.to_rust(cr);
+        let sort_columns: bool = sort_columns.to_rust(cr);
+        let agg_expr: Option<Expr> = agg_expr.to_rust::<Option<Abstract<Expr>>>(cr).map(|Abstract(expr)| expr);
+        let separator: Option<String> = separator.to_rust(cr);
+
+        let stable: bool = stable.to_rust(cr);
+
+        if stable {
+            pivot::pivot_stable(&data_frame, &values, &index, &columns, sort_columns, agg_expr, separator.as_deref())
+        } else {
+            pivot::pivot(&data_frame, &values, &index, &columns, sort_columns, agg_expr, separator.as_deref())
+        }.map(Abstract).map_err(|err| err.to_string()).to_ocaml(cr)
+    }
+
     fn rust_data_frame_head(cr, data_frame: OCamlRef<DynBox<DataFrame>>, length: OCamlRef<Option<OCamlInt>>) -> OCaml<Option<DynBox<DataFrame>>> {
         let Abstract(data_frame) = data_frame.to_rust(cr);
         let length: Option<i64> = length.to_rust(cr);
@@ -169,5 +198,23 @@ ocaml_export! {
     fn rust_data_frame_to_string_hum(cr, data_frame: OCamlRef<DynBox<DataFrame>>) -> OCaml<String> {
         let Abstract(data_frame) = data_frame.to_rust(cr);
         data_frame.to_string().to_ocaml(cr)
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn rust_data_frame_pivot_bytecode(
+    argv: *const ocaml_interop::RawOCaml,
+) -> ocaml_interop::RawOCaml {
+    unsafe {
+        rust_data_frame_pivot(
+            *argv.offset(0),
+            *argv.offset(1),
+            *argv.offset(2),
+            *argv.offset(3),
+            *argv.offset(4),
+            *argv.offset(5),
+            *argv.offset(6),
+            *argv.offset(7),
+        )
     }
 }
