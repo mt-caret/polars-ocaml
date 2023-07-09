@@ -72,6 +72,32 @@ let columns_exn t ~names =
   columns t ~names |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
 ;;
 
+external vertical_concat
+  :  t list
+  -> (t, string) result
+  = "rust_data_frame_vertical_concat"
+
+external horizontal_concat
+  :  t list
+  -> (t, string) result
+  = "rust_data_frame_horizontal_concat"
+
+external diagonal_concat
+  :  t list
+  -> (t, string) result
+  = "rust_data_frame_diagonal_concat"
+
+let concat ?(how = `Vertical) ts =
+  match how with
+  | `Vertical -> vertical_concat ts
+  | `Horizontal -> horizontal_concat ts
+  | `Diagonal -> diagonal_concat ts
+;;
+
+let concat_exn ?how ts =
+  concat ?how ts |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
+;;
+
 external head : t -> length:int option -> t option = "rust_data_frame_head"
 
 let head ?length t = head t ~length |> Option.value_exn ~here:[%here]

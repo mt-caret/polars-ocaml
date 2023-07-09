@@ -45,6 +45,26 @@ external join_
 let join t ~other ~on ~how = join_ t ~other ~left_on:on ~right_on:on ~how
 let join' = join_
 
+external vertical_concat
+  :  t list
+  -> rechunk:bool
+  -> parallel:bool
+  -> t
+  = "rust_lazy_frame_vertical_concat"
+
+external diagonal_concat
+  :  t list
+  -> rechunk:bool
+  -> parallel:bool
+  -> t
+  = "rust_lazy_frame_diagonal_concat"
+
+let concat ?(how = `Vertical) ?(rechunk = false) ?(parallel = false) ts =
+  match how with
+  | `Vertical -> vertical_concat ts ~rechunk ~parallel
+  | `Diagonal -> diagonal_concat ts ~rechunk ~parallel
+;;
+
 external sort
   :  t
   -> by_column:string

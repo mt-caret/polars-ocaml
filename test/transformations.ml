@@ -343,3 +343,55 @@ let%expect_test "Joins" =
     │ 2020-01-01 09:06:00 ┆ C     ┆ 500   ┆ 501         │
     └─────────────────────┴───────┴───────┴─────────────┘ |}]
 ;;
+
+(* Examples from https://pola-rs.github.io/polars-book/user-guide/transformations/concatenation/ *)
+let%expect_test "Concatenation" =
+  let df_v1 = Data_frame.create_exn Series.[ int "a" [ 1 ]; int "b" [ 2 ] ] in
+  let df_v2 = Data_frame.create_exn Series.[ int "a" [ 2 ]; int "b" [ 4 ] ] in
+  let df_vertical_concat = Data_frame.concat_exn [ df_v1; df_v2 ] in
+  Data_frame.print df_vertical_concat;
+  [%expect
+    {|
+    shape: (2, 2)
+    ┌─────┬─────┐
+    │ a   ┆ b   │
+    │ --- ┆ --- │
+    │ i64 ┆ i64 │
+    ╞═════╪═════╡
+    │ 1   ┆ 2   │
+    │ 2   ┆ 4   │
+    └─────┴─────┘ |}];
+  let df_h1 = Data_frame.create_exn Series.[ int "l1" [ 1; 2 ]; int "l2" [ 3; 4 ] ] in
+  let df_h2 =
+    Data_frame.create_exn
+      Series.[ int "r1" [ 5; 6 ]; int "r2" [ 7; 8 ]; int "r3" [ 9; 10 ] ]
+  in
+  let df_horizontal_concat = Data_frame.concat_exn ~how:`Horizontal [ df_h1; df_h2 ] in
+  Data_frame.print df_horizontal_concat;
+  [%expect
+    {|
+    shape: (2, 5)
+    ┌─────┬─────┬─────┬─────┬─────┐
+    │ l1  ┆ l2  ┆ r1  ┆ r2  ┆ r3  │
+    │ --- ┆ --- ┆ --- ┆ --- ┆ --- │
+    │ i64 ┆ i64 ┆ i64 ┆ i64 ┆ i64 │
+    ╞═════╪═════╪═════╪═════╪═════╡
+    │ 1   ┆ 3   ┆ 5   ┆ 7   ┆ 9   │
+    │ 2   ┆ 4   ┆ 6   ┆ 8   ┆ 10  │
+    └─────┴─────┴─────┴─────┴─────┘ |}];
+  let df_d1 = Data_frame.create_exn Series.[ int "a" [ 1 ]; int "b" [ 3 ] ] in
+  let df_d2 = Data_frame.create_exn Series.[ int "a" [ 2 ]; int "d" [ 4 ] ] in
+  let df_diagonal_concat = Data_frame.concat_exn ~how:`Diagonal [ df_d1; df_d2 ] in
+  Data_frame.print df_diagonal_concat;
+  [%expect
+    {|
+    shape: (2, 3)
+    ┌─────┬──────┬──────┐
+    │ a   ┆ b    ┆ d    │
+    │ --- ┆ ---  ┆ ---  │
+    │ i64 ┆ i64  ┆ i64  │
+    ╞═════╪══════╪══════╡
+    │ 1   ┆ 3    ┆ null │
+    │ 2   ┆ null ┆ 4    │
+    └─────┴──────┴──────┘ |}]
+;;

@@ -88,6 +88,20 @@ ocaml_export! {
         OCaml::box_value(cr, lazy_frame.sort(&by_column, sort_options))
     }
 
+    fn rust_lazy_frame_vertical_concat(cr, lazy_frames: OCamlRef<OCamlList<DynBox<LazyFrame>>>, rechunk: OCamlRef<bool>, parallel: OCamlRef<bool>) -> OCaml<Result<DynBox<LazyFrame>,String>> {
+        let lazy_frames = unwrap_abstract_vec(lazy_frames.to_rust(cr));
+        let rechunk = rechunk.to_rust(cr);
+        let parallel = parallel.to_rust(cr);
+        concat(&lazy_frames, rechunk, parallel).map(Abstract).map_err(|err| err.to_string()).to_ocaml(cr)
+    }
+
+    fn rust_lazy_frame_diagonal_concat(cr, lazy_frames: OCamlRef<OCamlList<DynBox<LazyFrame>>>, rechunk: OCamlRef<bool>, parallel: OCamlRef<bool>) -> OCaml<Result<DynBox<LazyFrame>,String>> {
+        let lazy_frames = unwrap_abstract_vec(lazy_frames.to_rust(cr));
+        let rechunk = rechunk.to_rust(cr);
+        let parallel = parallel.to_rust(cr);
+        diag_concat_lf(&lazy_frames, rechunk, parallel).map(Abstract).map_err(|err| err.to_string()).to_ocaml(cr)
+    }
+
     fn rust_lazy_frame_limit(cr, lazy_frame: OCamlRef<DynBox<LazyFrame>>, n: OCamlRef<OCamlInt>) -> OCaml<Option<DynBox<LazyFrame>>> {
         let result: Option<_> = try {
             let n = n.to_rust::<i64>(cr).try_into().ok()?;

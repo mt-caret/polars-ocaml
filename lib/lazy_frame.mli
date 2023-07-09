@@ -23,6 +23,13 @@ val join'
   -> how:Join_type.t
   -> t
 
+val concat
+  :  ?how:[ `Diagonal | `Vertical ]
+  -> ?rechunk:bool
+  -> ?parallel:bool
+  -> t list
+  -> t
+
 val sort : ?descending:bool -> ?nulls_last:bool -> t -> by_column:string -> t
 val limit : t -> n:int -> t
 external explode : t -> columns:Expr.t list -> t = "rust_lazy_frame_explode"
