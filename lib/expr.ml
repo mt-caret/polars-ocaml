@@ -151,6 +151,9 @@ include Common.Make_numeric (T)
 
 module Dt = struct
   external strftime : t -> format:string -> t = "rust_expr_dt_strftime"
+
+  (* TODO: consider supporting Time_ns.Zone.t *)
+  external convert_time_zone : t -> to_:string -> t = "rust_expr_dt_convert_time_zone"
   external year : t -> t = "rust_expr_dt_year"
   external month : t -> t = "rust_expr_dt_month"
   external day : t -> t = "rust_expr_dt_day"

@@ -41,4 +41,5 @@ features = [
     "round_series",
     "semi_anti_join",
     "streaming",
+    "timezones",
 ]

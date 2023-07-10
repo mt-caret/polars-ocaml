@@ -507,3 +507,109 @@ let%expect_test "Melt" =
     │ a   ┆ 5   ┆ D        ┆ 6     │
     └─────┴─────┴──────────┴───────┘ |}]
 ;;
+
+let%expect_test "Time Series Parsing" =
+  let df = Data_frame.read_csv_exn ~try_parse_dates:true "./data/appleStock.csv" in
+  Data_frame.print df;
+  [%expect
+    {|
+    shape: (100, 2)
+    ┌────────────┬────────┐
+    │ Date       ┆ Close  │
+    │ ---        ┆ ---    │
+    │ date       ┆ f64    │
+    ╞════════════╪════════╡
+    │ 1981-02-23 ┆ 24.62  │
+    │ 1981-05-06 ┆ 27.38  │
+    │ 1981-05-18 ┆ 28.0   │
+    │ 1981-09-25 ┆ 14.25  │
+    │ …          ┆ …      │
+    │ 2012-12-04 ┆ 575.85 │
+    │ 2013-07-05 ┆ 417.42 │
+    │ 2013-11-07 ┆ 512.49 │
+    │ 2014-02-25 ┆ 522.06 │
+    └────────────┴────────┘ |}];
+  let df =
+    Data_frame.read_csv_exn ~try_parse_dates:false "./data/appleStock.csv"
+    |> Data_frame.with_columns_exn
+         ~exprs:Expr.[ col "Date" |> Str.strptime ~type_:Date ~format:"%Y-%m-%d" ]
+  in
+  Data_frame.print df;
+  [%expect
+    {|
+    shape: (100, 2)
+    ┌────────────┬────────┐
+    │ Date       ┆ Close  │
+    │ ---        ┆ ---    │
+    │ date       ┆ f64    │
+    ╞════════════╪════════╡
+    │ 1981-02-23 ┆ 24.62  │
+    │ 1981-05-06 ┆ 27.38  │
+    │ 1981-05-18 ┆ 28.0   │
+    │ 1981-09-25 ┆ 14.25  │
+    │ …          ┆ …      │
+    │ 2012-12-04 ┆ 575.85 │
+    │ 2013-07-05 ┆ 417.42 │
+    │ 2013-11-07 ┆ 512.49 │
+    │ 2014-02-25 ┆ 522.06 │
+    └────────────┴────────┘ |}];
+  let df_with_year =
+    Data_frame.with_columns_exn
+      df
+      ~exprs:Expr.[ col "Date" |> Dt.year |> alias ~name:"year" ]
+  in
+  Data_frame.print df_with_year;
+  [%expect
+    {|
+    shape: (100, 3)
+    ┌────────────┬────────┬──────┐
+    │ Date       ┆ Close  ┆ year │
+    │ ---        ┆ ---    ┆ ---  │
+    │ date       ┆ f64    ┆ i32  │
+    ╞════════════╪════════╪══════╡
+    │ 1981-02-23 ┆ 24.62  ┆ 1981 │
+    │ 1981-05-06 ┆ 27.38  ┆ 1981 │
+    │ 1981-05-18 ┆ 28.0   ┆ 1981 │
+    │ 1981-09-25 ┆ 14.25  ┆ 1981 │
+    │ …          ┆ …      ┆ …    │
+    │ 2012-12-04 ┆ 575.85 ┆ 2012 │
+    │ 2013-07-05 ┆ 417.42 ┆ 2013 │
+    │ 2013-11-07 ┆ 512.49 ┆ 2013 │
+    │ 2014-02-25 ┆ 522.06 ┆ 2014 │
+    └────────────┴────────┴──────┘ |}];
+  let df =
+    Data_frame.create_exn
+      Series.
+        [ string
+            "date"
+            [ "2021-03-27T00:00:00+0100"
+            ; "2021-03-28T00:00:00+0100"
+            ; "2021-03-29T00:00:00+0200"
+            ; "2021-03-30T00:00:00+0200"
+            ]
+        ]
+    |> Data_frame.with_columns_exn
+         ~exprs:
+           Expr.
+             [ col "date"
+               |> Str.strptime
+                    ~type_:(Datetime (Microseconds, None))
+                    ~format:"%Y-%m-%dT%H:%M:%S%z"
+               |> Dt.convert_time_zone ~to_:"Europe/Brussels"
+             ]
+  in
+  Data_frame.print df;
+  [%expect
+    {|
+    shape: (4, 1)
+    ┌───────────────────────────────┐
+    │ date                          │
+    │ ---                           │
+    │ datetime[μs, Europe/Brussels] │
+    ╞═══════════════════════════════╡
+    │ 2021-03-27 00:00:00 CET       │
+    │ 2021-03-28 00:00:00 CET       │
+    │ 2021-03-29 00:00:00 CEST      │
+    │ 2021-03-30 00:00:00 CEST      │
+    └───────────────────────────────┘ |}]
+;;

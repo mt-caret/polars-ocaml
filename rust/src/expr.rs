@@ -392,6 +392,11 @@ ocaml_export! {
         expr_unary_op(cr, expr, |expr| expr.dt().to_string(&format))
     }
 
+    fn rust_expr_dt_convert_time_zone(cr, expr: OCamlRef<DynBox<Expr>>, timezone: OCamlRef<String>) -> OCaml<DynBox<Expr>> {
+        let timezone: String = timezone.to_rust(cr);
+        expr_unary_op(cr, expr, |expr| expr.dt().convert_time_zone(timezone))
+    }
+
     fn rust_expr_dt_year(cr, expr: OCamlRef<DynBox<Expr>>)-> OCaml<DynBox<Expr>> {
         expr_unary_op(cr, expr, |expr| expr.dt().year())
     }
