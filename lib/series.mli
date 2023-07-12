@@ -41,3 +41,5 @@ val print : t -> unit
 
 include Common.Compare with type t := t
 include Common.Numeric with type t := t
+
+val pp : Format.formatter -> t -> unit [@@ocaml.toplevel_printer]
