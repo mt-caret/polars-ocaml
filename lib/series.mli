@@ -65,8 +65,6 @@ val fill_null : t -> strategy:Fill_null_strategy.t -> (t, string) result
 val fill_null_exn : t -> strategy:Fill_null_strategy.t -> t
 val interpolate : t -> method_:[ `Linear | `Nearest ] -> (t, string) result
 val interpolate_exn : t -> method_:[ `Linear | `Nearest ] -> t
-val to_string_hum : t -> string
-val print : t -> unit
 
 type typed_list =
   | Int of int option list
@@ -78,6 +76,9 @@ type typed_list =
 
 val to_typed_list : t -> (typed_list, string) result
 val to_typed_list_exn : t -> typed_list
+val to_string_hum : t -> string
+val print : t -> unit
+val pp : Format.formatter -> t -> unit [@@ocaml.toplevel_printer]
 
 include Common.Compare with type t := t
 include Common.Numeric with type t := t
