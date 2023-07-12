@@ -133,6 +133,7 @@ module T = struct
   external to_string_hum : t -> string = "rust_series_to_string_hum"
 
   let print t = print_endline (to_string_hum t)
+  let pp formatter t = Stdlib.Format.pp_print_string formatter (to_string_hum t)
 end
 
 include T

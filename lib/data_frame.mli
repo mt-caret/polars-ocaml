@@ -122,3 +122,4 @@ val explode_exn : t -> columns:string list -> t
 external schema : t -> Schema.t = "rust_data_frame_schema"
 external to_string_hum : t -> string = "rust_data_frame_to_string_hum"
 val print : t -> unit
+val pp : Format.formatter -> t -> unit [@@ocaml.toplevel_printer]

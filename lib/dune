@@ -5,7 +5,7 @@
   (glob_files ../rust/src/*.rs))
  ;(action
  ; (progn
- ;  (run sh -c "cd %{project_root}/rust && cargo build --release")
+ ;  (run sh -c "cd %{project_root}/rust && cargo build --release  --features '%{env:cargo_feature_flags=}'")
  ;  (run
  ;   sh
  ;   -c
@@ -16,7 +16,10 @@
  ;   libpolars_ocaml.a)))
  (action
   (progn
-   (run sh -c "cd %{project_root}/rust && cargo build")
+   (run
+    sh
+    -c
+    "cd %{project_root}/rust && cargo build  --features '%{env:cargo_feature_flags=}'")
    (run
     sh
     -c
@@ -33,3 +36,8 @@
  (inline_tests)
  (preprocess
   (pps ppx_jane)))
+
+(env
+ (utop
+  (env-vars
+   (OCAML_INTEROP_NO_CAML_STARTUP true))))
