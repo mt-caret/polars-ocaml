@@ -306,6 +306,44 @@ ocaml_export! {
         }
     }
 
+    fn rust_expr_shift(cr, expr: OCamlRef<DynBox<Expr>>, periods: OCamlRef<OCamlInt>, fill_value: OCamlRef<Option<DynBox<Expr>>>) -> OCaml<DynBox<Expr>> {
+        let Abstract(expr) = expr.to_rust(cr);
+        let periods: i64 = periods.to_rust(cr);
+        let fill_value: Option<Abstract<Expr>> = fill_value.to_rust(cr);
+
+        let expr =
+            match fill_value {
+                None => expr.shift(periods),
+                Some(Abstract(fill_value)) => expr.shift_and_fill(periods, fill_value),
+            };
+        Abstract(expr).to_ocaml(cr)
+    }
+
+    fn rust_expr_cumcount(cr, expr: OCamlRef<DynBox<Expr>>, reverse: OCamlRef<bool>) -> OCaml<DynBox<Expr>> {
+        let reverse: bool = reverse.to_rust(cr);
+        expr_unary_op(cr, expr, |expr| expr.cumcount(reverse))
+    }
+
+    fn rust_expr_cumsum(cr, expr: OCamlRef<DynBox<Expr>>, reverse: OCamlRef<bool>) -> OCaml<DynBox<Expr>> {
+        let reverse: bool = reverse.to_rust(cr);
+        expr_unary_op(cr, expr, |expr| expr.cumsum(reverse))
+    }
+
+    fn rust_expr_cumprod(cr, expr: OCamlRef<DynBox<Expr>>, reverse: OCamlRef<bool>) -> OCaml<DynBox<Expr>> {
+        let reverse: bool = reverse.to_rust(cr);
+        expr_unary_op(cr, expr, |expr| expr.cumprod(reverse))
+    }
+
+    fn rust_expr_cummin(cr, expr: OCamlRef<DynBox<Expr>>, reverse: OCamlRef<bool>) -> OCaml<DynBox<Expr>> {
+        let reverse: bool = reverse.to_rust(cr);
+        expr_unary_op(cr, expr, |expr| expr.cummin(reverse))
+    }
+
+    fn rust_expr_cummax(cr, expr: OCamlRef<DynBox<Expr>>, reverse: OCamlRef<bool>) -> OCaml<DynBox<Expr>> {
+        let reverse: bool = reverse.to_rust(cr);
+        expr_unary_op(cr, expr, |expr| expr.cummax(reverse))
+    }
+
     fn rust_expr_alias(cr, expr: OCamlRef<DynBox<Expr>>, name: OCamlRef<String>) -> OCaml<DynBox<Expr>> {
         let name: String = name.to_rust(cr);
         expr_unary_op(cr, expr, |expr| expr.alias(&name))
@@ -385,6 +423,10 @@ ocaml_export! {
 
     fn rust_expr_div(cr, expr: OCamlRef<DynBox<Expr>>, other: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
         expr_binary_op(cr, expr, other, |a, b| a / b)
+    }
+
+    fn rust_expr_floor_div(cr, expr: OCamlRef<DynBox<Expr>>, other: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
+        expr_binary_op(cr, expr, other, |a, b| a.floor_div(b))
     }
 
     fn rust_expr_dt_strftime(cr, expr: OCamlRef<DynBox<Expr>>, format:OCamlRef<String>)-> OCaml<DynBox<Expr>> {

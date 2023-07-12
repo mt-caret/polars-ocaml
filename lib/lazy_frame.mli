@@ -9,6 +9,13 @@ val scan_csv_exn : string -> t
 external to_dot : t -> (string, string) result = "rust_lazy_frame_to_dot"
 external collect : t -> (Data_frame0.t, string) result = "rust_lazy_frame_collect"
 val collect_exn : t -> Data_frame0.t
+
+external collect_all
+  :  t list
+  -> (Data_frame0.t list, string) result
+  = "rust_lazy_frame_collect_all"
+
+val collect_all_exn : t list -> Data_frame0.t list
 external filter : t -> predicate:Expr.t -> t = "rust_lazy_frame_filter"
 external select : t -> exprs:Expr.t list -> t = "rust_lazy_frame_select"
 external with_columns : t -> exprs:Expr.t list -> t = "rust_lazy_frame_with_columns"

@@ -143,6 +143,9 @@ module T = struct
   external sub : t -> t -> t = "rust_expr_sub"
   external mul : t -> t -> t = "rust_expr_mul"
   external div : t -> t -> t = "rust_expr_div"
+  external floor_div : t -> t -> t = "rust_expr_floor_div"
+
+  let ( // ) = floor_div
 end
 
 include T

@@ -19,6 +19,15 @@ external collect : t -> (Data_frame0.t, string) result = "rust_lazy_frame_collec
 
 let collect_exn t = collect t |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
 
+external collect_all
+  :  t list
+  -> (Data_frame0.t list, string) result
+  = "rust_lazy_frame_collect_all"
+
+let collect_all_exn ts =
+  collect_all ts |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
+;;
+
 external filter : t -> predicate:Expr.t -> t = "rust_lazy_frame_filter"
 external select : t -> exprs:Expr.t list -> t = "rust_lazy_frame_select"
 external with_columns : t -> exprs:Expr.t list -> t = "rust_lazy_frame_with_columns"

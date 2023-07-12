@@ -68,6 +68,11 @@ ocaml_export! {
         .to_ocaml(cr)
     }
 
+    fn rust_data_frame_get_column_names(cr, data_frame: OCamlRef<DynBox<DataFrame>>) -> OCaml<OCamlList<String>> {
+        let Abstract(data_frame) = data_frame.to_rust(cr);
+        data_frame.get_column_names().to_ocaml(cr)
+    }
+
     fn rust_data_frame_vertical_concat(cr, data_frames: OCamlRef<OCamlList<DynBox<DataFrame>>>) -> OCaml<Result<DynBox<DataFrame>,String>> {
         let data_frames = unwrap_abstract_vec(data_frames.to_rust(cr));
 

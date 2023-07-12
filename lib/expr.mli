@@ -72,6 +72,10 @@ include Common.Compare with type t := t
 include Common.Logic with type t := t
 include Common.Numeric with type t := t
 
+(* TODO: apparently this doesn't exist for series, which is surprising! *)
+val floor_div : t -> t -> t
+val ( // ) : t -> t -> t
+
 module Dt : sig
   external strftime : t -> format:string -> t = "rust_expr_dt_strftime"
   external convert_time_zone : t -> to_:string -> t = "rust_expr_dt_convert_time_zone"
