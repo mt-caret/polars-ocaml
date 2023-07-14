@@ -119,6 +119,31 @@ module T = struct
   ;;
 
   external when_ : (t * t) list -> otherwise:t -> t = "rust_expr_when_then"
+  external shift : t -> periods:int -> fill_value:t option -> t = "rust_expr_shift"
+
+  let shift ?fill_value t ~periods = shift t ~periods ~fill_value
+
+  (* TODO: couldn't we do something like Haskell's Foldable typeclass and generalize? *)
+  external cum_count : t -> reverse:bool -> t = "rust_expr_cum_count"
+
+  let cum_count ?(reverse = false) t = cum_count t ~reverse
+
+  external cum_sum : t -> reverse:bool -> t = "rust_expr_cum_sum"
+
+  let cum_sum ?(reverse = false) t = cum_sum t ~reverse
+
+  external cum_prod : t -> reverse:bool -> t = "rust_expr_cum_prod"
+
+  let cum_prod ?(reverse = false) t = cum_prod t ~reverse
+
+  external cum_min : t -> reverse:bool -> t = "rust_expr_cum_min"
+
+  let cum_min ?(reverse = false) t = cum_min t ~reverse
+
+  external cum_max : t -> reverse:bool -> t = "rust_expr_cum_max"
+
+  let cum_max ?(reverse = false) t = cum_max t ~reverse
+
   external alias : t -> name:string -> t = "rust_expr_alias"
   external prefix : t -> prefix:string -> t = "rust_expr_prefix"
   external suffix : t -> suffix:string -> t = "rust_expr_suffix"

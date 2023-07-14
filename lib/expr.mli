@@ -62,6 +62,12 @@ val rank
   -> t
 
 external when_ : (t * t) list -> otherwise:t -> t = "rust_expr_when_then"
+val shift : ?fill_value:t -> t -> periods:int -> t
+val cum_count : ?reverse:bool -> t -> t
+val cum_sum : ?reverse:bool -> t -> t
+val cum_prod : ?reverse:bool -> t -> t
+val cum_min : ?reverse:bool -> t -> t
+val cum_max : ?reverse:bool -> t -> t
 external alias : t -> name:string -> t = "rust_expr_alias"
 external prefix : t -> prefix:string -> t = "rust_expr_prefix"
 external suffix : t -> suffix:string -> t = "rust_expr_suffix"

@@ -72,6 +72,8 @@ let columns_exn t ~names =
   columns t ~names |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
 ;;
 
+external get_column_names : t -> string list = "rust_data_frame_get_column_names"
+
 external vertical_concat
   :  t list
   -> (t, string) result

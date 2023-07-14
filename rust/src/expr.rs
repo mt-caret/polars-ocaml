@@ -319,27 +319,27 @@ ocaml_export! {
         Abstract(expr).to_ocaml(cr)
     }
 
-    fn rust_expr_cumcount(cr, expr: OCamlRef<DynBox<Expr>>, reverse: OCamlRef<bool>) -> OCaml<DynBox<Expr>> {
+    fn rust_expr_cum_count(cr, expr: OCamlRef<DynBox<Expr>>, reverse: OCamlRef<bool>) -> OCaml<DynBox<Expr>> {
         let reverse: bool = reverse.to_rust(cr);
         expr_unary_op(cr, expr, |expr| expr.cumcount(reverse))
     }
 
-    fn rust_expr_cumsum(cr, expr: OCamlRef<DynBox<Expr>>, reverse: OCamlRef<bool>) -> OCaml<DynBox<Expr>> {
+    fn rust_expr_cum_sum(cr, expr: OCamlRef<DynBox<Expr>>, reverse: OCamlRef<bool>) -> OCaml<DynBox<Expr>> {
         let reverse: bool = reverse.to_rust(cr);
         expr_unary_op(cr, expr, |expr| expr.cumsum(reverse))
     }
 
-    fn rust_expr_cumprod(cr, expr: OCamlRef<DynBox<Expr>>, reverse: OCamlRef<bool>) -> OCaml<DynBox<Expr>> {
+    fn rust_expr_cum_prod(cr, expr: OCamlRef<DynBox<Expr>>, reverse: OCamlRef<bool>) -> OCaml<DynBox<Expr>> {
         let reverse: bool = reverse.to_rust(cr);
         expr_unary_op(cr, expr, |expr| expr.cumprod(reverse))
     }
 
-    fn rust_expr_cummin(cr, expr: OCamlRef<DynBox<Expr>>, reverse: OCamlRef<bool>) -> OCaml<DynBox<Expr>> {
+    fn rust_expr_cum_min(cr, expr: OCamlRef<DynBox<Expr>>, reverse: OCamlRef<bool>) -> OCaml<DynBox<Expr>> {
         let reverse: bool = reverse.to_rust(cr);
         expr_unary_op(cr, expr, |expr| expr.cummin(reverse))
     }
 
-    fn rust_expr_cummax(cr, expr: OCamlRef<DynBox<Expr>>, reverse: OCamlRef<bool>) -> OCaml<DynBox<Expr>> {
+    fn rust_expr_cum_max(cr, expr: OCamlRef<DynBox<Expr>>, reverse: OCamlRef<bool>) -> OCaml<DynBox<Expr>> {
         let reverse: bool = reverse.to_rust(cr);
         expr_unary_op(cr, expr, |expr| expr.cummax(reverse))
     }

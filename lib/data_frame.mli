@@ -32,6 +32,7 @@ external columns
   = "rust_data_frame_column"
 
 val columns_exn : t -> names:string list -> Series.t list
+external get_column_names : t -> string list = "rust_data_frame_get_column_names"
 val concat : ?how:[ `Diagonal | `Horizontal | `Vertical ] -> t list -> (t, string) result
 val concat_exn : ?how:[ `Diagonal | `Horizontal | `Vertical ] -> t list -> t
 
