@@ -613,3 +613,66 @@ let%expect_test "Time Series Parsing" =
     │ 2021-03-30 00:00:00 CEST      │
     └───────────────────────────────┘ |}]
 ;;
+
+let%expect_test "Filtering" =
+  let df = Data_frame.read_csv_exn ~try_parse_dates:true "./data/appleStock.csv" in
+  Data_frame.print df;
+  [%expect
+    {|
+    shape: (100, 2)
+    ┌────────────┬────────┐
+    │ Date       ┆ Close  │
+    │ ---        ┆ ---    │
+    │ date       ┆ f64    │
+    ╞════════════╪════════╡
+    │ 1981-02-23 ┆ 24.62  │
+    │ 1981-05-06 ┆ 27.38  │
+    │ 1981-05-18 ┆ 28.0   │
+    │ 1981-09-25 ┆ 14.25  │
+    │ …          ┆ …      │
+    │ 2012-12-04 ┆ 575.85 │
+    │ 2013-07-05 ┆ 417.42 │
+    │ 2013-11-07 ┆ 512.49 │
+    │ 2014-02-25 ┆ 522.06 │
+    └────────────┴────────┘ |}];
+  let filtered_df =
+    Data_frame.lazy_ df
+    |> Lazy_frame.filter
+         ~predicate:
+           Expr.(
+             col "Date" = naive_datetime (Common.Naive_datetime.of_string "1995-10-16"))
+    |> Lazy_frame.collect_exn
+  in
+  Data_frame.print filtered_df;
+  [%expect
+    {|
+    shape: (1, 2)
+    ┌────────────┬───────┐
+    │ Date       ┆ Close │
+    │ ---        ┆ ---   │
+    │ date       ┆ f64   │
+    ╞════════════╪═══════╡
+    │ 1995-10-16 ┆ 36.13 │
+    └────────────┴───────┘ |}];
+  let filtered_range_df =
+    Data_frame.lazy_ df
+    |> Lazy_frame.filter
+         ~predicate:
+           Expr.(
+             naive_datetime (Common.Naive_datetime.of_string "1995-07-01") < col "Date"
+             && col "Date" < naive_datetime (Common.Naive_datetime.of_string "1995-11-01"))
+    |> Lazy_frame.collect_exn
+  in
+  Data_frame.print filtered_range_df;
+  [%expect
+    {|
+    shape: (2, 2)
+    ┌────────────┬───────┐
+    │ Date       ┆ Close │
+    │ ---        ┆ ---   │
+    │ date       ┆ f64   │
+    ╞════════════╪═══════╡
+    │ 1995-07-06 ┆ 47.0  │
+    │ 1995-10-16 ┆ 36.13 │
+    └────────────┴───────┘ |}]
+;;

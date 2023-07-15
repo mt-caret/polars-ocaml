@@ -683,8 +683,8 @@ let%expect_test "Aggregation" =
     │ ---   ┆ ---      ┆ ---      │
     │ str   ┆ f64      ┆ f64      │
     ╞═══════╪══════════╪══════════╡
-    │ OL    ┆ null     ┆ null     │
     │ PI    ┆ null     ┆ null     │
+    │ OL    ┆ null     ┆ null     │
     │ CT    ┆ 0.0      ┆ 0.013216 │
     │ NJ    ┆ 0.0      ┆ 0.008547 │
     │ NC    ┆ 0.002865 ┆ 0.005731 │

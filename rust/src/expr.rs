@@ -1,3 +1,4 @@
+use chrono::{NaiveDate, NaiveDateTime};
 use ocaml_interop::{
     ocaml_export, DynBox, OCaml, OCamlFloat, OCamlInt, OCamlList, OCamlRef, OCamlRuntime, ToOCaml,
 };
@@ -102,6 +103,16 @@ ocaml_export! {
 
     fn rust_expr_string(cr, value: OCamlRef<String>) -> OCaml<DynBox<Expr>> {
         let value: String = value.to_rust(cr);
+        OCaml::box_value(cr, lit(value))
+    }
+
+    fn rust_expr_naive_date(cr, value: OCamlRef<DynBox<NaiveDate>>) -> OCaml<DynBox<Expr>> {
+        let Abstract(value) = value.to_rust(cr);
+        OCaml::box_value(cr, lit(value))
+    }
+
+    fn rust_expr_naive_datetime(cr, value: OCamlRef<DynBox<NaiveDateTime>>) -> OCaml<DynBox<Expr>> {
+        let Abstract(value) = value.to_rust(cr);
         OCaml::box_value(cr, lit(value))
     }
 

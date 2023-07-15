@@ -13,6 +13,8 @@ external int : int -> t = "rust_expr_int"
 external float : float -> t = "rust_expr_float"
 external bool : bool -> t = "rust_expr_bool"
 external string : string -> t = "rust_expr_string"
+external naive_date : Common.Naive_date.t -> t = "rust_expr_naive_date"
+external naive_datetime : Common.Naive_datetime.t -> t = "rust_expr_naive_datetime"
 val sort : ?descending:bool -> t -> t
 val sort_by : ?descending:bool -> t -> by:t list -> t
 external first : t -> t = "rust_expr_first"
