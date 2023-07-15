@@ -12,7 +12,7 @@ crate-type = ["staticlib", "cdylib"]
 chrono = "0.4.26"
 expect-test = "1.4.1"
 ocaml = "0.22.4"
-ocaml-interop = "0.8.8"
+ocaml-interop = "0.9.1"
 ocaml-sys = "0.23.0"
 smartstring = "1.0.1"
 
