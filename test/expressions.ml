@@ -599,31 +599,33 @@ let%expect_test "Aggregation" =
   [%expect
     {|
     shape: (12_136, 36)
-    ┌────────────┬──────────┬───────────┬────────┬───┬────────────┬────────────┬──────────┬────────────┐
-    │ last_name  ┆ first_na ┆ middle_na ┆ suffix ┆ … ┆ ballotpedi ┆ washington ┆ icpsr_id ┆ wikipedia_ │
-    │ ---        ┆ me       ┆ me        ┆ ---    ┆   ┆ a_id       ┆ _post_id   ┆ ---      ┆ id         │
-    │ str        ┆ ---      ┆ ---       ┆ str    ┆   ┆ ---        ┆ ---        ┆ i64      ┆ ---        │
-    │            ┆ str      ┆ str       ┆        ┆   ┆ str        ┆ str        ┆          ┆ str        │
-    ╞════════════╪══════════╪═══════════╪════════╪═══╪════════════╪════════════╪══════════╪════════════╡
-    │ Bassett    ┆ Richard  ┆ null      ┆ null   ┆ … ┆ null       ┆ null       ┆ 507      ┆ Richard    │
-    │            ┆          ┆           ┆        ┆   ┆            ┆            ┆          ┆ Bassett    │
-    │            ┆          ┆           ┆        ┆   ┆            ┆            ┆          ┆ (Delaware  │
-    │            ┆          ┆           ┆        ┆   ┆            ┆            ┆          ┆ politi…    │
-    │ Bland      ┆ Theodori ┆ null      ┆ null   ┆ … ┆ null       ┆ null       ┆ 786      ┆ Theodorick │
-    │            ┆ ck       ┆           ┆        ┆   ┆            ┆            ┆          ┆ Bland (con │
-    │            ┆          ┆           ┆        ┆   ┆            ┆            ┆          ┆ gressman)  │
-    │ Burke      ┆ Aedanus  ┆ null      ┆ null   ┆ … ┆ null       ┆ null       ┆ 1260     ┆ Aedanus    │
-    │            ┆          ┆           ┆        ┆   ┆            ┆            ┆          ┆ Burke      │
-    │ Carroll    ┆ Daniel   ┆ null      ┆ null   ┆ … ┆ null       ┆ null       ┆ 1538     ┆ Daniel     │
-    │            ┆          ┆           ┆        ┆   ┆            ┆            ┆          ┆ Carroll    │
-    │ …          ┆ …        ┆ …         ┆ …      ┆ … ┆ …          ┆ …          ┆ …        ┆ …          │
-    │ Flores     ┆ Mayra    ┆ null      ┆ null   ┆ … ┆ Mayra      ┆ null       ┆ null     ┆ Mayra      │
-    │            ┆          ┆           ┆        ┆   ┆ Flores     ┆            ┆          ┆ Flores     │
-    │ Sempolinsk ┆ Joseph   ┆ null      ┆ null   ┆ … ┆ Joe Sempol ┆ null       ┆ null     ┆ Joe Sempol │
-    │ i          ┆          ┆           ┆        ┆   ┆ inski      ┆            ┆          ┆ inski      │
-    │ Inhofe     ┆ James    ┆ M.        ┆ null   ┆ … ┆ Jim Inhofe ┆ null       ┆ 15424    ┆ Jim Inhofe │
-    │ Sasse      ┆ Benjamin ┆ Eric      ┆ null   ┆ … ┆ Ben Sasse  ┆ null       ┆ 41503    ┆ Ben Sasse  │
-    └────────────┴──────────┴───────────┴────────┴───┴────────────┴────────────┴──────────┴────────────┘ |}];
+    ┌────────────┬────────────┬────────────┬────────┬───┬───────────┬───────────┬──────────┬───────────┐
+    │ last_name  ┆ first_name ┆ middle_nam ┆ suffix ┆ … ┆ ballotped ┆ washingto ┆ icpsr_id ┆ wikipedia │
+    │ ---        ┆ ---        ┆ e          ┆ ---    ┆   ┆ ia_id     ┆ n_post_id ┆ ---      ┆ _id       │
+    │ str        ┆ str        ┆ ---        ┆ str    ┆   ┆ ---       ┆ ---       ┆ i64      ┆ ---       │
+    │            ┆            ┆ str        ┆        ┆   ┆ str       ┆ str       ┆          ┆ str       │
+    ╞════════════╪════════════╪════════════╪════════╪═══╪═══════════╪═══════════╪══════════╪═══════════╡
+    │ Bassett    ┆ Richard    ┆ null       ┆ null   ┆ … ┆ null      ┆ null      ┆ 507      ┆ Richard   │
+    │            ┆            ┆            ┆        ┆   ┆           ┆           ┆          ┆ Bassett   │
+    │            ┆            ┆            ┆        ┆   ┆           ┆           ┆          ┆ (Delaware │
+    │            ┆            ┆            ┆        ┆   ┆           ┆           ┆          ┆ politi…   │
+    │ Bland      ┆ Theodorick ┆ null       ┆ null   ┆ … ┆ null      ┆ null      ┆ 786      ┆ Theodoric │
+    │            ┆            ┆            ┆        ┆   ┆           ┆           ┆          ┆ k Bland   │
+    │            ┆            ┆            ┆        ┆   ┆           ┆           ┆          ┆ (congress │
+    │            ┆            ┆            ┆        ┆   ┆           ┆           ┆          ┆ man)      │
+    │ Burke      ┆ Aedanus    ┆ null       ┆ null   ┆ … ┆ null      ┆ null      ┆ 1260     ┆ Aedanus   │
+    │            ┆            ┆            ┆        ┆   ┆           ┆           ┆          ┆ Burke     │
+    │ Carroll    ┆ Daniel     ┆ null       ┆ null   ┆ … ┆ null      ┆ null      ┆ 1538     ┆ Daniel    │
+    │            ┆            ┆            ┆        ┆   ┆           ┆           ┆          ┆ Carroll   │
+    │ …          ┆ …          ┆ …          ┆ …      ┆ … ┆ …         ┆ …         ┆ …        ┆ …         │
+    │ Flores     ┆ Mayra      ┆ null       ┆ null   ┆ … ┆ Mayra     ┆ null      ┆ null     ┆ Mayra     │
+    │            ┆            ┆            ┆        ┆   ┆ Flores    ┆           ┆          ┆ Flores    │
+    │ Sempolinsk ┆ Joseph     ┆ null       ┆ null   ┆ … ┆ Joe Sempo ┆ null      ┆ null     ┆ Joe Sempo │
+    │ i          ┆            ┆            ┆        ┆   ┆ linski    ┆           ┆          ┆ linski    │
+    │ Inhofe     ┆ James      ┆ M.         ┆ null   ┆ … ┆ Jim       ┆ null      ┆ 15424    ┆ Jim       │
+    │            ┆            ┆            ┆        ┆   ┆ Inhofe    ┆           ┆          ┆ Inhofe    │
+    │ Sasse      ┆ Benjamin   ┆ Eric       ┆ null   ┆ … ┆ Ben Sasse ┆ null      ┆ 41503    ┆ Ben Sasse │
+    └────────────┴────────────┴────────────┴────────┴───┴───────────┴───────────┴──────────┴───────────┘ |}];
   let df =
     Data_frame.lazy_ dataset
     |> Lazy_frame.groupby
@@ -681,8 +683,8 @@ let%expect_test "Aggregation" =
     │ ---   ┆ ---      ┆ ---      │
     │ str   ┆ f64      ┆ f64      │
     ╞═══════╪══════════╪══════════╡
-    │ PI    ┆ null     ┆ null     │
     │ OL    ┆ null     ┆ null     │
+    │ PI    ┆ null     ┆ null     │
     │ CT    ┆ 0.0      ┆ 0.013216 │
     │ NJ    ┆ 0.0      ┆ 0.008547 │
     │ NC    ┆ 0.002865 ┆ 0.005731 │
@@ -712,11 +714,11 @@ let%expect_test "Aggregation" =
     │ ---   ┆ ---                 ┆ ---   │
     │ str   ┆ str                 ┆ u32   │
     ╞═══════╪═════════════════════╪═══════╡
+    │ NJ    ┆ Pro-Administration  ┆ 3     │
     │ VA    ┆ Anti-Administration ┆ 3     │
     │ CT    ┆ Pro-Administration  ┆ 3     │
-    │ NJ    ┆ Pro-Administration  ┆ 3     │
     │ NC    ┆ Pro-Administration  ┆ 2     │
-    │ SC    ┆ Pro-Administration  ┆ 1     │
+    │ DE    ┆ Anti-Administration ┆ 1     │
     └───────┴─────────────────────┴───────┘ |}];
   let compute_age = Expr.(int 2022 - (col "birthday" |> Dt.year)) in
   let avg_birthday gender =

@@ -58,6 +58,7 @@ external vertical_concat
   :  t list
   -> rechunk:bool
   -> parallel:bool
+  -> to_supertypes:bool
   -> t
   = "rust_lazy_frame_vertical_concat"
 
@@ -70,7 +71,8 @@ external diagonal_concat
 
 let concat ?(how = `Vertical) ?(rechunk = false) ?(parallel = false) ts =
   match how with
-  | `Vertical -> vertical_concat ts ~rechunk ~parallel
+  | `Vertical -> vertical_concat ts ~rechunk ~parallel ~to_supertypes:false
+  | `Vertical_relaxed -> vertical_concat ts ~rechunk ~parallel ~to_supertypes:true
   | `Diagonal -> diagonal_concat ts ~rechunk ~parallel
 ;;
 
@@ -94,16 +96,23 @@ external sort
   -> descending:bool option
   -> nulls_last:bool option
   -> multithreaded:bool option
+  -> maintain_order:bool option
   -> t
-  = "rust_lazy_frame_sort"
+  = "rust_lazy_frame_sort_bytecode" "rust_lazy_frame_sort"
+
+let sort ?descending ?nulls_last t ~by_column =
+  sort
+    t
+    ~by_column
+    ~descending
+    ~nulls_last (* TODO: make following parameters configurable *)
+    ~multithreaded:(Some false)
+    ~maintain_order:(Some true)
+;;
 
 external limit : t -> n:int -> t option = "rust_lazy_frame_limit"
 
 let limit t ~n = limit t ~n |> Option.value_exn ~here:[%here]
-
-let sort ?descending ?nulls_last t ~by_column =
-  sort t ~by_column ~descending ~nulls_last ~multithreaded:(Some false)
-;;
 
 external explode : t -> columns:Expr.t list -> t = "rust_lazy_frame_explode"
 external with_streaming : t -> toggle:bool -> t = "rust_lazy_frame_with_streaming"

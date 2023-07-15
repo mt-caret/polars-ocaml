@@ -17,7 +17,7 @@ ocaml-sys = "0.23.0"
 smartstring = "1.0.1"
 
 [dependencies.polars]
-version = "0.30.0"
+version = "0.31.0"
 features = [
     "approx_unique",
     "asof_join",

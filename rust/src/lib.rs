@@ -64,10 +64,14 @@ mod tests {
             )
             .map(|date_range| date_range.into_series()),
             expect![[r#"
-                Ok(shape: (1,)
+                Ok(shape: (5,)
                 Series: 'date' [datetime[μs]]
                 [
-                	1970-01-01 00:27:20.995200
+                	2022-01-01 00:00:00
+                	2022-01-02 00:00:00
+                	2022-01-03 00:00:00
+                	2022-01-04 00:00:00
+                	2022-01-05 00:00:00
                 ])"#]],
         );
         check(

@@ -79,30 +79,35 @@ ocaml_export! {
         let PolarsJoinType(how) = how.to_rust(cr);
         let Abstract(lazy_frame) = lazy_frame.to_rust(cr);
         let Abstract(other) = other.to_rust(cr);
-        OCaml::box_value(cr, lazy_frame.join(other, &left_on, &right_on, how))
+
+        // TODO: expose JoinArgs directly
+        OCaml::box_value(cr, lazy_frame.join(other, &left_on, &right_on, JoinArgs::new(how)))
     }
 
-    fn rust_lazy_frame_sort(cr, lazy_frame: OCamlRef<DynBox<LazyFrame>>, by_column: OCamlRef<String>, descending: OCamlRef<Option<bool>>, nulls_last: OCamlRef<Option<bool>>, multithreaded: OCamlRef<Option<bool>>) -> OCaml<DynBox<LazyFrame>> {
+    fn rust_lazy_frame_sort(cr, lazy_frame: OCamlRef<DynBox<LazyFrame>>, by_column: OCamlRef<String>, descending: OCamlRef<Option<bool>>, nulls_last: OCamlRef<Option<bool>>, multithreaded: OCamlRef<Option<bool>>, maintain_order: OCamlRef<Option<bool>>) -> OCaml<DynBox<LazyFrame>> {
         let by_column: String = by_column.to_rust(cr);
         let descending: Option<bool> = descending.to_rust(cr);
         let nulls_last: Option<bool> = nulls_last.to_rust(cr);
         let multithreaded: Option<bool> = multithreaded.to_rust(cr);
+        let maintain_order: Option<bool> = maintain_order.to_rust(cr);
         let sort_options: SortOptions = Default::default();
         let sort_options = SortOptions {
             descending: descending.unwrap_or(sort_options.descending),
             nulls_last: nulls_last.unwrap_or(sort_options.nulls_last),
             multithreaded: multithreaded.unwrap_or(sort_options.multithreaded),
+            maintain_order: maintain_order.unwrap_or(sort_options.maintain_order),
         };
 
         let Abstract(lazy_frame) = lazy_frame.to_rust(cr);
         OCaml::box_value(cr, lazy_frame.sort(&by_column, sort_options))
     }
 
-    fn rust_lazy_frame_vertical_concat(cr, lazy_frames: OCamlRef<OCamlList<DynBox<LazyFrame>>>, rechunk: OCamlRef<bool>, parallel: OCamlRef<bool>) -> OCaml<Result<DynBox<LazyFrame>,String>> {
+    fn rust_lazy_frame_vertical_concat(cr, lazy_frames: OCamlRef<OCamlList<DynBox<LazyFrame>>>, rechunk: OCamlRef<bool>, parallel: OCamlRef<bool>, to_supertypes: OCamlRef<bool>) -> OCaml<Result<DynBox<LazyFrame>,String>> {
         let lazy_frames = unwrap_abstract_vec(lazy_frames.to_rust(cr));
         let rechunk = rechunk.to_rust(cr);
         let parallel = parallel.to_rust(cr);
-        concat(&lazy_frames, rechunk, parallel).map(Abstract).map_err(|err| err.to_string()).to_ocaml(cr)
+        let to_supertypes = to_supertypes.to_rust(cr);
+        concat(&lazy_frames, UnionArgs { rechunk, parallel, to_supertypes }).map(Abstract).map_err(|err| err.to_string()).to_ocaml(cr)
     }
 
     fn rust_lazy_frame_diagonal_concat(cr, lazy_frames: OCamlRef<OCamlList<DynBox<LazyFrame>>>, rechunk: OCamlRef<bool>, parallel: OCamlRef<bool>) -> OCaml<Result<DynBox<LazyFrame>,String>> {
@@ -171,6 +176,22 @@ pub extern "C" fn rust_lazy_frame_melt_bytecode(
 ) -> ocaml_interop::RawOCaml {
     unsafe {
         rust_lazy_frame_melt(
+            *argv.offset(0),
+            *argv.offset(1),
+            *argv.offset(2),
+            *argv.offset(3),
+            *argv.offset(4),
+            *argv.offset(5),
+        )
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn rust_lazy_frame_sort_bytecode(
+    argv: *const ocaml_interop::RawOCaml,
+) -> ocaml_interop::RawOCaml {
+    unsafe {
+        rust_lazy_frame_sort(
             *argv.offset(0),
             *argv.offset(1),
             *argv.offset(2),

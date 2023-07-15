@@ -31,7 +31,7 @@ val join'
   -> t
 
 val concat
-  :  ?how:[ `Diagonal | `Vertical ]
+  :  ?how:[ `Diagonal | `Vertical | `Vertical_relaxed ]
   -> ?rechunk:bool
   -> ?parallel:bool
   -> t list

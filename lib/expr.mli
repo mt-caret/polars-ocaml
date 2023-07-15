@@ -20,7 +20,16 @@ external last : t -> t = "rust_expr_last"
 external reverse : t -> t = "rust_expr_reverse"
 val head : ?length:int -> t -> t
 val tail : ?length:int -> t -> t
-val sample_n : ?seed:int -> t -> n:int -> with_replacement:bool -> shuffle:bool -> t
+
+val sample_n
+  :  ?seed:int
+  -> ?fixed_seed:bool
+  -> t
+  -> n:int
+  -> with_replacement:bool
+  -> shuffle:bool
+  -> t
+
 external filter : t -> predicate:t -> t = "rust_expr_filter"
 external sum : t -> t = "rust_expr_sum"
 external mean : t -> t = "rust_expr_mean"

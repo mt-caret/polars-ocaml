@@ -44,11 +44,13 @@ module T = struct
     -> with_replacement:bool
     -> shuffle:bool
     -> seed:int option
+    -> fixed_seed:bool
     -> t option
-    = "rust_expr_sample_n"
+    = "rust_expr_sample_n_bytecode" "rust_expr_sample_n"
 
-  let sample_n ?seed t ~n ~with_replacement ~shuffle =
-    sample_n t ~n ~with_replacement ~shuffle ~seed |> Option.value_exn ~here:[%here]
+  let sample_n ?seed ?(fixed_seed = true) t ~n ~with_replacement ~shuffle =
+    sample_n t ~n ~with_replacement ~shuffle ~seed ~fixed_seed
+    |> Option.value_exn ~here:[%here]
   ;;
 
   external filter : t -> predicate:t -> t = "rust_expr_filter"
