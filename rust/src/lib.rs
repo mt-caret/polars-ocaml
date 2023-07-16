@@ -137,7 +137,7 @@ mod tests {
 
         let mut prev: Option<DataFrame> = None;
 
-        for _ in 0..1000 {
+        for _ in 0..10000 {
             let df = dataset
                 .clone()
                 .lazy()
