@@ -84,7 +84,7 @@ ocaml_export! {
         OCaml::box_value(cr, lazy_frame.join(other, &left_on, &right_on, JoinArgs::new(how)))
     }
 
-    fn rust_lazy_frame_sort(cr, lazy_frame: OCamlRef<DynBox<LazyFrame>>, by_column: OCamlRef<String>, descending: OCamlRef<Option<bool>>, nulls_last: OCamlRef<Option<bool>>, multithreaded: OCamlRef<Option<bool>>, maintain_order: OCamlRef<Option<bool>>) -> OCaml<DynBox<LazyFrame>> {
+    fn rust_lazy_frame_sort|rust_lazy_frame_sort_bytecode(cr, lazy_frame: OCamlRef<DynBox<LazyFrame>>, by_column: OCamlRef<String>, descending: OCamlRef<Option<bool>>, nulls_last: OCamlRef<Option<bool>>, multithreaded: OCamlRef<Option<bool>>, maintain_order: OCamlRef<Option<bool>>) -> OCaml<DynBox<LazyFrame>> {
         let by_column: String = by_column.to_rust(cr);
         let descending: Option<bool> = descending.to_rust(cr);
         let nulls_last: Option<bool> = nulls_last.to_rust(cr);
@@ -117,7 +117,7 @@ ocaml_export! {
         diag_concat_lf(&lazy_frames, rechunk, parallel).map(Abstract).map_err(|err| err.to_string()).to_ocaml(cr)
     }
 
-    fn rust_lazy_frame_melt(cr,
+    fn rust_lazy_frame_melt|rust_lazy_frame_melt_bytecode(cr,
         lazy_frame: OCamlRef<DynBox<LazyFrame>>,
         id_vars: OCamlRef<OCamlList<String>>,
         value_vars: OCamlRef<OCamlList<String>>,
@@ -168,36 +168,4 @@ ocaml_export! {
         .map_err(|err| err.to_string()).to_ocaml(cr)
     }
 
-}
-
-#[no_mangle]
-pub extern "C" fn rust_lazy_frame_melt_bytecode(
-    argv: *const ocaml_interop::RawOCaml,
-) -> ocaml_interop::RawOCaml {
-    unsafe {
-        rust_lazy_frame_melt(
-            *argv.offset(0),
-            *argv.offset(1),
-            *argv.offset(2),
-            *argv.offset(3),
-            *argv.offset(4),
-            *argv.offset(5),
-        )
-    }
-}
-
-#[no_mangle]
-pub extern "C" fn rust_lazy_frame_sort_bytecode(
-    argv: *const ocaml_interop::RawOCaml,
-) -> ocaml_interop::RawOCaml {
-    unsafe {
-        rust_lazy_frame_sort(
-            *argv.offset(0),
-            *argv.offset(1),
-            *argv.offset(2),
-            *argv.offset(3),
-            *argv.offset(4),
-            *argv.offset(5),
-        )
-    }
 }

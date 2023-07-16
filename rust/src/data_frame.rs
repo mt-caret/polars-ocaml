@@ -100,7 +100,7 @@ ocaml_export! {
         polars::functions::diag_concat_df(&data_frames).map(Abstract).map_err(|err| err.to_string()).to_ocaml(cr)
     }
 
-    fn rust_data_frame_pivot(cr,
+    fn rust_data_frame_pivot|rust_data_frame_pivot_bytecode(cr,
         data_frame: OCamlRef<DynBox<DataFrame>>,
         values: OCamlRef<OCamlList<String>>,
         index: OCamlRef<OCamlList<String>>,
@@ -129,7 +129,7 @@ ocaml_export! {
         }.map(Abstract).map_err(|err| err.to_string()).to_ocaml(cr)
     }
 
-    fn rust_data_frame_melt(cr,
+    fn rust_data_frame_melt|rust_data_frame_melt_bytecode(cr,
         data_frame: OCamlRef<DynBox<DataFrame>>,
         id_vars: OCamlRef<OCamlList<String>>,
         value_vars: OCamlRef<OCamlList<String>>,
@@ -226,39 +226,5 @@ ocaml_export! {
     fn rust_data_frame_to_string_hum(cr, data_frame: OCamlRef<DynBox<DataFrame>>) -> OCaml<String> {
         let Abstract(data_frame) = data_frame.to_rust(cr);
         data_frame.to_string().to_ocaml(cr)
-    }
-}
-
-#[no_mangle]
-pub extern "C" fn rust_data_frame_pivot_bytecode(
-    argv: *const ocaml_interop::RawOCaml,
-) -> ocaml_interop::RawOCaml {
-    unsafe {
-        rust_data_frame_pivot(
-            *argv.offset(0),
-            *argv.offset(1),
-            *argv.offset(2),
-            *argv.offset(3),
-            *argv.offset(4),
-            *argv.offset(5),
-            *argv.offset(6),
-            *argv.offset(7),
-        )
-    }
-}
-
-#[no_mangle]
-pub extern "C" fn rust_data_frame_melt_bytecode(
-    argv: *const ocaml_interop::RawOCaml,
-) -> ocaml_interop::RawOCaml {
-    unsafe {
-        rust_data_frame_melt(
-            *argv.offset(0),
-            *argv.offset(1),
-            *argv.offset(2),
-            *argv.offset(3),
-            *argv.offset(4),
-            *argv.offset(5),
-        )
     }
 }

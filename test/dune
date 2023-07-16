@@ -5,6 +5,11 @@
   ; TODO: Ideally we can test the bytecode bindings in tests as well, but AFAICT
   ; ocaml-interop currently doesn't work with bytecode compilation
   ; (https://github.com/tizoc/ocaml-interop/issues/49#issuecomment-1627816642).
+  ;
+  ; update: while ocaml-interop supports bytecode compilation, I'm not sure how
+  ; to have certain environment variables passed in certain modes (which is
+  ; required in bytecode compilation mode)
+  ;
   ; (modes native byte)
   (deps
    (glob_files ./data/*.csv)))

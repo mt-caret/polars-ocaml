@@ -180,7 +180,7 @@ ocaml_export! {
         }.to_ocaml(cr)
     }
 
-    fn rust_expr_sample_n(cr, expr: OCamlRef<DynBox<Expr>>, n: OCamlRef<OCamlInt>, with_replacement: OCamlRef<bool>, shuffle: OCamlRef<bool>, seed: OCamlRef<Option<OCamlInt>>, fixed_seed: OCamlRef<bool>) -> OCaml<Option<DynBox<Expr>>> {
+    fn rust_expr_sample_n|rust_expr_sample_n_bytecode(cr, expr: OCamlRef<DynBox<Expr>>, n: OCamlRef<OCamlInt>, with_replacement: OCamlRef<bool>, shuffle: OCamlRef<bool>, seed: OCamlRef<Option<OCamlInt>>, fixed_seed: OCamlRef<bool>) -> OCaml<Option<DynBox<Expr>>> {
         let result: Option<_> = try {
             let Abstract(expr) = expr.to_rust(cr);
             let n: usize = n.to_rust::<i64>(cr).try_into().ok()?;
@@ -586,21 +586,5 @@ ocaml_export! {
     fn rust_expr_list_eval(cr, expr: OCamlRef<DynBox<Expr>>, other: OCamlRef<DynBox<Expr>>, parallel: OCamlRef<bool>) -> OCaml<DynBox<Expr>> {
         let parallel = parallel.to_rust(cr);
         expr_binary_op(cr, expr, other, |expr, other| expr.list().eval(other, parallel))
-    }
-}
-
-#[no_mangle]
-pub extern "C" fn rust_expr_sample_n_bytecode(
-    argv: *const ocaml_interop::RawOCaml,
-) -> ocaml_interop::RawOCaml {
-    unsafe {
-        rust_expr_sample_n(
-            *argv.offset(0),
-            *argv.offset(1),
-            *argv.offset(2),
-            *argv.offset(3),
-            *argv.offset(4),
-            *argv.offset(5),
-        )
     }
 }
