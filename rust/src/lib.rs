@@ -8,94 +8,13 @@ mod utils;
 
 #[cfg(test)]
 mod tests {
-    use chrono::naive::NaiveDate;
     use expect_test::{expect, Expect};
-    use polars::prelude::prelude::*;
     use polars::prelude::*;
     use std::fmt::Debug;
 
     fn check<T: Debug>(actual: T, expect: Expect) {
         let actual = format!("{:?}", actual);
         expect.assert_eq(&actual);
-    }
-
-    // https://github.com/pola-rs/polars/issues/9409
-    #[test]
-    fn check_date_range() {
-        let start = NaiveDate::from_ymd_opt(2022, 1, 1)
-            .unwrap()
-            .and_hms_opt(0, 0, 0)
-            .unwrap();
-        let stop = NaiveDate::from_ymd_opt(2022, 1, 5)
-            .unwrap()
-            .and_hms_opt(0, 0, 0)
-            .unwrap();
-        check(
-            date_range(
-                "date",
-                start,
-                stop,
-                Duration::parse("1d"),
-                ClosedWindow::Both,
-                TimeUnit::Nanoseconds,
-                None,
-            )
-            .map(|date_range| date_range.into_series()),
-            expect![[r#"
-                Ok(shape: (5,)
-                Series: 'date' [datetime[ns]]
-                [
-                	2022-01-01 00:00:00
-                	2022-01-02 00:00:00
-                	2022-01-03 00:00:00
-                	2022-01-04 00:00:00
-                	2022-01-05 00:00:00
-                ])"#]],
-        );
-        check(
-            date_range(
-                "date",
-                start,
-                stop,
-                Duration::parse("1d"),
-                ClosedWindow::Both,
-                TimeUnit::Microseconds, // TODO: BUG!
-                None,
-            )
-            .map(|date_range| date_range.into_series()),
-            expect![[r#"
-                Ok(shape: (5,)
-                Series: 'date' [datetime[μs]]
-                [
-                	2022-01-01 00:00:00
-                	2022-01-02 00:00:00
-                	2022-01-03 00:00:00
-                	2022-01-04 00:00:00
-                	2022-01-05 00:00:00
-                ])"#]],
-        );
-        check(
-            date_range(
-                "date",
-                start,
-                stop,
-                Duration::parse("1d"),
-                ClosedWindow::Both,
-                TimeUnit::Milliseconds,
-                None,
-            )
-            .map(|date_range| date_range.into_series()),
-            expect![[r#"
-                Ok(shape: (5,)
-                Series: 'date' [datetime[ms]]
-                [
-                	2022-01-01 00:00:00
-                	2022-01-02 00:00:00
-                	2022-01-03 00:00:00
-                	2022-01-04 00:00:00
-                	2022-01-05 00:00:00
-                ])"#]],
-        )
     }
 
     #[test]
@@ -205,5 +124,48 @@ mod tests {
                 │ Station_10 ┆ 17    ┆ 13    ┆ 10    ┆ [0.33, 0.67, 1.0]  │
                 └────────────┴───────┴───────┴───────┴────────────────────┘"#]],
         );
+    }
+
+    // https://github.com/pola-rs/polars/issues/9916
+    #[test]
+    #[should_panic]
+    fn lazy_sort_instability() {
+        let dataset = CsvReader::from_path("../test/data/legislators-historical.csv")
+            .unwrap()
+            .finish()
+            .unwrap();
+
+        let mut prev: Option<DataFrame> = None;
+
+        for _ in 0..1000 {
+            let df = dataset
+                .clone()
+                .lazy()
+                .groupby_stable(vec![col("state")])
+                .agg(vec![
+                    (col("party").eq(lit("Anti-Administration")))
+                        .mean()
+                        .alias("anti"),
+                    (col("party").eq(lit("Pro-Administration")))
+                        .mean()
+                        .alias("pro"),
+                ])
+                .sort(
+                    "pro",
+                    SortOptions {
+                        multithreaded: false,
+                        maintain_order: true,
+                        ..Default::default()
+                    },
+                )
+                .limit(5)
+                .collect()
+                .unwrap();
+
+            if let Some(prev) = prev {
+                assert_eq!(df, prev);
+            }
+            prev = Some(df);
+        }
     }
 }

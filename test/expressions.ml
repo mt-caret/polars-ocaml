@@ -558,25 +558,6 @@ let%expect_test "Casting" =
     └─────┴────────┴──────────────────┘ |}]
 ;;
 
-(* TODO: Below example demonstrates SEGV *)
-(* let%expect_test "segv test case" =
-  for _ = 0 to 300 do
-    let dataset =
-      Data_frame.read_csv_exn "./data/legislators-historical.csv"
-      |> Data_frame.head ~length:1000
-    in
-    let df =
-      Data_frame.lazy_ dataset
-      |> Lazy_frame.groupby
-           ~is_stable:true
-           ~by:Expr.[ col "state" ]
-           ~agg:Expr.[ sum (col "party" = string "some_string") ]
-      |> Lazy_frame.collect_exn
-    in
-    ignore df
-  done
-;; *)
-
 (* Examples from https://pola-rs.github.io/polars-book/user-guide/expressions/aggregation/ *)
 let%expect_test "Aggregation" =
   let schema =
@@ -663,11 +644,8 @@ let%expect_test "Aggregation" =
          ~by:Expr.[ col "state" ]
          ~agg:
            Expr.
-             [ (* The original guide uses [sum] here instead of [mean], but
-                using [sum] here seems to cause panics within polars:
-                https://github.com/pola-rs/polars/issues/9408 *)
-               col "party" = string "Anti-Administration" |> mean |> alias ~name:"anti"
-             ; col "party" = string "Pro-Administration" |> mean |> alias ~name:"pro"
+             [ col "party" = string "Anti-Administration" |> sum |> alias ~name:"anti"
+             ; col "party" = string "Pro-Administration" |> sum |> alias ~name:"pro"
              ]
     |> Lazy_frame.sort ~by_column:"pro" ~descending:true ~nulls_last:false
     |> Lazy_frame.limit ~n:5
@@ -678,17 +656,17 @@ let%expect_test "Aggregation" =
     {|
 
     shape: (5, 3)
-    ┌───────┬──────────┬──────────┐
-    │ state ┆ anti     ┆ pro      │
-    │ ---   ┆ ---      ┆ ---      │
-    │ str   ┆ f64      ┆ f64      │
-    ╞═══════╪══════════╪══════════╡
-    │ PI    ┆ null     ┆ null     │
-    │ OL    ┆ null     ┆ null     │
-    │ CT    ┆ 0.0      ┆ 0.013216 │
-    │ NJ    ┆ 0.0      ┆ 0.008547 │
-    │ NC    ┆ 0.002865 ┆ 0.005731 │
-    └───────┴──────────┴──────────┘ |}];
+    ┌───────┬──────┬─────┐
+    │ state ┆ anti ┆ pro │
+    │ ---   ┆ ---  ┆ --- │
+    │ str   ┆ u32  ┆ u32 │
+    ╞═══════╪══════╪═════╡
+    │ NJ    ┆ 0    ┆ 3   │
+    │ CT    ┆ 0    ┆ 3   │
+    │ NC    ┆ 1    ┆ 2   │
+    │ VA    ┆ 3    ┆ 1   │
+    │ SC    ┆ 0    ┆ 1   │
+    └───────┴──────┴─────┘ |}];
   let df =
     Data_frame.lazy_ dataset
     |> Lazy_frame.groupby
