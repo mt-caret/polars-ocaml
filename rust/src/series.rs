@@ -207,4 +207,77 @@ ocaml_export! {
         let Abstract(series) = series.to_rust(cr);
         ToString::to_string(&series).to_ocaml(cr)
     }
+
+    // TODO: Consider using Bigarray here instead of OCamlList to keep memory outside the
+    // OCaml heap and skip a copy.
+    // TODO: Consider mapping to smaller OCaml values like Int8, Float32, etc instead of
+    // casting up
+    fn rust_series_to_typed_list(
+        cr,
+        series: OCamlRef<DynBox<Series>>,
+    ) -> OCaml<Result<TypedList, String>> {
+        let Abstract(series) = series.to_rust(cr);
+
+        // Get and process series based on its data type
+        let result : Result<TypedList, _> = match series.dtype() {
+            DataType::Int8 | DataType::Int16 => {
+                series
+                    .cast(&DataType::Int32)
+                    .and_then(|series| series
+                        .i32()
+                        .map(|elems| elems.into_iter().collect())
+                        .map(|list : Vec<Option<i32>>| TypedList::Int32(list))
+                    )
+                    .map_err(|e| e.to_string())
+            },
+            DataType::Int32 => {
+                series
+                    .i32()
+                    .map_err(|e| e.to_string())
+                    .map(|elems| elems.into_iter().collect())
+                    .map(|list : Vec<Option<i32>>| TypedList::Int32(list))
+            }
+            DataType::Int64 => {
+                series
+                    .i64()
+                    .map_err(|e| e.to_string())
+                    .map(|elems| elems.into_iter().collect())
+                    .map(|list : Vec<Option<i64>>| TypedList::Int(list))
+            }
+            DataType::Float32 => {
+                series
+                    .cast(&DataType::Float64)
+                    .and_then(|series| series
+                        .f64()
+                        .map(|elems| elems.into_iter().collect())
+                        .map(|list : Vec<Option<f64>>| TypedList::Float(list))
+                    )
+                    .map_err(|e| e.to_string())
+            }
+            DataType::Float64 => {
+                series
+                    .f64()
+                    .map_err(|e| e.to_string())
+                    .map(|elems| elems.into_iter().collect())
+                    .map(|list : Vec<Option<f64>>| TypedList::Float(list))
+            }
+            DataType::Utf8 => {
+                series
+                    .utf8()
+                    .map_err(|e| e.to_string())
+                    .map(|elems| elems.into_iter().map(|s_opt| s_opt.map(|s| s.to_string())).collect())
+                    .map(|list : Vec<Option<String>>| TypedList::String(list))
+            }
+            DataType::Binary => {
+                series
+                .binary()
+                .map_err(|e| e.to_string())
+                .map(|elems| elems.into_iter().map(|s_opt| s_opt.map(|b| b.to_vec())).collect())
+                .map(|list : Vec<Option<Vec<u8>>>| TypedList::Bytes(list))
+            }
+            dtype => Result::Err(format!("Unsupported dtype: {:?}", dtype)),
+        };
+        result.to_ocaml(cr)
+    }
+
 }

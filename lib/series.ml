@@ -133,6 +133,18 @@ module T = struct
   external to_string_hum : t -> string = "rust_series_to_string_hum"
 
   let print t = print_endline (to_string_hum t)
+
+  type typed_list =
+    | Int of int option list
+    | Int32 of Int32.t option list
+    | Float of float option list
+    | String of string option list
+    | Bytes of bytes option list
+
+  external to_typed_list : t -> (typed_list, string) result = "rust_series_to_typed_list"
+
+  let to_typed_list_exn t =
+    t |> to_typed_list |> Result.map_error ~f:Error.of_string |> ok_exn
 end
 
 include T

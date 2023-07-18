@@ -39,5 +39,16 @@ val sample_n_exn : ?seed:int -> t -> n:int -> with_replacement:bool -> shuffle:b
 external to_string_hum : t -> string = "rust_series_to_string_hum"
 val print : t -> unit
 
+type typed_list =
+  | Int of int option list
+  | Int32 of Int32.t option list
+  | Float of float option list
+  | String of string option list
+  | Bytes of bytes option list
+
+external to_typed_list : t -> (typed_list, string) result = "rust_series_to_typed_list"
+
+val to_typed_list_exn : t -> typed_list
+
 include Common.Compare with type t := t
 include Common.Numeric with type t := t
