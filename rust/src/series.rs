@@ -1,7 +1,8 @@
 use crate::utils::*;
 use chrono::naive::{NaiveDate, NaiveDateTime};
 use ocaml_interop::{
-    ocaml_export, DynBox, OCaml, OCamlFloat, OCamlInt, OCamlList, OCamlRef, OCamlRuntime, ToOCaml,
+    impl_to_ocaml_variant, ocaml_export, DynBox, OCaml, OCamlBytes, OCamlFloat, OCamlInt,
+    OCamlInt32, OCamlList, OCamlRef, OCamlRuntime, ToOCaml,
 };
 use polars::prelude::prelude::*;
 use polars::prelude::*;
@@ -33,6 +34,27 @@ fn series_binary_op_result<'a>(
 
     series.to_ocaml(cr)
 }
+
+pub enum TypedList {
+    Int(Vec<Option<i64>>),
+    Int32(Vec<Option<i32>>),
+    Float(Vec<Option<f64>>),
+    String(Vec<Option<String>>),
+    Bytes(Vec<Option<Vec<u8>>>),
+}
+
+impl_to_ocaml_variant! {
+    // Optionally, if Rust and OCaml types don't match:
+    // RustType => OCamlType { ... }
+    TypedList {
+        TypedList::Int(l: OCamlList<Option<OCamlInt>>),
+        TypedList::Int32(l: OCamlList<Option<OCamlInt32>>),
+        TypedList::Float(l: OCamlList<Option<OCamlFloat>>),
+        TypedList::String(l: OCamlList<Option<String>>),
+        TypedList::Bytes(l: OCamlList<Option<OCamlBytes>>),
+    }
+}
+
 
 ocaml_export! {
     fn rust_series_new_int(cr, name: OCamlRef<String>, values: OCamlRef<OCamlList<OCamlInt>>) -> OCaml<DynBox<Series>> {
