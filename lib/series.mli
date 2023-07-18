@@ -45,9 +45,9 @@ type typed_list =
   | Float of float option list
   | String of string option list
   | Bytes of bytes option list
+[@@deriving sexp_of]
 
 external to_typed_list : t -> (typed_list, string) result = "rust_series_to_typed_list"
-
 val to_typed_list_exn : t -> typed_list
 
 include Common.Compare with type t := t

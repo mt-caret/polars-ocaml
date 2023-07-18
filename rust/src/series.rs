@@ -55,7 +55,6 @@ impl_to_ocaml_variant! {
     }
 }
 
-
 ocaml_export! {
     fn rust_series_new_int(cr, name: OCamlRef<String>, values: OCamlRef<OCamlList<OCamlInt>>) -> OCaml<DynBox<Series>> {
         let name: String = name.to_rust(cr);
@@ -180,7 +179,7 @@ ocaml_export! {
             let seed: Option<u64> = seed.map_or(Ok(None), |seed| seed.map(Some)).ok()?;
 
             series.sample_n(n, with_replacement, shuffle, seed)
-            .map(Abstract).map_err(|err| err.to_string())
+                .map(Abstract).map_err(|err| err.to_string())
         };
         result.to_ocaml(cr)
     }
@@ -301,5 +300,8 @@ ocaml_export! {
         };
         result.to_ocaml(cr)
     }
+
+
+
 
 }

@@ -140,11 +140,13 @@ module T = struct
     | Float of float option list
     | String of string option list
     | Bytes of bytes option list
+  [@@deriving sexp_of]
 
   external to_typed_list : t -> (typed_list, string) result = "rust_series_to_typed_list"
 
   let to_typed_list_exn t =
     t |> to_typed_list |> Result.map_error ~f:Error.of_string |> ok_exn
+  ;;
 end
 
 include T
