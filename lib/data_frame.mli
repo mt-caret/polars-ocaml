@@ -2,13 +2,13 @@ open! Core
 
 type t = Data_frame0.t
 
-external create : Series.t list -> (t, string) result = "rust_data_frame_new"
+val create : Series.t list -> (t, string) result
 val create_exn : Series.t list -> t
 val read_csv : ?schema:Schema.t -> ?try_parse_dates:bool -> string -> (t, string) result
 val read_csv_exn : ?schema:Schema.t -> ?try_parse_dates:bool -> string -> t
 val describe : ?percentiles:float list -> t -> (t, string) result
 val describe_exn : ?percentiles:float list -> t -> t
-external lazy_ : t -> Lazy_frame.t = "rust_data_frame_lazy"
+val lazy_ : t -> Lazy_frame.t
 val select : t -> exprs:Expr.t list -> (t, string) result
 val select_exn : t -> exprs:Expr.t list -> t
 val with_columns : t -> exprs:Expr.t list -> (t, string) result
@@ -22,17 +22,11 @@ val groupby
   -> (t, string) result
 
 val groupby_exn : ?is_stable:bool -> t -> by:Expr.t list -> agg:Expr.t list -> t
-external column : t -> name:string -> (Series.t, string) result = "rust_data_frame_column"
+val column : t -> name:string -> (Series.t, string) result
 val column_exn : t -> name:string -> Series.t
-
-external columns
-  :  t
-  -> names:string list
-  -> (Series.t list, string) result
-  = "rust_data_frame_column"
-
+val columns : t -> names:string list -> (Series.t list, string) result
 val columns_exn : t -> names:string list -> Series.t list
-external get_column_names : t -> string list = "rust_data_frame_get_column_names"
+val get_column_names : t -> string list
 val concat : ?how:[ `Diagonal | `Horizontal | `Vertical ] -> t list -> (t, string) result
 val concat_exn : ?how:[ `Diagonal | `Horizontal | `Vertical ] -> t list -> t
 
@@ -108,18 +102,12 @@ val sample_n
   -> (t, string) result
 
 val sample_n_exn : ?seed:int -> t -> n:int -> with_replacement:bool -> shuffle:bool -> t
-external sum : t -> t = "rust_data_frame_sum"
-external mean : t -> t = "rust_data_frame_mean"
-external median : t -> t = "rust_data_frame_median"
-external null_count : t -> t = "rust_data_frame_null_count"
-
-external explode
-  :  t
-  -> columns:string list
-  -> (t, string) result
-  = "rust_data_frame_explode"
-
+val sum : t -> t
+val mean : t -> t
+val median : t -> t
+val null_count : t -> t
+val explode : t -> columns:string list -> (t, string) result
 val explode_exn : t -> columns:string list -> t
-external schema : t -> Schema.t = "rust_data_frame_schema"
-external to_string_hum : t -> string = "rust_data_frame_to_string_hum"
+val schema : t -> Schema.t
+val to_string_hum : t -> string
 val print : t -> unit
