@@ -58,7 +58,7 @@ module type Common = sig
   module Naive_date : sig
     type t
 
-    external create : year:int -> month:int -> day:int -> t option = "rust_naive_date"
+    val create : year:int -> month:int -> day:int -> t option
     val of_date : Date.t -> t
     val of_string : string -> t
   end
@@ -72,12 +72,8 @@ module type Common = sig
   end
 
   module For_testing : sig
-    external panic : string -> unit = "rust_test_panic"
-    external raise_exception : string -> unit = "rust_test_exception"
-
-    external install_panic_hook
-      :  suppress_backtrace:bool
-      -> unit
-      = "rust_install_panic_hook"
+    val panic : string -> unit
+    val raise_exception : string -> unit
+    val install_panic_hook : suppress_backtrace:bool -> unit
   end
 end

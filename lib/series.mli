@@ -2,20 +2,14 @@ open! Core
 
 type t
 
-external int : string -> int list -> t = "rust_series_new_int"
-external int_option : string -> int option list -> t = "rust_series_new_int_option"
-external float : string -> float list -> t = "rust_series_new_float"
-external float_option : string -> float option list -> t = "rust_series_new_float_option"
-external bool : string -> bool list -> t = "rust_series_new_bool"
-external bool_option : string -> bool option list -> t = "rust_series_new_bool_option"
-external string : string -> string list -> t = "rust_series_new_string"
-
-external string_option
-  :  string
-  -> string option list
-  -> t
-  = "rust_series_new_string_option"
-
+val int : string -> int list -> t
+val int_option : string -> int option list -> t
+val float : string -> float list -> t
+val float_option : string -> float option list -> t
+val bool : string -> bool list -> t
+val bool_option : string -> bool option list -> t
+val string : string -> string list -> t
+val string_option : string -> string option list -> t
 val date : string -> Date.t list -> t
 val datetime : string -> Common.Naive_datetime.t list -> t
 val datetime' : string -> Date.t list -> t
@@ -36,7 +30,7 @@ val sample_n
   -> (t, string) result
 
 val sample_n_exn : ?seed:int -> t -> n:int -> with_replacement:bool -> shuffle:bool -> t
-external to_string_hum : t -> string = "rust_series_to_string_hum"
+val to_string_hum : t -> string
 val print : t -> unit
 
 type typed_list =
@@ -47,7 +41,7 @@ type typed_list =
   | Bytes of bytes option list
 [@@deriving sexp_of]
 
-external to_typed_list : t -> (typed_list, string) result = "rust_series_to_typed_list"
+val to_typed_list : t -> (typed_list, string) result
 val to_typed_list_exn : t -> typed_list
 
 include Common.Compare with type t := t
