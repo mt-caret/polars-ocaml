@@ -167,13 +167,13 @@ let melt_exn ?variable_name ?value_name ?streamable t ~id_vars ~value_vars =
   |> Or_error.ok_exn
 ;;
 
-external head : t -> length:int option -> t option = "rust_data_frame_head"
+external head : t -> length:int option -> t = "rust_data_frame_head"
 
-let head ?length t = head t ~length |> Option.value_exn ~here:[%here]
+let head ?length t = head t ~length
 
-external tail : t -> length:int option -> t option = "rust_data_frame_tail"
+external tail : t -> length:int option -> t = "rust_data_frame_tail"
 
-let tail ?length t = tail t ~length |> Option.value_exn ~here:[%here]
+let tail ?length t = tail t ~length
 
 external sample_n
   :  t

@@ -16,6 +16,14 @@ pub unsafe fn ocaml_failwith(error_message: &str) -> ! {
     unreachable!("caml_failwith should never return")
 }
 
+pub unsafe fn ocaml_invalid_argument(error_message: &str) -> ! {
+    let error_message = std::ffi::CString::new(error_message).expect("CString::new failed");
+    unsafe {
+        ocaml_sys::caml_failwith(error_message.as_ptr());
+    }
+    unreachable!("caml_failwith should never return")
+}
+
 pub struct PolarsTimeUnit(pub TimeUnit);
 
 unsafe impl FromOCaml<TimeUnit> for PolarsTimeUnit {
@@ -364,6 +372,11 @@ where
 // conversion fails. For example, Coerce<OCamlInt, i64, u32> will convert an
 // OCamlInt into an i64 and then try to convert that i64 into a u32.
 pub struct Coerce<OCamlType, Via, T>(pub T, pub PhantomData<Via>, pub PhantomData<OCamlType>);
+impl<OCamlType, Via, T> Coerce<OCamlType, Via, T> {
+    pub fn get(self) -> T {
+        self.0
+    }
+}
 unsafe impl<OCamlType, Via, T> FromOCaml<OCamlType> for Coerce<OCamlType, Via, T>
 where
     Via: FromOCaml<OCamlType>,
@@ -374,17 +387,17 @@ where
         match T::try_from(v.to_rust::<Via>()) {
             Ok(v) => Coerce(v, PhantomData, PhantomData),
             Err(e) => unsafe {
-                ocaml_failwith(&format!("Failed to convert OCaml<Via> to Rust<T>: {:?}", e))
+                ocaml_invalid_argument(&format!(
+                    "Failed to convert OCaml<{}> (from {}) to Rust<{}>: {:?}",
+                    std::any::type_name::<Via>(),
+                    std::any::type_name::<OCamlType>(),
+                    std::any::type_name::<T>(),
+                    e
+                ))
             },
         }
     }
 }
-impl<OCamlType, Via, T> Coerce<OCamlType, Via, T> {
-    pub fn get(self) -> T {
-        self.0
-    }
-}
-
 unsafe impl<OCamlType, Via, T> FromOCaml<Option<OCamlType>>
     for Coerce<OCamlType, Option<Via>, Option<T>>
 where
@@ -398,7 +411,13 @@ where
             Some(v) => match T::try_from(v) {
                 Ok(v) => Coerce(Some(v), PhantomData, PhantomData),
                 Err(e) => unsafe {
-                    ocaml_failwith(&format!("Failed to convert OCaml<Via> to Rust<T>: {:?}", e))
+                    ocaml_invalid_argument(&format!(
+                        "Failed to convert OCaml<Option<{}>> (from Option<{}>) to Rust<Option<{}>>: {:?}",
+                        std::any::type_name::<Via>(),
+                        std::any::type_name::<OCamlType>(),
+                        std::any::type_name::<T>(),
+                        e
+                    ))
                 },
             },
         }

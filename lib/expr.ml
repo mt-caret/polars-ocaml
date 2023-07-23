@@ -32,13 +32,13 @@ module T = struct
   external first : t -> t = "rust_expr_first"
   external last : t -> t = "rust_expr_last"
   external reverse : t -> t = "rust_expr_reverse"
-  external head : t -> length:int option -> t option = "rust_expr_head"
+  external head : t -> length:int option -> t = "rust_expr_head"
 
-  let head ?length t = head t ~length |> Option.value_exn ~here:[%here]
+  let head ?length t = head t ~length
 
-  external tail : t -> length:int option -> t option = "rust_expr_tail"
+  external tail : t -> length:int option -> t = "rust_expr_tail"
 
-  let tail ?length t = tail t ~length |> Option.value_exn ~here:[%here]
+  let tail ?length t = tail t ~length
 
   external sample_n
     :  t

@@ -147,26 +147,26 @@ ocaml_export! {
         OCaml::box_value(cr, series.sort(descending))
     }
 
-    fn rust_series_head(cr, series: OCamlRef<DynBox<Series>>, length: OCamlRef<Option<OCamlInt>>) -> OCaml<Option<DynBox<Series>>> {
+    fn rust_series_head(
+        cr,
+        series: OCamlRef<DynBox<Series>>,
+        length: OCamlRef<Option<OCamlInt>>
+    ) -> OCaml<DynBox<Series>> {
         let Abstract(series) = series.to_rust(cr);
-        let length: Option<i64> = length.to_rust(cr);
+        let length = length.to_rust::<Coerce<_, Option<i64>, Option<usize>>>(cr).get();
 
-        match length.map(|length| length.try_into().ok()) {
-            None => Some(Abstract(series.head(None))),
-            Some(None) => None,
-            Some(Some(length)) => Some(Abstract(series.head(Some(length)))),
-        }.to_ocaml(cr)
+        Abstract(series.head(length)).to_ocaml(cr)
     }
 
-    fn rust_series_tail(cr, series: OCamlRef<DynBox<Series>>, length: OCamlRef<Option<OCamlInt>>) -> OCaml<Option<DynBox<Series>>> {
+    fn rust_series_tail(
+        cr,
+        series: OCamlRef<DynBox<Series>>,
+        length: OCamlRef<Option<OCamlInt>>
+    ) -> OCaml<DynBox<Series>> {
         let Abstract(series) = series.to_rust(cr);
-        let length: Option<i64> = length.to_rust(cr);
+        let length = length.to_rust::<Coerce<_, Option<i64>, Option<usize>>>(cr).get();
 
-        match length.map(|length| length.try_into().ok()) {
-            None => Some(Abstract(series.tail(None))),
-            Some(None) => None,
-            Some(Some(length)) => Some(Abstract(series.tail(Some(length)))),
-        }.to_ocaml(cr)
+        Abstract(series.tail(length)).to_ocaml(cr)
     }
 
     fn rust_series_sample_n(

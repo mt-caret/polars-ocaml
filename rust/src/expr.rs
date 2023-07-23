@@ -158,26 +158,26 @@ ocaml_export! {
     // - tail
     // - sample_n
 
-    fn rust_expr_head(cr, expr: OCamlRef<DynBox<Expr>>, length: OCamlRef<Option<OCamlInt>>) -> OCaml<Option<DynBox<Expr>>> {
+    fn rust_expr_head(
+        cr,
+        expr: OCamlRef<DynBox<Expr>>,
+        length: OCamlRef<Option<OCamlInt>>
+    ) -> OCaml<DynBox<Expr>> {
         let Abstract(expr) = expr.to_rust(cr);
-        let length: Option<i64> = length.to_rust(cr);
+        let length = length.to_rust::<Coerce<_, Option<i64>, Option<usize>>>(cr).get();
 
-        match length.map(|length| length.try_into().ok()) {
-            None => Some(Abstract(expr.head(None))),
-            Some(None) => None,
-            Some(Some(length)) => Some(Abstract(expr.head(Some(length)))),
-        }.to_ocaml(cr)
+        Abstract(expr.head(length)).to_ocaml(cr)
     }
 
-    fn rust_expr_tail(cr, expr: OCamlRef<DynBox<Expr>>, length: OCamlRef<Option<OCamlInt>>) -> OCaml<Option<DynBox<Expr>>> {
+    fn rust_expr_tail(
+        cr,
+        expr: OCamlRef<DynBox<Expr>>,
+        length: OCamlRef<Option<OCamlInt>>
+    ) -> OCaml<DynBox<Expr>> {
         let Abstract(expr) = expr.to_rust(cr);
-        let length: Option<i64> = length.to_rust(cr);
+        let length = length.to_rust::<Coerce<_, Option<i64>, Option<usize>>>(cr).get();
 
-        match length.map(|length| length.try_into().ok()) {
-            None => Some(Abstract(expr.tail(None))),
-            Some(None) => None,
-            Some(Some(length)) => Some(Abstract(expr.tail(Some(length)))),
-        }.to_ocaml(cr)
+        Abstract(expr.tail(length)).to_ocaml(cr)
     }
 
     fn rust_expr_sample_n|rust_expr_sample_n_bytecode(
