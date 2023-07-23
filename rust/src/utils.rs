@@ -5,6 +5,7 @@ use ocaml_interop::{
 };
 use polars::{lazy::dsl::WindowMapping, prelude::*};
 use smartstring::{LazyCompact, SmartString};
+use std::any::type_name;
 use std::borrow::Borrow;
 use std::marker::PhantomData;
 
@@ -373,9 +374,9 @@ where
             Err(e) => unsafe {
                 ocaml_invalid_argument(&format!(
                     "Failed to convert OCaml<{}> (from {}) to Rust<{}>: {:?}",
-                    std::any::type_name::<Via>(),
-                    std::any::type_name::<OCamlType>(),
-                    std::any::type_name::<T>(),
+                    type_name::<Via>(),
+                    type_name::<OCamlType>(),
+                    type_name::<T>(),
                     e
                 ))
             },
@@ -397,9 +398,9 @@ where
                 Err(e) => unsafe {
                     ocaml_invalid_argument(&format!(
                         "Failed to convert OCaml<Option<{}>> (from Option<{}>) to Rust<Option<{}>>: {:?}",
-                        std::any::type_name::<Via>(),
-                        std::any::type_name::<OCamlType>(),
-                        std::any::type_name::<T>(),
+                        type_name::<Via>(),
+                        type_name::<OCamlType>(),
+                        type_name::<T>(),
                         e
                     ))
                 },
