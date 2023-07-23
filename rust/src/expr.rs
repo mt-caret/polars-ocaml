@@ -180,19 +180,23 @@ ocaml_export! {
         }.to_ocaml(cr)
     }
 
-    fn rust_expr_sample_n|rust_expr_sample_n_bytecode(cr, expr: OCamlRef<DynBox<Expr>>, n: OCamlRef<OCamlInt>, with_replacement: OCamlRef<bool>, shuffle: OCamlRef<bool>, seed: OCamlRef<Option<OCamlInt>>, fixed_seed: OCamlRef<bool>) -> OCaml<Option<DynBox<Expr>>> {
-        let result: Option<_> = try {
-            let Abstract(expr) = expr.to_rust(cr);
-            let n: usize = n.to_rust::<i64>(cr).try_into().ok()?;
-            let with_replacement: bool = with_replacement.to_rust(cr);
-            let shuffle: bool = shuffle.to_rust(cr);
-            let seed: Option<Result<u64,_>> = seed.to_rust::<Option<i64>>(cr).map(|seed| seed.try_into());
-            let seed: Option<u64> = seed.map_or(Ok(None), |seed| seed.map(Some)).ok()?;
-            let fixed_seed = fixed_seed.to_rust(cr);
+    fn rust_expr_sample_n|rust_expr_sample_n_bytecode(
+        cr,
+        expr: OCamlRef<DynBox<Expr>>,
+        n: OCamlRef<OCamlInt>,
+        with_replacement: OCamlRef<bool>,
+        shuffle: OCamlRef<bool>,
+        seed: OCamlRef<Option<OCamlInt>>,
+        fixed_seed: OCamlRef<bool>
+    ) -> OCaml<DynBox<Expr>> {
+        let Abstract(expr) = expr.to_rust(cr);
+        let Coerce(n, _, _): Coerce<_, i64, usize> = n.to_rust(cr);
+        let with_replacement: bool = with_replacement.to_rust(cr);
+        let shuffle: bool = shuffle.to_rust(cr);
+        let Coerce(seed, _, _): Coerce<_, Option<i64>, Option<u64>> = seed.to_rust(cr);
+        let fixed_seed = fixed_seed.to_rust(cr);
 
-            Abstract(expr.sample_n(n, with_replacement, shuffle, seed, fixed_seed))
-        };
-        result.to_ocaml(cr)
+        Abstract(expr.sample_n(n, with_replacement, shuffle, seed, fixed_seed)).to_ocaml(cr)
     }
 
     fn rust_expr_filter(cr, expr: OCamlRef<DynBox<Expr>>, predicate: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
@@ -281,18 +285,18 @@ ocaml_export! {
         expr_binary_op(cr, expr, with, |expr, with| expr.fill_nan(with))
     }
 
-    fn rust_expr_rank(cr, expr: OCamlRef<DynBox<Expr>>, method: OCamlRef<RankMethod>, descending: OCamlRef<bool>, seed: OCamlRef<Option<OCamlInt>>) -> OCaml<Option<DynBox<Expr>>> {
-        let result: Option<_> = try {
-            let Abstract(expr) = expr.to_rust(cr);
-            let PolarsRankMethod(method) = method.to_rust(cr);
-            let descending: bool = descending.to_rust(cr);
-            let seed: Option<Result<u64,_>> = seed.to_rust::<Option<i64>>(cr).map(|seed| seed.try_into());
-            let seed: Option<u64> = seed.map_or(Ok(None), |seed| seed.map(Some)).ok()?;
-
-            Abstract(expr.rank(RankOptions { method, descending }, seed))
-        };
-
-        result.to_ocaml(cr)
+    fn rust_expr_rank(
+        cr,
+        expr: OCamlRef<DynBox<Expr>>,
+        method: OCamlRef<RankMethod>,
+        descending: OCamlRef<bool>,
+        seed: OCamlRef<Option<OCamlInt>>
+    ) -> OCaml<DynBox<Expr>> {
+        let Abstract(expr) = expr.to_rust(cr);
+        let PolarsRankMethod(method) = method.to_rust(cr);
+        let descending: bool = descending.to_rust(cr);
+        let Coerce(seed, _, _): Coerce<_, Option<i64>, Option<u64>> = seed.to_rust(cr);
+        Abstract(expr.rank(RankOptions { method, descending }, seed)).to_ocaml(cr)
     }
 
     fn rust_expr_when_then(cr, when_then_clauses: OCamlRef<OCamlList<(DynBox<Expr>, DynBox<Expr>)>>, otherwise: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
@@ -371,14 +375,15 @@ ocaml_export! {
         expr_unary_op(cr, expr, |expr| expr.suffix(&suffix))
     }
 
-    fn rust_expr_round(cr, expr: OCamlRef<DynBox<Expr>>, decimals: OCamlRef<OCamlInt>) -> OCaml<Option<DynBox<Expr>>> {
-        let result: Option<_> = try {
-            let decimals: u32 = decimals.to_rust::<i64>(cr).try_into().ok()?;
+    fn rust_expr_round(
+        cr,
+        expr: OCamlRef<DynBox<Expr>>,
+        decimals: OCamlRef<OCamlInt>
+    ) -> OCaml<DynBox<Expr>> {
+        let Coerce(decimals, _, _): Coerce<_, i64, u32> = decimals.to_rust(cr);
 
-            let Abstract(expr) = expr.to_rust(cr);
-            Abstract(expr.round(decimals))
-        };
-        result.to_ocaml(cr)
+        let Abstract(expr) = expr.to_rust(cr);
+        Abstract(expr.round(decimals)).to_ocaml(cr)
     }
 
     fn rust_expr_eq(cr, expr: OCamlRef<DynBox<Expr>>, other: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {

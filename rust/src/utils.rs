@@ -6,6 +6,7 @@ use ocaml_interop::{
 use polars::{lazy::dsl::WindowMapping, prelude::*};
 use smartstring::{LazyCompact, SmartString};
 use std::borrow::Borrow;
+use std::marker::PhantomData;
 
 pub unsafe fn ocaml_failwith(error_message: &str) -> ! {
     let error_message = std::ffi::CString::new(error_message).expect("CString::new failed");
@@ -339,6 +340,63 @@ unsafe impl FromOCaml<JoinType> for PolarsJoinType {
         };
 
         PolarsJoinType(result.expect("Failure when unpacking an OCaml<JoinType> variant into PolarsJoinType (unexpected tag value"))
+    }
+}
+
+pub struct FromOCamlInt<T>(pub T);
+unsafe impl<T> FromOCaml<OCamlInt> for FromOCamlInt<T>
+where
+    T: TryFrom<i64>,
+    <T as TryFrom<i64>>::Error: std::fmt::Debug,
+{
+    fn from_ocaml(v: OCaml<OCamlInt>) -> Self {
+        match T::try_from(v.to_rust::<i64>()) {
+            Ok(v) => FromOCamlInt(v),
+            Err(e) => unsafe {
+                ocaml_failwith(&format!("Failed to convert OCaml<i64> to Rust<T>: {:?}", e))
+            },
+        }
+    }
+}
+
+// Coerce<OCamlType, Via, T>, given OCamlType which can be converted into a Rust
+// type Via will then try_into() T and will raise an OCaml exception if the
+// conversion fails. For example, Coerce<OCamlInt, i64, u32> will convert an
+// OCamlInt into an i64 and then try to convert that i64 into a u32.
+pub struct Coerce<OCamlType, Via, T>(pub T, pub PhantomData<Via>, pub PhantomData<OCamlType>);
+unsafe impl<OCamlType, Via, T> FromOCaml<OCamlType> for Coerce<OCamlType, Via, T>
+where
+    Via: FromOCaml<OCamlType>,
+    T: TryFrom<Via>,
+    <T as TryFrom<Via>>::Error: std::fmt::Debug,
+{
+    fn from_ocaml(v: OCaml<OCamlType>) -> Self {
+        match T::try_from(v.to_rust::<Via>()) {
+            Ok(v) => Coerce(v, PhantomData, PhantomData),
+            Err(e) => unsafe {
+                ocaml_failwith(&format!("Failed to convert OCaml<Via> to Rust<T>: {:?}", e))
+            },
+        }
+    }
+}
+
+unsafe impl<OCamlType, Via, T> FromOCaml<Option<OCamlType>>
+    for Coerce<OCamlType, Option<Via>, Option<T>>
+where
+    Via: FromOCaml<OCamlType>,
+    T: TryFrom<Via>,
+    <T as TryFrom<Via>>::Error: std::fmt::Debug,
+{
+    fn from_ocaml(v: OCaml<Option<OCamlType>>) -> Self {
+        match v.to_rust::<Option<Via>>() {
+            None => Coerce(None, PhantomData, PhantomData),
+            Some(v) => match T::try_from(v) {
+                Ok(v) => Coerce(Some(v), PhantomData, PhantomData),
+                Err(e) => unsafe {
+                    ocaml_failwith(&format!("Failed to convert OCaml<Via> to Rust<T>: {:?}", e))
+                },
+            },
+        }
     }
 }
 
