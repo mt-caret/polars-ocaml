@@ -351,24 +351,8 @@ unsafe impl FromOCaml<JoinType> for PolarsJoinType {
     }
 }
 
-pub struct FromOCamlInt<T>(pub T);
-unsafe impl<T> FromOCaml<OCamlInt> for FromOCamlInt<T>
-where
-    T: TryFrom<i64>,
-    <T as TryFrom<i64>>::Error: std::fmt::Debug,
-{
-    fn from_ocaml(v: OCaml<OCamlInt>) -> Self {
-        match T::try_from(v.to_rust::<i64>()) {
-            Ok(v) => FromOCamlInt(v),
-            Err(e) => unsafe {
-                ocaml_failwith(&format!("Failed to convert OCaml<i64> to Rust<T>: {:?}", e))
-            },
-        }
-    }
-}
-
 // Coerce<OCamlType, Via, T>, given OCamlType which can be converted into a Rust
-// type Via will then try_into() T and will raise an OCaml exception if the
+// type Via, will try_into() T and will raise an OCaml exception if the
 // conversion fails. For example, Coerce<OCamlInt, i64, u32> will convert an
 // OCamlInt into an i64 and then try to convert that i64 into a u32.
 pub struct Coerce<OCamlType, Via, T>(pub T, pub PhantomData<Via>, pub PhantomData<OCamlType>);
