@@ -169,19 +169,23 @@ ocaml_export! {
         }.to_ocaml(cr)
     }
 
-    fn rust_series_sample_n(cr, series: OCamlRef<DynBox<Series>>, n: OCamlRef<OCamlInt>, with_replacement: OCamlRef<bool>, shuffle: OCamlRef<bool>, seed: OCamlRef<Option<OCamlInt>>) -> OCaml<Option<Result<DynBox<Series>,String>>> {
-        let result: Option<_> = try {
-            let Abstract(series) = series.to_rust(cr);
-            let n: usize = n.to_rust::<i64>(cr).try_into().ok()?;
-            let with_replacement: bool = with_replacement.to_rust(cr);
-            let shuffle: bool = shuffle.to_rust(cr);
-            let seed: Option<Result<u64,_>> = seed.to_rust::<Option<i64>>(cr).map(|seed| seed.try_into());
-            let seed: Option<u64> = seed.map_or(Ok(None), |seed| seed.map(Some)).ok()?;
+    fn rust_series_sample_n(
+        cr,
+        series: OCamlRef<DynBox<Series>>,
+        n: OCamlRef<OCamlInt>,
+        with_replacement: OCamlRef<bool>,
+        shuffle: OCamlRef<bool>,
+        seed: OCamlRef<Option<OCamlInt>>
+    ) -> OCaml<Result<DynBox<Series>,String>> {
+        let Abstract(series) = series.to_rust(cr);
+        let n = n.to_rust::<Coerce<_, i64, usize>>(cr).get();
+        let with_replacement: bool = with_replacement.to_rust(cr);
+        let shuffle: bool = shuffle.to_rust(cr);
+        let seed = seed.to_rust::<Coerce<_, Option<i64>, Option<u64>>>(cr).get();
 
-            series.sample_n(n, with_replacement, shuffle, seed)
-                .map(Abstract).map_err(|err| err.to_string())
-        };
-        result.to_ocaml(cr)
+        series.sample_n(n, with_replacement, shuffle, seed)
+        .map(Abstract).map_err(|err| err.to_string())
+        .to_ocaml(cr)
     }
 
     fn rust_series_eq(cr, series: OCamlRef<DynBox<Series>>, other: OCamlRef<DynBox<Series>>) -> OCaml<Result<DynBox<Series>,String>> {

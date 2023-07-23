@@ -190,10 +190,10 @@ ocaml_export! {
         fixed_seed: OCamlRef<bool>
     ) -> OCaml<DynBox<Expr>> {
         let Abstract(expr) = expr.to_rust(cr);
-        let Coerce(n, _, _): Coerce<_, i64, usize> = n.to_rust(cr);
+        let n = n.to_rust::<Coerce<_, i64, usize>>(cr).get();
         let with_replacement: bool = with_replacement.to_rust(cr);
         let shuffle: bool = shuffle.to_rust(cr);
-        let Coerce(seed, _, _): Coerce<_, Option<i64>, Option<u64>> = seed.to_rust(cr);
+        let seed = seed.to_rust::<Coerce<_, Option<i64>, Option<u64>>>(cr).get();
         let fixed_seed = fixed_seed.to_rust(cr);
 
         Abstract(expr.sample_n(n, with_replacement, shuffle, seed, fixed_seed)).to_ocaml(cr)
@@ -295,7 +295,7 @@ ocaml_export! {
         let Abstract(expr) = expr.to_rust(cr);
         let PolarsRankMethod(method) = method.to_rust(cr);
         let descending: bool = descending.to_rust(cr);
-        let Coerce(seed, _, _): Coerce<_, Option<i64>, Option<u64>> = seed.to_rust(cr);
+        let seed = seed.to_rust::<Coerce<_, Option<i64>, Option<u64>>>(cr).get();
         Abstract(expr.rank(RankOptions { method, descending }, seed)).to_ocaml(cr)
     }
 
@@ -380,7 +380,7 @@ ocaml_export! {
         expr: OCamlRef<DynBox<Expr>>,
         decimals: OCamlRef<OCamlInt>
     ) -> OCaml<DynBox<Expr>> {
-        let Coerce(decimals, _, _): Coerce<_, i64, u32> = decimals.to_rust(cr);
+        let decimals = decimals.to_rust::<Coerce<_, i64, u32>>(cr).get();
 
         let Abstract(expr) = expr.to_rust(cr);
         Abstract(expr.round(decimals)).to_ocaml(cr)
@@ -523,18 +523,20 @@ ocaml_export! {
         }, GetOutput::from_type(DataType::Boolean))
     }
 
-    fn rust_expr_str_extract(cr, expr: OCamlRef<DynBox<Expr>>, pat: OCamlRef<String>, group_index: OCamlRef<OCamlInt>) -> OCaml<Option<DynBox<Expr>>> {
-        let result: Option<_> = try {
-            let pat: String = pat.to_rust(cr);
-            let group_index: usize = group_index.to_rust::<i64>(cr).try_into().ok()?;
+    fn rust_expr_str_extract(
+        cr,
+        expr: OCamlRef<DynBox<Expr>>,
+        pat: OCamlRef<String>,
+        group_index: OCamlRef<OCamlInt>
+    ) -> OCaml<DynBox<Expr>> {
+        let pat: String = pat.to_rust(cr);
+        let group_index = group_index.to_rust::<Coerce<_, i64, usize>>(cr).get();
 
-            let Abstract(expr) = expr.to_rust(cr);
-            let f = move |series: Series| {
-                Ok(Some(series.utf8()?.extract(&pat, group_index)?.into_series()))
-            };
-            Abstract(expr.map(f, GetOutput::from_type(DataType::Utf8)))
+        let Abstract(expr) = expr.to_rust(cr);
+        let f = move |series: Series| {
+            Ok(Some(series.utf8()?.extract(&pat, group_index)?.into_series()))
         };
-        result.to_ocaml(cr)
+        Abstract(expr.map(f, GetOutput::from_type(DataType::Utf8))).to_ocaml(cr)
     }
 
     fn rust_expr_str_extract_all(cr, expr: OCamlRef<DynBox<Expr>>, pat: OCamlRef<String>) -> OCaml<DynBox<Expr>> {

@@ -139,13 +139,14 @@ ocaml_export! {
         Abstract(lazy_frame.melt(melt_args)).to_ocaml(cr)
     }
 
-    fn rust_lazy_frame_limit(cr, lazy_frame: OCamlRef<DynBox<LazyFrame>>, n: OCamlRef<OCamlInt>) -> OCaml<Option<DynBox<LazyFrame>>> {
-        let result: Option<_> = try {
-            let n = n.to_rust::<i64>(cr).try_into().ok()?;
-            let Abstract(lazy_frame) = lazy_frame.to_rust(cr);
-            Abstract(lazy_frame.limit(n))
-        };
-        result.to_ocaml(cr)
+    fn rust_lazy_frame_limit(
+        cr,
+        lazy_frame: OCamlRef<DynBox<LazyFrame>>,
+        n: OCamlRef<OCamlInt>
+    ) -> OCaml<DynBox<LazyFrame>> {
+        let n = n.to_rust::<Coerce<_, i64, u32>>(cr).get();
+        let Abstract(lazy_frame) = lazy_frame.to_rust(cr);
+        Abstract(lazy_frame.limit(n)).to_ocaml(cr)
     }
 
     fn rust_lazy_frame_explode(cr, lazy_frame: OCamlRef<DynBox<LazyFrame>>, columns: OCamlRef<OCamlList<DynBox<Expr>>>) -> OCaml<DynBox<LazyFrame>> {

@@ -379,6 +379,11 @@ where
         }
     }
 }
+impl<OCamlType, Via, T> Coerce<OCamlType, Via, T> {
+    pub fn get(self) -> T {
+        self.0
+    }
+}
 
 unsafe impl<OCamlType, Via, T> FromOCaml<Option<OCamlType>>
     for Coerce<OCamlType, Option<Via>, Option<T>>

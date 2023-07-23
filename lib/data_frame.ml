@@ -181,11 +181,11 @@ external sample_n
   -> with_replacement:bool
   -> shuffle:bool
   -> seed:int option
-  -> (t, string) result option
+  -> (t, string) result
   = "rust_data_frame_sample_n"
 
 let sample_n ?seed t ~n ~with_replacement ~shuffle =
-  sample_n t ~n ~with_replacement ~shuffle ~seed |> Option.value_exn ~here:[%here]
+  sample_n t ~n ~with_replacement ~shuffle ~seed
 ;;
 
 let sample_n_exn ?seed t ~n ~with_replacement ~shuffle =
