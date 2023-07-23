@@ -17,6 +17,7 @@ val date_range : string -> start:Date.t -> stop:Date.t -> (t, string) result
 val date_range_exn : string -> start:Date.t -> stop:Date.t -> t
 val datetime_range : string -> start:Date.t -> stop:Date.t -> (t, string) result
 val datetime_range_exn : string -> start:Date.t -> stop:Date.t -> t
+external to_data_frame : t -> Data_frame0.t = "rust_series_to_data_frame"
 val sort : ?descending:bool -> t -> t
 val head : ?length:int -> t -> t
 val tail : ?length:int -> t -> t

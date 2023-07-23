@@ -352,6 +352,43 @@ unsafe impl FromOCaml<JoinType> for PolarsJoinType {
     }
 }
 
+pub struct PolarsClosedWindow(pub ClosedWindow);
+
+unsafe impl FromOCaml<ClosedWindow> for PolarsClosedWindow {
+    fn from_ocaml(v: OCaml<ClosedWindow>) -> Self {
+        let result = ocaml_unpack_polymorphic_variant! {
+            v => {
+                Left => ClosedWindow::Left,
+                Right => ClosedWindow::Right,
+                Both => ClosedWindow::Both,
+                None_ => ClosedWindow::None,
+            }
+        };
+        PolarsClosedWindow(result.expect("Failure when unpacking an OCaml<ClosedWindow> variant into PolarsClosedWindow (unexpected tag value"))
+    }
+}
+
+pub struct PolarsStartBy(pub StartBy);
+
+unsafe impl FromOCaml<StartBy> for PolarsStartBy {
+    fn from_ocaml(v: OCaml<StartBy>) -> Self {
+        let result = ocaml_unpack_polymorphic_variant! {
+            v => {
+                Window_bound => StartBy::WindowBound,
+                Data_point => StartBy::DataPoint,
+                Monday => StartBy::Monday,
+                Tuesday => StartBy::Tuesday,
+                Wednesday => StartBy::Wednesday,
+                Thursday => StartBy::Thursday,
+                Friday => StartBy::Friday,
+                Saturday => StartBy::Saturday,
+                Sunday => StartBy::Sunday,
+            }
+        };
+        PolarsStartBy(result.expect("Failure when unpacking an OCaml<StartBy> variant into PolarsStartBy (unexpected tag value"))
+    }
+}
+
 // Coerce<OCamlType, Via, T>, given OCamlType which can be converted into a Rust
 // type Via, will try_into() T and will raise an OCaml exception if the
 // conversion fails. For example, Coerce<OCamlInt, i64, u32> will convert an

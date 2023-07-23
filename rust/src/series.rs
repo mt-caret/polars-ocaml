@@ -140,6 +140,11 @@ ocaml_export! {
         series.to_ocaml(cr)
     }
 
+    fn rust_series_to_data_frame(cr, series: OCamlRef<DynBox<Series>>) -> OCaml<DynBox<DataFrame>> {
+        let Abstract(series) = series.to_rust(cr);
+        OCaml::box_value(cr, series.into_frame())
+    }
+
     fn rust_series_sort(cr, series: OCamlRef<DynBox<Series>>, descending: OCamlRef<bool>) -> OCaml<DynBox<Series>> {
         let Abstract(series) = series.to_rust(cr);
         let descending: bool = descending.to_rust(cr);

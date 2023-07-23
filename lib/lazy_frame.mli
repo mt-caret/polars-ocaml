@@ -15,6 +15,31 @@ val filter : t -> predicate:Expr.t -> t
 val select : t -> exprs:Expr.t list -> t
 val with_columns : t -> exprs:Expr.t list -> t
 val groupby : ?is_stable:bool -> t -> by:Expr.t list -> agg:Expr.t list -> t
+
+val groupby_dynamic
+  :  ?every:string
+  -> ?period:string
+  -> ?offset:string
+  -> ?truncate:bool
+  -> ?include_boundaries:bool
+  -> ?closed_window:[ `Both | `Left | `None_ | `Right ]
+  -> ?start_by:
+       [ `Data_point
+       | `Friday
+       | `Monday
+       | `Saturday
+       | `Sunday
+       | `Thursday
+       | `Tuesday
+       | `Wednesday
+       | `Window_bound
+       ]
+  -> ?check_sorted:bool
+  -> t
+  -> index_column:Expr.t
+  -> by:Expr.t list
+  -> t
+
 val join : t -> other:t -> on:Expr.t list -> how:Join_type.t -> t
 
 val join'

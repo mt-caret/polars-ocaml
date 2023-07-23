@@ -37,23 +37,74 @@ let describe_exn ?percentiles t =
 
 external lazy_ : t -> Lazy_frame.t = "rust_data_frame_lazy"
 
-let select t ~exprs = lazy_ t |> Lazy_frame.select ~exprs |> Lazy_frame.collect
-let select_exn t ~exprs = lazy_ t |> Lazy_frame.select ~exprs |> Lazy_frame.collect_exn
-
-let with_columns t ~exprs =
-  lazy_ t |> Lazy_frame.with_columns ~exprs |> Lazy_frame.collect
-;;
-
-let with_columns_exn t ~exprs =
-  lazy_ t |> Lazy_frame.with_columns ~exprs |> Lazy_frame.collect_exn
-;;
-
-let groupby ?is_stable t ~by ~agg =
-  lazy_ t |> Lazy_frame.groupby ?is_stable ~by ~agg |> Lazy_frame.collect
-;;
+let in_lazy t ~f = lazy_ t |> f |> Lazy_frame.collect
+let in_lazy_exn t ~f = lazy_ t |> f |> Lazy_frame.collect_exn
+let select t ~exprs = in_lazy t ~f:(Lazy_frame.select ~exprs)
+let select_exn t ~exprs = in_lazy_exn t ~f:(Lazy_frame.select ~exprs)
+let with_columns t ~exprs = in_lazy t ~f:(Lazy_frame.with_columns ~exprs)
+let with_columns_exn t ~exprs = in_lazy_exn t ~f:(Lazy_frame.with_columns ~exprs)
+let groupby ?is_stable t ~by ~agg = in_lazy t ~f:(Lazy_frame.groupby ?is_stable ~by ~agg)
 
 let groupby_exn ?is_stable t ~by ~agg =
-  lazy_ t |> Lazy_frame.groupby ?is_stable ~by ~agg |> Lazy_frame.collect_exn
+  in_lazy_exn t ~f:(Lazy_frame.groupby ?is_stable ~by ~agg)
+;;
+
+let groupby_dynamic
+  ?every
+  ?period
+  ?offset
+  ?truncate
+  ?include_boundaries
+  ?closed_window
+  ?start_by
+  ?check_sorted
+  t
+  ~index_column
+  ~by
+  =
+  in_lazy
+    t
+    ~f:
+      (Lazy_frame.groupby_dynamic
+         ?every
+         ?period
+         ?offset
+         ?truncate
+         ?include_boundaries
+         ?closed_window
+         ?start_by
+         ?check_sorted
+         ~index_column
+         ~by)
+;;
+
+let groupby_dynamic_exn
+  ?every
+  ?period
+  ?offset
+  ?truncate
+  ?include_boundaries
+  ?closed_window
+  ?start_by
+  ?check_sorted
+  t
+  ~index_column
+  ~by
+  =
+  in_lazy_exn
+    t
+    ~f:
+      (Lazy_frame.groupby_dynamic
+         ?every
+         ?period
+         ?offset
+         ?truncate
+         ?include_boundaries
+         ?closed_window
+         ?start_by
+         ?check_sorted
+         ~index_column
+         ~by)
 ;;
 
 external column : t -> name:string -> (Series.t, string) result = "rust_data_frame_column"
@@ -163,6 +214,27 @@ let melt ?variable_name ?value_name ?(streamable = false) t ~id_vars ~value_vars
 
 let melt_exn ?variable_name ?value_name ?streamable t ~id_vars ~value_vars =
   melt ?variable_name ?value_name ?streamable t ~id_vars ~value_vars
+  |> Result.map_error ~f:Error.of_string
+  |> Or_error.ok_exn
+;;
+
+external sort
+  :  t
+  -> by_column:string list
+  -> descending:bool list
+  -> maintain_order:bool
+  -> (t, string) result
+  = "rust_data_frame_sort"
+
+let sort ?descending ?(maintain_order = true) t ~by_column =
+  let descending =
+    Option.value descending ~default:(List.map by_column ~f:(Fn.const false))
+  in
+  sort t ~by_column ~descending ~maintain_order
+;;
+
+let sort_exn ?descending ?maintain_order t ~by_column =
+  sort ?descending ?maintain_order t ~by_column
   |> Result.map_error ~f:Error.of_string
   |> Or_error.ok_exn
 ;;

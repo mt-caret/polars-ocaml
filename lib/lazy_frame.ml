@@ -42,6 +42,59 @@ external groupby
 
 let groupby ?(is_stable = false) t ~by ~agg = groupby t ~is_stable ~by ~agg
 
+external groupby_dynamic
+  :  t
+  -> index_column:Expr.t
+  -> by:Expr.t list
+  -> every:string option
+  -> period:string option
+  -> offset:string option
+  -> truncate:bool option
+  -> include_boundaries:bool option
+       (* -> closed_window:[ `Left | `Right | `Both | `None_ ] option
+  -> start_by:
+       [ `Window_bound
+       | `Data_point
+       | `Monday
+       | `Tuesday
+       | `Wednesday
+       | `Thursday
+       | `Friday
+       | `Saturday
+       | `Sunday
+       ]
+       option *)
+  -> check_sorted:bool option
+  -> t
+  = "rust_lazy_frame_groupby_dynamic_bytecode" "rust_lazy_frame_groupby_dynamic"
+
+let groupby_dynamic
+  ?every
+  ?period
+  ?offset
+  ?truncate
+  ?include_boundaries
+  ?closed_window:_
+  ?start_by:_
+  ?check_sorted
+  t
+  ~index_column
+  ~by
+  =
+  groupby_dynamic
+    t
+    ~index_column
+    ~by
+    ~every
+    ~period
+    ~offset
+    ~truncate
+    ~include_boundaries
+      (* ~closed_window
+    ~start_by *)
+    ~check_sorted
+;;
+
 external join_
   :  t
   -> other:t
