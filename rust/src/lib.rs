@@ -126,46 +126,57 @@ mod tests {
         );
     }
 
+    // I don't really understand what's going on here, but below tests correctly
+    // demonstrates a panic when running on a box on EC2[1] but not on my development machine at home[2]
+    //
+    // [1]:
+    // $ cat /proc/cpuinfo | grep 'model name' | uniq
+    // model name      : AMD EPYC 7571
+    //
+    // [2]:
+    // $ cat /proc/cpuinfo | grep 'model name' | uniq
+    // model name      : 13th Gen Intel(R) Core(TM) i9-13900K
+
     // https://github.com/pola-rs/polars/issues/9916
-    #[test]
-    #[should_panic]
-    fn lazy_sort_instability() {
-        let dataset = CsvReader::from_path("../test/data/legislators-historical.csv")
-            .unwrap()
-            .finish()
-            .unwrap();
+    // #[test]
+    // #[should_panic]
+    // fn lazy_sort_instability() {
+    //     let dataset = CsvReader::from_path("../test/data/legislators-historical.csv")
+    //         .unwrap()
+    //         .finish()
+    //         .unwrap();
 
-        let mut prev: Option<DataFrame> = None;
+    //     let mut prev: Option<DataFrame> = None;
 
-        for _ in 0..10000 {
-            let df = dataset
-                .clone()
-                .lazy()
-                .groupby_stable(vec![col("state")])
-                .agg(vec![
-                    (col("party").eq(lit("Anti-Administration")))
-                        .mean()
-                        .alias("anti"),
-                    (col("party").eq(lit("Pro-Administration")))
-                        .mean()
-                        .alias("pro"),
-                ])
-                .sort(
-                    "pro",
-                    SortOptions {
-                        multithreaded: false,
-                        maintain_order: true,
-                        ..Default::default()
-                    },
-                )
-                .limit(5)
-                .collect()
-                .unwrap();
+    //     for _ in 0..10000 {
+    //         let df = dataset
+    //             .clone()
+    //             .lazy()
+    //             .groupby_stable(vec![col("state")])
+    //             .agg(vec![
+    //                 (col("party").eq(lit("Anti-Administration")))
+    //                     .mean()
+    //                     .alias("anti"),
+    //                 (col("party").eq(lit("Pro-Administration")))
+    //                     .mean()
+    //                     .alias("pro"),
+    //             ])
+    //             .sort(
+    //                 "pro",
+    //                 SortOptions {
+    //                     multithreaded: false,
+    //                     maintain_order: true,
+    //                     ..Default::default()
+    //                 },
+    //             )
+    //             .limit(5)
+    //             .collect()
+    //             .unwrap();
 
-            if let Some(prev) = prev {
-                assert_eq!(df, prev);
-            }
-            prev = Some(df);
-        }
-    }
+    //         if let Some(prev) = prev {
+    //             assert_eq!(df, prev);
+    //         }
+    //         prev = Some(df);
+    //     }
+    // }
 }

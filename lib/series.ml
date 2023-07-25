@@ -71,13 +71,13 @@ module T = struct
 
   let sort ?(descending = false) t = sort t ~descending
 
-  external head : t -> length:int option -> t option = "rust_series_head"
+  external head : t -> length:int option -> t = "rust_series_head"
 
-  let head ?length t = head t ~length |> Option.value_exn ~here:[%here]
+  let head ?length t = head t ~length
 
-  external tail : t -> length:int option -> t option = "rust_series_tail"
+  external tail : t -> length:int option -> t = "rust_series_tail"
 
-  let tail ?length t = tail t ~length |> Option.value_exn ~here:[%here]
+  let tail ?length t = tail t ~length
 
   external sample_n
     :  t
@@ -85,11 +85,11 @@ module T = struct
     -> with_replacement:bool
     -> shuffle:bool
     -> seed:int option
-    -> (t, string) result option
+    -> (t, string) result
     = "rust_series_sample_n"
 
   let sample_n ?seed t ~n ~with_replacement ~shuffle =
-    sample_n t ~n ~with_replacement ~shuffle ~seed |> Option.value_exn ~here:[%here]
+    sample_n t ~n ~with_replacement ~shuffle ~seed
   ;;
 
   let sample_n_exn ?seed t ~n ~with_replacement ~shuffle =

@@ -110,10 +110,7 @@ let sort ?descending ?nulls_last t ~by_column =
     ~maintain_order:(Some true)
 ;;
 
-external limit : t -> n:int -> t option = "rust_lazy_frame_limit"
-
-let limit t ~n = limit t ~n |> Option.value_exn ~here:[%here]
-
+external limit : t -> n:int -> t = "rust_lazy_frame_limit"
 external explode : t -> columns:Expr.t list -> t = "rust_lazy_frame_explode"
 external with_streaming : t -> toggle:bool -> t = "rust_lazy_frame_with_streaming"
 external schema : t -> (Schema.t, string) result = "rust_lazy_frame_schema"

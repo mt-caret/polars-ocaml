@@ -32,13 +32,13 @@ module T = struct
   external first : t -> t = "rust_expr_first"
   external last : t -> t = "rust_expr_last"
   external reverse : t -> t = "rust_expr_reverse"
-  external head : t -> length:int option -> t option = "rust_expr_head"
+  external head : t -> length:int option -> t = "rust_expr_head"
 
-  let head ?length t = head t ~length |> Option.value_exn ~here:[%here]
+  let head ?length t = head t ~length
 
-  external tail : t -> length:int option -> t option = "rust_expr_tail"
+  external tail : t -> length:int option -> t = "rust_expr_tail"
 
-  let tail ?length t = tail t ~length |> Option.value_exn ~here:[%here]
+  let tail ?length t = tail t ~length
 
   external sample_n
     :  t
@@ -47,12 +47,11 @@ module T = struct
     -> shuffle:bool
     -> seed:int option
     -> fixed_seed:bool
-    -> t option
+    -> t
     = "rust_expr_sample_n_bytecode" "rust_expr_sample_n"
 
   let sample_n ?seed ?(fixed_seed = true) t ~n ~with_replacement ~shuffle =
     sample_n t ~n ~with_replacement ~shuffle ~seed ~fixed_seed
-    |> Option.value_exn ~here:[%here]
   ;;
 
   external filter : t -> predicate:t -> t = "rust_expr_filter"
@@ -115,11 +114,11 @@ module T = struct
     -> method_:[ `Average | `Min | `Max | `Dense | `Ordinal | `Random ]
     -> descending:bool
     -> seed:int option
-    -> t option
+    -> t
     = "rust_expr_rank"
 
   let rank ?(method_ = `Dense) ?(descending = false) ?seed t =
-    rank t ~method_ ~descending ~seed |> Option.value_exn ~here:[%here]
+    rank t ~method_ ~descending ~seed
   ;;
 
   external when_ : (t * t) list -> otherwise:t -> t = "rust_expr_when_then"
@@ -151,10 +150,7 @@ module T = struct
   external alias : t -> name:string -> t = "rust_expr_alias"
   external prefix : t -> prefix:string -> t = "rust_expr_prefix"
   external suffix : t -> suffix:string -> t = "rust_expr_suffix"
-  external round : t -> decimals:int -> t option = "rust_expr_round"
-
-  let round t ~decimals = round t ~decimals |> Option.value_exn ~here:[%here]
-
+  external round : t -> decimals:int -> t = "rust_expr_round"
   external equal : t -> t -> t = "rust_expr_eq"
 
   let ( = ) = equal
@@ -211,10 +207,7 @@ module Str = struct
 
   external starts_with : t -> prefix:string -> t = "rust_expr_str_starts_with"
   external ends_with : t -> suffix:string -> t = "rust_expr_str_ends_with"
-  external extract : t -> pat:string -> group:int -> t option = "rust_expr_str_extract"
-
-  let extract t ~pat ~group = extract t ~pat ~group |> Option.value_exn ~here:[%here]
-
+  external extract : t -> pat:string -> group:int -> t = "rust_expr_str_extract"
   external extract_all : t -> pat:string -> t = "rust_expr_str_extract_all"
 
   external replace
