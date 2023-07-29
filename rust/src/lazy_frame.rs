@@ -83,17 +83,18 @@ ocaml_export! {
         offset: OCamlRef<Option<String>>,
         truncate: OCamlRef<Option<bool>>,
         include_boundaries: OCamlRef<Option<bool>>,
-        // closed_window: OCamlRef<Option<ClosedWindow>>,
-        // start_by: OCamlRef<Option<StartBy>>,
+        closed_window: OCamlRef<Option<ClosedWindow>>,
+        start_by: OCamlRef<Option<StartBy>>,
         check_sorted: OCamlRef<Option<bool>>,
-    ) -> OCaml<DynBox<LazyGroupBy>> {
+        agg: OCamlRef<OCamlList<DynBox<Expr>>>,
+    ) -> OCaml<DynBox<LazyFrame>> {
         let every = every.to_rust::<Option<String>>(cr).as_deref().map(Duration::parse);
         let period = period.to_rust::<Option<String>>(cr).as_deref().map(Duration::parse);
         let offset = offset.to_rust::<Option<String>>(cr).as_deref().map(Duration::parse);
         let truncate: Option<bool> = truncate.to_rust(cr);
         let include_boundaries: Option<bool> = include_boundaries.to_rust(cr);
-        // let closed_window = closed_window.to_rust::<Option<PolarsClosedWindow>>(cr).map(|PolarsClosedWindow(closed_window)| closed_window);
-        // let start_by = start_by.to_rust::<Option<PolarsStartBy>>(cr).map(|PolarsStartBy(start_by)| start_by);
+        let closed_window = closed_window.to_rust::<Option<PolarsClosedWindow>>(cr).map(|PolarsClosedWindow(closed_window)| closed_window);
+        let start_by = start_by.to_rust::<Option<PolarsStartBy>>(cr).map(|PolarsStartBy(start_by)| start_by);
         let check_sorted: Option<bool> = check_sorted.to_rust(cr);
 
         let options: DynamicGroupOptions = Default::default();
@@ -105,16 +106,20 @@ ocaml_export! {
             offset: offset.unwrap_or(options.offset),
             truncate: truncate.unwrap_or(options.truncate),
             include_boundaries: include_boundaries.unwrap_or(options.include_boundaries),
-            closed_window: options.closed_window, // closed_window.unwrap_or(options.closed_window),
-            start_by: options.start_by, // start_by.unwrap_or(options.start_by),
+            closed_window: closed_window.unwrap_or(options.closed_window),
+            start_by: start_by.unwrap_or(options.start_by),
             check_sorted: check_sorted.unwrap_or(options.check_sorted),
         };
+
+        println!("options: {:?}", options);
 
         let Abstract(lazy_frame) = lazy_frame.to_rust(cr);
         let Abstract(index_column) = index_column.to_rust(cr);
         let by = unwrap_abstract_vec(by.to_rust(cr));
 
-        OCaml::box_value(cr, lazy_frame.groupby_dynamic(index_column, by, options))
+        let agg = unwrap_abstract_vec(agg.to_rust(cr));
+
+        OCaml::box_value(cr, lazy_frame.groupby_dynamic(index_column, by, options).agg(agg))
     }
 
     fn rust_lazy_frame_join(cr, lazy_frame: OCamlRef<DynBox<LazyFrame>>, other: OCamlRef<DynBox<LazyFrame>>, left_on: OCamlRef<OCamlList<DynBox<Expr>>>, right_on: OCamlRef<OCamlList<DynBox<Expr>>>, how: OCamlRef<JoinType>) -> OCaml<DynBox<LazyFrame>> {

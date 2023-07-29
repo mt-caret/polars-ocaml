@@ -38,6 +38,7 @@ val groupby_dynamic
   -> t
   -> index_column:Expr.t
   -> by:Expr.t list
+  -> agg:Expr.t list
   -> t
 
 val join : t -> other:t -> on:Expr.t list -> how:Join_type.t -> t

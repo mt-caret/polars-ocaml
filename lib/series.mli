@@ -13,11 +13,26 @@ val string_option : string -> string option list -> t
 val date : string -> Date.t list -> t
 val datetime : string -> Common.Naive_datetime.t list -> t
 val datetime' : string -> Date.t list -> t
-val date_range : string -> start:Date.t -> stop:Date.t -> (t, string) result
-val date_range_exn : string -> start:Date.t -> stop:Date.t -> t
-val datetime_range : string -> start:Date.t -> stop:Date.t -> (t, string) result
-val datetime_range_exn : string -> start:Date.t -> stop:Date.t -> t
-external to_data_frame : t -> Data_frame0.t = "rust_series_to_data_frame"
+
+val date_range
+  :  ?every:string
+  -> string
+  -> start:Date.t
+  -> stop:Date.t
+  -> (t, string) result
+
+val date_range_exn : ?every:string -> string -> start:Date.t -> stop:Date.t -> t
+
+val datetime_range
+  :  ?every:string
+  -> string
+  -> start:Date.t
+  -> stop:Date.t
+  -> (t, string) result
+
+val datetime_range_exn : ?every:string -> string -> start:Date.t -> stop:Date.t -> t
+val rename : t -> name:string -> t
+val to_data_frame : t -> Data_frame0.t
 val sort : ?descending:bool -> t -> t
 val head : ?length:int -> t -> t
 val tail : ?length:int -> t -> t

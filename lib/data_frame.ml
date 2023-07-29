@@ -61,6 +61,7 @@ let groupby_dynamic
   t
   ~index_column
   ~by
+  ~agg
   =
   in_lazy
     t
@@ -75,7 +76,8 @@ let groupby_dynamic
          ?start_by
          ?check_sorted
          ~index_column
-         ~by)
+         ~by
+         ~agg)
 ;;
 
 let groupby_dynamic_exn
@@ -90,6 +92,7 @@ let groupby_dynamic_exn
   t
   ~index_column
   ~by
+  ~agg
   =
   in_lazy_exn
     t
@@ -104,7 +107,8 @@ let groupby_dynamic_exn
          ?start_by
          ?check_sorted
          ~index_column
-         ~by)
+         ~by
+         ~agg)
 ;;
 
 external column : t -> name:string -> (Series.t, string) result = "rust_data_frame_column"

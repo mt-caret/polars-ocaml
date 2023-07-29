@@ -708,7 +708,101 @@ let%expect_test "Grouping" =
       df
       ~index_column:(Expr.col "Date")
       ~every:"1y"
-      ~by:Expr.[ col "Close" |> mean ]
+      ~by:[]
+      ~agg:Expr.[ col "Close" |> mean ]
   in
-  Data_frame.print annual_average_df
+  let df_with_year =
+    Data_frame.with_columns_exn
+      annual_average_df
+      ~exprs:Expr.[ col "Date" |> Dt.year |> alias ~name:"year" ]
+  in
+  Data_frame.print df_with_year;
+  [%expect
+    {|
+    options: DynamicGroupOptions { index_column: "", every: Duration { months: 12, weeks: 0, days: 0, nsecs: 0, negative: false, parsed_int: false, saturating: false }, period: Duration { months: 12, weeks: 0, days: 0, nsecs: 0, negative: false, parsed_int: false, saturating: false }, offset: Duration { months: 12, weeks: 0, days: 0, nsecs: 0, negative: true, parsed_int: false, saturating: false }, truncate: true, include_boundaries: false, closed_window: Left, start_by: WindowBound, check_sorted: true }
+    shape: (34, 3)
+    ┌────────────┬───────────┬──────┐
+    │ Date       ┆ Close     ┆ year │
+    │ ---        ┆ ---       ┆ ---  │
+    │ date       ┆ f64       ┆ i32  │
+    ╞════════════╪═══════════╪══════╡
+    │ 1981-01-01 ┆ 23.5625   ┆ 1981 │
+    │ 1982-01-01 ┆ 11.0      ┆ 1982 │
+    │ 1983-01-01 ┆ 30.543333 ┆ 1983 │
+    │ 1984-01-01 ┆ 27.583333 ┆ 1984 │
+    │ …          ┆ …         ┆ …    │
+    │ 2011-01-01 ┆ 368.225   ┆ 2011 │
+    │ 2012-01-01 ┆ 560.965   ┆ 2012 │
+    │ 2013-01-01 ┆ 464.955   ┆ 2013 │
+    │ 2014-01-01 ┆ 522.06    ┆ 2014 │
+    └────────────┴───────────┴──────┘ |}];
+  let df =
+    Series.date_range_exn
+      ~every:"1d"
+      ~start:(Date.of_string "2021-01-01")
+      ~stop:(Date.of_string "2021-12-31")
+      "time"
+    |> Series.to_data_frame
+  in
+  let out =
+    Data_frame.groupby_dynamic_exn
+      df
+      ~index_column:(Expr.col "time")
+      ~every:"1mo"
+      ~period:"1mo"
+      ~by:[]
+      ~agg:
+        Expr.
+          [ col "time" |> cum_count |> reverse |> head ~length:3 |> alias ~name:"day/eom"
+          ; col "time" - first (col "time")
+            |> last
+            |> Dt.days
+            |> add (int 1)
+            |> alias ~name:"days_in_month"
+          ]
+    |> Data_frame.explode_exn ~columns:[ "day/eom" ]
+  in
+  Data_frame.print out;
+  [%expect
+    {|
+    options: DynamicGroupOptions { index_column: "", every: Duration { months: 1, weeks: 0, days: 0, nsecs: 0, negative: false, parsed_int: false, saturating: false }, period: Duration { months: 1, weeks: 0, days: 0, nsecs: 0, negative: false, parsed_int: false, saturating: false }, offset: Duration { months: 0, weeks: 0, days: 0, nsecs: 0, negative: false, parsed_int: false, saturating: false }, truncate: true, include_boundaries: false, closed_window: Left, start_by: WindowBound, check_sorted: true }
+    shape: (36, 3)
+    ┌────────────┬─────────┬───────────────┐
+    │ time       ┆ day/eom ┆ days_in_month │
+    │ ---        ┆ ---     ┆ ---           │
+    │ date       ┆ u32     ┆ i64           │
+    ╞════════════╪═════════╪═══════════════╡
+    │ 2021-01-01 ┆ 30      ┆ 31            │
+    │ 2021-01-01 ┆ 29      ┆ 31            │
+    │ 2021-01-01 ┆ 28      ┆ 31            │
+    │ 2021-02-01 ┆ 27      ┆ 28            │
+    │ …          ┆ …       ┆ …             │
+    │ 2021-11-01 ┆ 27      ┆ 30            │
+    │ 2021-12-01 ┆ 30      ┆ 31            │
+    │ 2021-12-01 ┆ 29      ┆ 31            │
+    │ 2021-12-01 ┆ 28      ┆ 31            │
+    └────────────┴─────────┴───────────────┘ |}];
+  let df =
+    Data_frame.create_exn
+      Series.
+        [ datetime_range_exn
+            ~every:"30m"
+            ~start:(Date.of_string "2021-12-16")
+            ~stop:(Date.of_string "2021-12-16")
+            "time"
+        ; string "groups" [ "a"; "a"; "a"; "b"; "b"; "a"; "a" ]
+        ]
+  in
+  Data_frame.print df
+  [@@expect.uncaught_exn
+    {|
+  (* CR expect_test_collector: This test expectation appears to contain a backtrace.
+     This is strongly discouraged as backtraces are fragile.
+     Please change this test to not include a backtrace. *)
+
+  "lengths don't match: could not create a new dataframe: series \"time\" has length 1 while series \"groups\" has length 7"
+  Raised at Base__Error.raise in file "src/error.ml" (inlined), line 9, characters 14-30
+  Called from Base__Or_error.ok_exn in file "src/or_error.ml", line 92, characters 17-32
+  Called from Polars_tests__Transformations.(fun) in file "test/transformations.ml", line 803, characters 4-283
+  Called from Expect_test_collector.Make.Instance_io.exec in file "collector/expect_test_collector.ml", line 262, characters 12-19 |}]
 ;;

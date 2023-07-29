@@ -116,16 +116,33 @@ ocaml_export! {
         OCaml::box_value(cr, Series::new(&name, values))
     }
 
-    fn rust_series_date_range(cr, name: OCamlRef<String>, start: OCamlRef<DynBox<NaiveDateTime>>, stop: OCamlRef<DynBox<NaiveDateTime>>, cast_to_date: OCamlRef<bool>) -> OCaml<Result<DynBox<Series>,String>> {
+    fn rust_series_date_range(
+        cr,
+        name: OCamlRef<String>, start: OCamlRef<DynBox<NaiveDateTime>>,
+        stop: OCamlRef<DynBox<NaiveDateTime>>,
+        every: OCamlRef<Option<String>>,
+        cast_to_date: OCamlRef<bool>,
+    ) -> OCaml<Result<DynBox<Series>,String>> {
         let name: String = name.to_rust(cr);
 
         let Abstract(start) = start.to_rust(cr);
         let Abstract(stop) = stop.to_rust(cr);
 
+        let every: String =
+            every.to_rust::<Option<String>>(cr).unwrap_or("1d".to_string());
+
         let cast_to_date: bool = cast_to_date.to_rust(cr);
 
         let series =
-            date_range(&name, start, stop, Duration::parse("1d"), ClosedWindow::Both, TimeUnit::Milliseconds, None)
+            date_range(
+                &name,
+                start,
+                stop,
+                Duration::parse(&every),
+                ClosedWindow::Both,
+                TimeUnit::Milliseconds,
+                None
+            )
             .and_then(|date_range| {
                 let series = date_range.into_series();
                 if cast_to_date {
@@ -138,6 +155,15 @@ ocaml_export! {
             .map_err(|err| err.to_string());
 
         series.to_ocaml(cr)
+    }
+
+    fn rust_series_rename(cr, series: OCamlRef<DynBox<Series>>, name: OCamlRef<String>) -> OCaml<DynBox<Series>> {
+        let Abstract(mut series) = series.to_rust(cr);
+        let name: String = name.to_rust(cr);
+
+        let _ = series.rename(&name);
+
+        OCaml::box_value(cr, series)
     }
 
     fn rust_series_to_data_frame(cr, series: OCamlRef<DynBox<Series>>) -> OCaml<DynBox<DataFrame>> {

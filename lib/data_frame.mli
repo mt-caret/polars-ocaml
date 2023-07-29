@@ -45,6 +45,7 @@ val groupby_dynamic
   -> t
   -> index_column:Expr.t
   -> by:Expr.t list
+  -> agg:Expr.t list
   -> (t, string) result
 
 val groupby_dynamic_exn
@@ -69,6 +70,7 @@ val groupby_dynamic_exn
   -> t
   -> index_column:Expr.t
   -> by:Expr.t list
+  -> agg:Expr.t list
   -> t
 
 val column : t -> name:string -> (Series.t, string) result
