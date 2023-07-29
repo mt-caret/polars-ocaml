@@ -719,7 +719,6 @@ let%expect_test "Grouping" =
   Data_frame.print df_with_year;
   [%expect
     {|
-    options: DynamicGroupOptions { index_column: "", every: Duration { months: 12, weeks: 0, days: 0, nsecs: 0, negative: false, parsed_int: false, saturating: false }, period: Duration { months: 12, weeks: 0, days: 0, nsecs: 0, negative: false, parsed_int: false, saturating: false }, offset: Duration { months: 12, weeks: 0, days: 0, nsecs: 0, negative: true, parsed_int: false, saturating: false }, truncate: true, include_boundaries: false, closed_window: Left, start_by: WindowBound, check_sorted: true }
     shape: (34, 3)
     ┌────────────┬───────────┬──────┐
     │ Date       ┆ Close     ┆ year │
@@ -765,7 +764,6 @@ let%expect_test "Grouping" =
   Data_frame.print out;
   [%expect
     {|
-    options: DynamicGroupOptions { index_column: "", every: Duration { months: 1, weeks: 0, days: 0, nsecs: 0, negative: false, parsed_int: false, saturating: false }, period: Duration { months: 1, weeks: 0, days: 0, nsecs: 0, negative: false, parsed_int: false, saturating: false }, offset: Duration { months: 0, weeks: 0, days: 0, nsecs: 0, negative: false, parsed_int: false, saturating: false }, truncate: true, include_boundaries: false, closed_window: Left, start_by: WindowBound, check_sorted: true }
     shape: (36, 3)
     ┌────────────┬─────────┬───────────────┐
     │ time       ┆ day/eom ┆ days_in_month │
@@ -787,22 +785,54 @@ let%expect_test "Grouping" =
       Series.
         [ datetime_range_exn
             ~every:"30m"
-            ~start:(Date.of_string "2021-12-16")
-            ~stop:(Date.of_string "2021-12-16")
+            ~start:(Common.Naive_datetime.of_string "2021-12-16")
+            ~stop:(Common.Naive_datetime.of_string "2021-12-16 3")
             "time"
         ; string "groups" [ "a"; "a"; "a"; "b"; "b"; "a"; "a" ]
         ]
   in
-  Data_frame.print df
-  [@@expect.uncaught_exn
+  Data_frame.print df;
+  [%expect
     {|
-  (* CR expect_test_collector: This test expectation appears to contain a backtrace.
-     This is strongly discouraged as backtraces are fragile.
-     Please change this test to not include a backtrace. *)
-
-  "lengths don't match: could not create a new dataframe: series \"time\" has length 1 while series \"groups\" has length 7"
-  Raised at Base__Error.raise in file "src/error.ml" (inlined), line 9, characters 14-30
-  Called from Base__Or_error.ok_exn in file "src/or_error.ml", line 92, characters 17-32
-  Called from Polars_tests__Transformations.(fun) in file "test/transformations.ml", line 803, characters 4-283
-  Called from Expect_test_collector.Make.Instance_io.exec in file "collector/expect_test_collector.ml", line 262, characters 12-19 |}]
+    shape: (7, 2)
+    ┌─────────────────────┬────────┐
+    │ time                ┆ groups │
+    │ ---                 ┆ ---    │
+    │ datetime[ms]        ┆ str    │
+    ╞═════════════════════╪════════╡
+    │ 2021-12-16 00:00:00 ┆ a      │
+    │ 2021-12-16 00:30:00 ┆ a      │
+    │ 2021-12-16 01:00:00 ┆ a      │
+    │ 2021-12-16 01:30:00 ┆ b      │
+    │ 2021-12-16 02:00:00 ┆ b      │
+    │ 2021-12-16 02:30:00 ┆ a      │
+    │ 2021-12-16 03:00:00 ┆ a      │
+    └─────────────────────┴────────┘ |}];
+  let out =
+    Data_frame.groupby_dynamic_exn
+      df
+      ~every:"1h"
+      ~closed_window:`Both
+      ~include_boundaries:true
+      ~index_column:(Expr.col "time")
+      ~by:[ Expr.col "groups" ]
+      ~agg:[ Expr.count_ () ]
+  in
+  Data_frame.print out;
+  [%expect
+    {|
+    shape: (7, 5)
+    ┌────────┬─────────────────────┬─────────────────────┬─────────────────────┬───────┐
+    │ groups ┆ _lower_boundary     ┆ _upper_boundary     ┆ time                ┆ count │
+    │ ---    ┆ ---                 ┆ ---                 ┆ ---                 ┆ ---   │
+    │ str    ┆ datetime[ms]        ┆ datetime[ms]        ┆ datetime[ms]        ┆ u32   │
+    ╞════════╪═════════════════════╪═════════════════════╪═════════════════════╪═══════╡
+    │ a      ┆ 2021-12-15 23:00:00 ┆ 2021-12-16 00:00:00 ┆ 2021-12-15 23:00:00 ┆ 1     │
+    │ a      ┆ 2021-12-16 00:00:00 ┆ 2021-12-16 01:00:00 ┆ 2021-12-16 00:00:00 ┆ 3     │
+    │ a      ┆ 2021-12-16 01:00:00 ┆ 2021-12-16 02:00:00 ┆ 2021-12-16 01:00:00 ┆ 1     │
+    │ a      ┆ 2021-12-16 02:00:00 ┆ 2021-12-16 03:00:00 ┆ 2021-12-16 02:00:00 ┆ 2     │
+    │ a      ┆ 2021-12-16 03:00:00 ┆ 2021-12-16 04:00:00 ┆ 2021-12-16 03:00:00 ┆ 1     │
+    │ b      ┆ 2021-12-16 01:00:00 ┆ 2021-12-16 02:00:00 ┆ 2021-12-16 01:00:00 ┆ 2     │
+    │ b      ┆ 2021-12-16 02:00:00 ┆ 2021-12-16 03:00:00 ┆ 2021-12-16 02:00:00 ┆ 1     │
+    └────────┴─────────────────────┴─────────────────────┴─────────────────────┴───────┘ |}]
 ;;

@@ -111,8 +111,6 @@ ocaml_export! {
             check_sorted: check_sorted.unwrap_or(options.check_sorted),
         };
 
-        println!("options: {:?}", options);
-
         let Abstract(lazy_frame) = lazy_frame.to_rust(cr);
         let Abstract(index_column) = index_column.to_rust(cr);
         let by = unwrap_abstract_vec(by.to_rust(cr));
