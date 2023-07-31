@@ -90,6 +90,7 @@ val ( // ) : t -> t -> t
 module Dt : sig
   val strftime : t -> format:string -> t
   val convert_time_zone : t -> to_:string -> t
+  val replace_time_zone : ?use_earliest:bool -> t -> to_:string option -> t
   val year : t -> t
   val month : t -> t
   val day : t -> t

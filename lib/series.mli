@@ -45,6 +45,7 @@ val datetime_range'
   -> (t, string) result
 
 val datetime_range_exn' : ?every:string -> string -> start:Date.t -> stop:Date.t -> t
+val name : t -> string
 val rename : t -> name:string -> t
 val to_data_frame : t -> Data_frame0.t
 val sort : ?descending:bool -> t -> t

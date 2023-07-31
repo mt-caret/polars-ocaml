@@ -456,6 +456,17 @@ ocaml_export! {
         expr_unary_op(cr, expr, |expr| expr.dt().convert_time_zone(timezone))
     }
 
+    fn rust_expr_dt_replace_time_zone(
+        cr,
+        expr: OCamlRef<DynBox<Expr>>,
+        timezone: OCamlRef<Option<String>>,
+        use_earliest: OCamlRef<Option<bool>>,
+    ) -> OCaml<DynBox<Expr>> {
+        let timezone: Option<String> = timezone.to_rust(cr);
+        let use_earliest: Option<bool> = use_earliest.to_rust(cr);
+        expr_unary_op(cr, expr, |expr| expr.dt().replace_time_zone(timezone, use_earliest))
+    }
+
     fn rust_expr_dt_year(cr, expr: OCamlRef<DynBox<Expr>>)-> OCaml<DynBox<Expr>> {
         expr_unary_op(cr, expr, |expr| expr.dt().year())
     }

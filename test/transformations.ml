@@ -912,3 +912,73 @@ let%expect_test "Resampling" =
     │ 2021-12-16 03:00:00 ┆ a      ┆ 7.0    │
     └─────────────────────┴────────┴────────┘ |}]
 ;;
+
+(* Examples from https://pola-rs.github.io/polars-book/user-guide/transformations/time-series/timezones/ *)
+let%expect_test "Time zones" =
+  (* TODO: The Polars Python library does roughly the below automatically when
+     applying Expr-expecting operations to Series. I'm not sure doing that
+     automatically is possible (or the best idea) for OCaml.
+
+     Perhaps this function belongs in the Series module, but this causes a fair
+     bit of pain associated with circular dependencies. *)
+  let map_expr series ~f =
+    let df =
+      Series.to_data_frame series
+      |> Data_frame.select_exn ~exprs:[ f (Expr.col (Series.name series)) ]
+    in
+    Data_frame.column_exn df ~name:(Data_frame.get_column_names df |> List.hd_exn)
+  in
+  let tz_naive =
+    Series.string "tz_naive" [ "2021-03-27 03:00"; "2021-03-28 03:00" ]
+    |> map_expr
+         ~f:
+           (Expr.Str.strptime
+              ~type_:(Datetime (Milliseconds, None))
+              ~format:"%Y-%m-%d %H:%M")
+  in
+  let tz_aware =
+    map_expr tz_naive ~f:(Expr.Dt.replace_time_zone ~to_:(Some "UTC"))
+    |> Series.rename ~name:"tz_aware"
+  in
+  let time_zones_df = Data_frame.create_exn [ tz_naive; tz_aware ] in
+  Data_frame.print time_zones_df;
+  [%expect
+    {|
+    shape: (2, 2)
+    ┌─────────────────────┬─────────────────────────┐
+    │ tz_naive            ┆ tz_aware                │
+    │ ---                 ┆ ---                     │
+    │ datetime[ms]        ┆ datetime[ms, UTC]       │
+    ╞═════════════════════╪═════════════════════════╡
+    │ 2021-03-27 03:00:00 ┆ 2021-03-27 03:00:00 UTC │
+    │ 2021-03-28 03:00:00 ┆ 2021-03-28 03:00:00 UTC │
+    └─────────────────────┴─────────────────────────┘ |}];
+  let time_zones_operations =
+    Data_frame.select_exn
+      time_zones_df
+      ~exprs:
+        Expr.
+          [ col "tz_aware"
+            |> Dt.replace_time_zone ~to_:(Some "Europe/Brussels")
+            |> alias ~name:"replace time zone"
+          ; col "tz_aware"
+            |> Dt.convert_time_zone ~to_:"Asia/Kathmandu"
+            |> alias ~name:"convert time zone"
+          ; col "tz_aware"
+            |> Dt.replace_time_zone ~to_:None
+            |> alias ~name:"unset time zone"
+          ]
+  in
+  Data_frame.print time_zones_operations;
+  [%expect
+    {|
+    shape: (2, 3)
+    ┌───────────────────────────────┬──────────────────────────────┬─────────────────────┐
+    │ replace time zone             ┆ convert time zone            ┆ unset time zone     │
+    │ ---                           ┆ ---                          ┆ ---                 │
+    │ datetime[ms, Europe/Brussels] ┆ datetime[ms, Asia/Kathmandu] ┆ datetime[ms]        │
+    ╞═══════════════════════════════╪══════════════════════════════╪═════════════════════╡
+    │ 2021-03-27 03:00:00 CET       ┆ 2021-03-27 08:45:00 +0545    ┆ 2021-03-27 03:00:00 │
+    │ 2021-03-28 03:00:00 CEST      ┆ 2021-03-28 08:45:00 +0545    ┆ 2021-03-28 03:00:00 │
+    └───────────────────────────────┴──────────────────────────────┴─────────────────────┘ |}]
+;;

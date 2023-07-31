@@ -157,6 +157,11 @@ ocaml_export! {
         series.to_ocaml(cr)
     }
 
+    fn rust_series_name(cr, series: OCamlRef<DynBox<Series>>) -> OCaml<String> {
+        let Abstract(series) = series.to_rust(cr);
+        series.name().to_ocaml(cr)
+    }
+
     fn rust_series_rename(cr, series: OCamlRef<DynBox<Series>>, name: OCamlRef<String>) -> OCaml<DynBox<Series>> {
         let Abstract(mut series) = series.to_rust(cr);
         let name: String = name.to_rust(cr);
@@ -359,8 +364,4 @@ ocaml_export! {
         };
         result.to_ocaml(cr)
     }
-
-
-
-
 }
