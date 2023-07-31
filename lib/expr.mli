@@ -115,6 +115,12 @@ module Str : sig
   val extract_all : t -> pat:string -> t
   val replace : ?literal:bool -> t -> pat:string -> with_:string -> t
   val replace_all : ?literal:bool -> t -> pat:string -> with_:string -> t
+  val strip : ?matches:string -> t -> t
+  val lstrip : ?matches:string -> t -> t
+  val rstrip : ?matches:string -> t -> t
+  val to_lowercase : t -> t
+  val to_uppercase : t -> t
+  val slice : t -> start:int -> length:int option -> t
 end
 
 module List : sig

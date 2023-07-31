@@ -246,6 +246,22 @@ module Str = struct
     = "rust_expr_str_replace_all"
 
   let replace_all ?(literal = false) t ~pat ~with_ = replace_all t ~pat ~with_ ~literal
+
+  external strip : t -> matches:string option -> t = "rust_expr_str_strip"
+
+  let strip ?matches t = strip t ~matches
+
+  external lstrip : t -> matches:string option -> t = "rust_expr_str_lstrip"
+
+  let lstrip ?matches t = lstrip t ~matches
+
+  external rstrip : t -> matches:string option -> t = "rust_expr_str_rstrip"
+
+  let rstrip ?matches t = rstrip t ~matches
+
+  external to_lowercase : t -> t = "rust_expr_str_to_lowercase"
+  external to_uppercase : t -> t = "rust_expr_str_to_uppercase"
+  external slice : t -> start:int -> length:int option -> t = "rust_expr_str_slice"
 end
 
 module List = struct
