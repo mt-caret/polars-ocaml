@@ -219,6 +219,30 @@ ocaml_export! {
         .to_ocaml(cr)
     }
 
+    fn rust_series_fill_null_with_strategy(
+        cr,
+        series: OCamlRef<DynBox<Series>>,
+        strategy: OCamlRef<FillNullStrategy>,
+    ) -> OCaml<Result<DynBox<Series>,String>> {
+        let Abstract(series) = series.to_rust(cr);
+        let PolarsFillNullStrategy(strategy) = strategy.to_rust(cr);
+
+        series.fill_null(strategy)
+        .map(Abstract).map_err(|err| err.to_string())
+        .to_ocaml(cr)
+    }
+
+    fn rust_series_interpolate(
+        cr,
+        series: OCamlRef<DynBox<Series>>,
+        method: OCamlRef<InterpolationMethod>,
+    ) -> OCaml<DynBox<Series>> {
+        let Abstract(series) = series.to_rust(cr);
+        let PolarsInterpolationMethod(method) = method.to_rust(cr);
+
+        Abstract(interpolate(&series, method)).to_ocaml(cr)
+    }
+
     fn rust_series_eq(cr, series: OCamlRef<DynBox<Series>>, other: OCamlRef<DynBox<Series>>) -> OCaml<Result<DynBox<Series>,String>> {
         series_binary_op_result(cr, series, other, |a, b| a.equal(&b).map(|series| series.into_series()))
     }

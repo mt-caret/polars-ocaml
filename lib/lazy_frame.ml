@@ -84,7 +84,7 @@ let groupby_dynamic
   ~agg
   =
   (* Following the logic of:
-    https://github.com/pola-rs/polars/blob/a8489558008652fe06e182dbdf082e8d9f0159ab/py-polars/polars/lazyframe/frame.py#L2327
+     https://github.com/pola-rs/polars/blob/a8489558008652fe06e182dbdf082e8d9f0159ab/py-polars/polars/lazyframe/frame.py#L2327
   *)
   let offset =
     Option.value

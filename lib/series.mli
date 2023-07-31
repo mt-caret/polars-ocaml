@@ -60,6 +60,10 @@ val sample_n
   -> (t, string) result
 
 val sample_n_exn : ?seed:int -> t -> n:int -> with_replacement:bool -> shuffle:bool -> t
+val fill_null : t -> strategy:Fill_null_strategy.t -> (t, string) result
+val fill_null_exn : t -> strategy:Fill_null_strategy.t -> t
+val interpolate : t -> method_:[ `Linear | `Nearest ] -> (t, string) result
+val interpolate_exn : t -> method_:[ `Linear | `Nearest ] -> t
 val to_string_hum : t -> string
 val print : t -> unit
 
