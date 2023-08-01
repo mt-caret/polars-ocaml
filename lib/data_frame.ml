@@ -23,6 +23,28 @@ let read_csv_exn ?schema ?try_parse_dates path =
   |> Or_error.ok_exn
 ;;
 
+external write_csv : t -> string -> (unit, string) result = "rust_data_frame_write_csv"
+
+let write_csv_exn t path =
+  write_csv t path |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
+;;
+
+external read_parquet : string -> (t, string) result = "rust_data_frame_read_parquet"
+
+let read_parquet_exn path =
+  read_parquet path |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
+;;
+
+external write_parquet
+  :  t
+  -> string
+  -> (unit, string) result
+  = "rust_data_frame_write_parquet"
+
+let write_parquet_exn t path =
+  write_parquet t path |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
+;;
+
 external describe
   :  t
   -> percentiles:float list option

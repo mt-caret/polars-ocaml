@@ -6,7 +6,12 @@ val create : Series.t list -> (t, string) result
 val create_exn : Series.t list -> t
 val read_csv : ?schema:Schema.t -> ?try_parse_dates:bool -> string -> (t, string) result
 val read_csv_exn : ?schema:Schema.t -> ?try_parse_dates:bool -> string -> t
-val describe : ?percentiles:float list -> t -> (t, string) result
+val write_csv : t -> string -> (unit, string) result
+val write_csv_exn : t -> string -> unit
+val read_parquet : string -> (t, string) result
+val read_parquet_exn : string -> t
+val write_parquet : t -> string -> (unit, string) result
+val write_parquet_exn : t -> string -> unit
 val describe_exn : ?percentiles:float list -> t -> t
 val lazy_ : t -> Lazy_frame.t
 val select : t -> exprs:Expr.t list -> (t, string) result
