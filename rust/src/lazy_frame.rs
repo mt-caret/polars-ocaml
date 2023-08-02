@@ -109,7 +109,7 @@ ocaml_export! {
         OCaml::box_value(cr, groupby.agg(agg))
     }
 
-    fn rust_lazy_frame_groupby_dynamic(
+    fn rust_lazy_frame_groupby_dynamic|rust_lazy_frame_groupby_dynamic_bytecode(
         cr,
         lazy_frame: OCamlRef<DynBox<LazyFrame>>,
         index_column: OCamlRef<DynBox<Expr>>,
