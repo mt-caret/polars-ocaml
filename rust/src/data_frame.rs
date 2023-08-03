@@ -57,7 +57,7 @@ ocaml_export! {
     ) -> OCaml<Result<DynBox<DataFrame>,String>> {
         let path: String = path.to_rust(cr);
 
-        File::create(&path).map_err(|err| err.to_string())
+        File::open(&path).map_err(|err| err.to_string())
         .and_then(|file|
             ParquetReader::new(file).finish().map_err(|err| err.to_string()))
         .map(Abstract).to_ocaml(cr)
