@@ -45,6 +45,34 @@ let write_parquet_exn t path =
   write_parquet t path |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
 ;;
 
+external read_json : string -> (t, string) result = "rust_data_frame_read_json"
+
+let read_json_exn path =
+  read_json path |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
+;;
+
+external write_json : t -> string -> (unit, string) result = "rust_data_frame_write_json"
+
+let write_json_exn t path =
+  write_json t path |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
+;;
+
+external read_jsonl : string -> (t, string) result = "rust_data_frame_read_jsonl"
+
+let read_jsonl_exn path =
+  read_jsonl path |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
+;;
+
+external write_jsonl
+  :  t
+  -> string
+  -> (unit, string) result
+  = "rust_data_frame_write_jsonl"
+
+let write_jsonl_exn t path =
+  write_jsonl t path |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
+;;
+
 external describe
   :  t
   -> percentiles:float list option

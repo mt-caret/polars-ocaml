@@ -85,6 +85,15 @@ unsafe impl FromOCaml<DataType> for PolarsDataType {
                     DataType::List(Box::new(datatype))
                 },
                 DataType::Null,
+                DataType::Struct(fields: OCamlList<(String, DataType)>) => {
+                    let fields_: Vec<(String, PolarsDataType)> = fields;
+                    let fields: Vec<Field> =
+                        fields_
+                        .into_iter()
+                        .map(|(name, PolarsDataType(datatype))| Field { name: SmartString::from(name), dtype: datatype })
+                        .collect();
+                    DataType::Struct(fields)
+                },
                 DataType::Unknown,
             }
         };
@@ -132,6 +141,13 @@ unsafe impl ToOCaml<DataType> for PolarsDataType {
                     ocaml_alloc_tagged_block!(cr, 2,  datatype: DataType)
                 }
                 DataType::Null => ocaml_value(cr, 15),
+                DataType::Struct(fields) => {
+                    let fields: Vec<(String, PolarsDataType)> = fields
+                        .iter()
+                        .map(|field| (field.name.to_string(), PolarsDataType(field.dtype.clone())))
+                        .collect();
+                    ocaml_alloc_tagged_block!(cr, 3, fields: OCamlList<(String, DataType)>)
+                }
                 DataType::Unknown => ocaml_value(cr, 16),
             }
         }

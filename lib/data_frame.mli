@@ -12,6 +12,14 @@ val read_parquet : string -> (t, string) result
 val read_parquet_exn : string -> t
 val write_parquet : t -> string -> (unit, string) result
 val write_parquet_exn : t -> string -> unit
+val read_json : string -> (t, string) result
+val read_json_exn : string -> t
+val write_json : t -> string -> (unit, string) result
+val write_json_exn : t -> string -> unit
+val read_jsonl : string -> (t, string) result
+val read_jsonl_exn : string -> t
+val write_jsonl : t -> string -> (unit, string) result
+val write_jsonl_exn : t -> string -> unit
 val describe_exn : ?percentiles:float list -> t -> t
 val lazy_ : t -> Lazy_frame.t
 val select : t -> exprs:Expr.t list -> (t, string) result
