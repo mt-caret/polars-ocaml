@@ -23,7 +23,7 @@ ocaml_export! {
         let schema = schema.to_rust::<Option<Abstract<Schema>>>(cr).map(|Abstract(schema)| Arc::new(schema));
         let try_parse_dates: Option<bool> = try_parse_dates.to_rust(cr);
 
-        CsvReader::from_path(&path)
+        CsvReader::from_path(path)
         .and_then(|csv_reader| {
             let csv_reader = csv_reader.with_dtypes(schema);
             match try_parse_dates {
@@ -42,7 +42,7 @@ ocaml_export! {
         let Abstract(mut data_frame) = data_frame.to_rust(cr);
         let path: String = path.to_rust(cr);
 
-        File::create(&path).map_err(|err| err.to_string())
+        File::create(path).map_err(|err| err.to_string())
         .and_then(|file|
             CsvWriter::new(&file)
             .finish(&mut data_frame)
@@ -57,7 +57,7 @@ ocaml_export! {
     ) -> OCaml<Result<DynBox<DataFrame>,String>> {
         let path: String = path.to_rust(cr);
 
-        File::open(&path).map_err(|err| err.to_string())
+        File::open(path).map_err(|err| err.to_string())
         .and_then(|file|
             ParquetReader::new(file).finish().map_err(|err| err.to_string()))
         .map(Abstract).to_ocaml(cr)
@@ -71,7 +71,7 @@ ocaml_export! {
         let Abstract(mut data_frame) = data_frame.to_rust(cr);
         let path: String = path.to_rust(cr);
 
-        File::create(&path).map_err(|err| err.to_string())
+        File::create(path).map_err(|err| err.to_string())
         .and_then(|file|
             ParquetWriter::new(file).finish(&mut data_frame)
             .map(|_file_size_in_bytes| ()).map_err(|err| err.to_string()))
@@ -84,7 +84,7 @@ ocaml_export! {
     ) -> OCaml<Result<DynBox<DataFrame>,String>> {
         let path: String = path.to_rust(cr);
 
-        File::open(&path).map_err(|err| err.to_string())
+        File::open(path).map_err(|err| err.to_string())
         .and_then(|file|
             JsonReader::new(file).finish().map_err(|err| err.to_string()))
         .map(Abstract).to_ocaml(cr)
@@ -98,7 +98,7 @@ ocaml_export! {
         let Abstract(mut data_frame) = data_frame.to_rust(cr);
         let path: String = path.to_rust(cr);
 
-        File::create(&path).map_err(|err| err.to_string())
+        File::create(path).map_err(|err| err.to_string())
         .and_then(|file|
             JsonWriter::new(file).with_json_format(JsonFormat::Json).finish(&mut data_frame)
             .map_err(|err| err.to_string()))
@@ -111,7 +111,7 @@ ocaml_export! {
     ) -> OCaml<Result<DynBox<DataFrame>,String>> {
         let path: String = path.to_rust(cr);
 
-        File::open(&path).map_err(|err| err.to_string())
+        File::open(path).map_err(|err| err.to_string())
         .and_then(|file|
             JsonLineReader::new(file).finish().map_err(|err| err.to_string()))
         .map(Abstract).to_ocaml(cr)
@@ -125,7 +125,7 @@ ocaml_export! {
         let Abstract(mut data_frame) = data_frame.to_rust(cr);
         let path: String = path.to_rust(cr);
 
-        File::create(&path).map_err(|err| err.to_string())
+        File::create(path).map_err(|err| err.to_string())
         .and_then(|file|
             JsonWriter::new(file).with_json_format(JsonFormat::JsonLines).finish(&mut data_frame)
             .map_err(|err| err.to_string()))
@@ -182,8 +182,7 @@ ocaml_export! {
 
         let stack = || {
             let mut data_frames = data_frames.into_iter();
-            let first = data_frames.next().ok_or(PolarsError::NoData("No dataframes provided for vertical concatenation".into()))?;
-            let mut result = first.clone();
+            let mut result = data_frames.next().ok_or(PolarsError::NoData("No dataframes provided for vertical concatenation".into()))?;
             for data_frame in data_frames {
                 result = result.vstack(&data_frame)?;
             }
@@ -262,7 +261,7 @@ ocaml_export! {
         let descending: Vec<bool> = descending.to_rust(cr);
         let maintain_order: bool = maintain_order.to_rust(cr);
 
-        data_frame.sort(&by_column, descending, maintain_order)
+        data_frame.sort(by_column, descending, maintain_order)
         .map(Abstract).map_err(|err| err.to_string()).to_ocaml(cr)
     }
 
@@ -354,11 +353,11 @@ ocaml_export! {
         // this should be added to upstream.
         data_frame.get_column_names().into_iter().map(|column_name| {
             data_frame.column(column_name).map(|series|
-                interpolate(&series, method)
+                interpolate(series, method)
             )
         })
         .collect::<PolarsResult<Vec<_>>>()
-        .and_then(|columns| DataFrame::new(columns))
+        .and_then(DataFrame::new)
         .map(Abstract)
         .map_err(|err| err.to_string())
         .to_ocaml(cr)

@@ -101,7 +101,7 @@ unsafe impl FromOCaml<DataType> for PolarsDataType {
     }
 }
 
-unsafe fn ocaml_value<'a, T>(cr: &'a mut OCamlRuntime, n: i32) -> OCaml<'a, T> {
+unsafe fn ocaml_value<T>(cr: &mut OCamlRuntime, n: i32) -> OCaml<T> {
     unsafe { OCaml::new(cr, OCaml::of_i32(n).raw()) }
 }
 
