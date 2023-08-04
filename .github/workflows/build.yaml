@@ -10,6 +10,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
+      - uses: ocaml/setup-ocaml@v2
+        with:
+          ocaml-compiler: 4.14.x
       - uses: rui314/setup-mold@v1
       # By default setup-mold replaces the linker with mold, so we don't need
       # the config.toml file in github actions.
