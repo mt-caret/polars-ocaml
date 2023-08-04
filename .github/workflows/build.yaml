@@ -12,6 +12,7 @@ jobs:
           components: clippy
       - name: Check
         run: cargo check --verbose
+        working-directory: ./rust
       - name: Build
         run: cargo build --verbose
         working-directory: ./rust
