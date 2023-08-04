@@ -12,7 +12,7 @@ jobs:
       # https://github.com/mt-caret/polars-ocaml/pull/30 is merged.
       - uses: dtolnay/rust-toolchain@nightly
         with:
-          components: clippy
+          components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
       - uses: ocaml/setup-ocaml@v2
         with:
@@ -41,3 +41,5 @@ jobs:
         with:
           reporter: "github-pr-review"
           github_token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Rust format
+        run: cargo fmt --all -- --check
