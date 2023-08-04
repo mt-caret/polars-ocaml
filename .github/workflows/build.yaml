@@ -81,6 +81,9 @@ jobs:
       - name: Add opam switch to PATH
         run: opam var bin >> $GITHUB_PATH
 
-      - run: opam install . --deps-only --with-doc --with-test
+      - uses: rui314/setup-mold@v1
+      - run: rm ./rust/.cargo/config.toml
+      - run: sed -i '/.*mold.*/d' test/dune
 
+      - run: opam install . --deps-only --with-doc --with-test
       - run: opam exec -- dune build @fmt @runtest @doc
