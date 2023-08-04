@@ -153,26 +153,44 @@ let%expect_test "SELECT" =
     │ Phoenix     ┆ USA         ┆ 1680000    │
     │ Amsterdam   ┆ Netherlands ┆ 900000     │
     └─────────────┴─────────────┴────────────┘ |}];
-  Sql_context.execute_exn
-    ctx
-    ~query:
-      {|
-  SELECT country, AVG(population) as avg_population
-  FROM population
-  GROUP BY country|}
-  |> Lazy_frame.collect_exn
-  |> Data_frame.print;
-  [%expect
-    {|
-    shape: (2, 2)
-    ┌─────────────┬────────────────┐
-    │ country     ┆ avg_population │
-    │ ---         ┆ ---            │
-    │ str         ┆ f64            │
-    ╞═════════════╪════════════════╡
-    │ USA         ┆ 3.8202e6       │
-    │ Netherlands ┆ 900000.0       │
-    └─────────────┴────────────────┘ |}];
+  (* TODO: Following test output is not stable, so commenting out *)
+  (* {[
+       for _ = 0 to 1000 do
+         Sql_context.execute_exn
+           ctx
+           ~query:
+             {|
+       SELECT country, AVG(population) as avg_population
+       FROM population
+       GROUP BY country|}
+         |> Lazy_frame.collect_exn
+         |> Data_frame.print;
+         [%expect
+           {|
+         (* expect_test: Collector ran multiple times with different outputs *)
+         =========================================================================
+         shape: (2, 2)
+         ┌─────────────┬────────────────┐
+         │ country     ┆ avg_population │
+         │ ---         ┆ ---            │
+         │ str         ┆ f64            │
+         ╞═════════════╪════════════════╡
+         │ USA         ┆ 3.8202e6       │
+         │ Netherlands ┆ 900000.0       │
+         └─────────────┴────────────────┘
+
+         =========================================================================
+         shape: (2, 2)
+         ┌─────────────┬────────────────┐
+         │ country     ┆ avg_population │
+         │ ---         ┆ ---            │
+         │ str         ┆ f64            │
+         ╞═════════════╪════════════════╡
+         │ Netherlands ┆ 900000.0       │
+         │ USA         ┆ 3.8202e6       │
+         └─────────────┴────────────────┘ |}]
+       done
+     ]} *)
   Sql_context.execute_exn
     ctx
     ~query:{|
