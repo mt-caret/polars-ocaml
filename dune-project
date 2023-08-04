@@ -25,6 +25,7 @@
  (depends
   (expect_test_helpers_core :with-test)
   (ocamlformat :dev)
+  (odoc :with-doc)
   core
   core_kernel
   dune

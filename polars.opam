@@ -12,12 +12,12 @@ bug-reports: "https://github.com/mt-caret/polars-ocaml/issues"
 depends: [
   "expect_test_helpers_core" {with-test}
   "ocamlformat" {dev}
+  "odoc" {with-doc}
   "core"
   "core_kernel"
   "dune" {>= "3.7"}
   "ocaml"
   "ppx_jane"
-  "odoc" {with-doc}
 ]
 build: [
   ["dune" "subst"] {dev}

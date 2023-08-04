@@ -86,4 +86,6 @@ jobs:
       - run: sed -i '/.*mold.*/d' test/dune
 
       - run: opam install . --deps-only --with-doc --with-test
-      - run: opam exec -- dune build @fmt @runtest @doc
+      - run: opam exec -- dune build @runtest @doc
+
+  # TODO: add ocamlformat linter
