@@ -56,3 +56,29 @@ jobs:
       - name: Rust format
         run: cargo fmt --all -- --check
         working-directory: ./rust
+
+  build-ocaml:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+
+      - name: OCaml/opam cache
+        id: polars-ocaml-opam-cache
+        uses: actions/cache@v3
+        with:
+          path: "~/.opam"
+          key: polars-ocaml-opam-4.14.x-ubuntu-latest
+      - uses: ocaml/setup-ocaml@v2
+        with:
+          ocaml-compiler: 4.14.x
+      - name: Set opam env
+        run: opam env | tr '\n' ' ' >> $GITHUB_ENV
+      - name: Add opam switch to PATH
+        run: opam var bin >> $GITHUB_PATH
+
+      - run: opam install . --deps-only --with-doc --with-test
