@@ -11,9 +11,12 @@
 
 (maintainers "mtakeda")
 
-(license LICENSE)
+(license MIT)
 
-(documentation https://url/to/documentation)
+; TODO: update below link once we start generating documentation
+; (https://github.com/mt-caret/polars-ocaml/issues/5)
+
+(documentation https://github.com/mt-caret/polars-ocaml)
 
 (package
  (name polars_ocaml)
@@ -21,4 +24,4 @@
  (description "OCaml bindings to the Polars dataframe library")
  (depends ocaml dune)
  (tags
-  (topics "to describe" your project)))
+  (data-science polars rust)))
