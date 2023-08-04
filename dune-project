@@ -1,6 +1,6 @@
 (lang dune 3.7)
 
-(name polars_ocaml)
+(name polars)
 
 (generate_opam_files true)
 
@@ -19,7 +19,7 @@
 (documentation https://github.com/mt-caret/polars-ocaml)
 
 (package
- (name polars_ocaml)
+ (name polars)
  (synopsis "OCaml bindings to the Polars dataframe library")
  (description "OCaml bindings to the Polars dataframe library")
  (depends ocaml dune)
