@@ -13,6 +13,12 @@ jobs:
       - uses: ocaml/setup-ocaml@v2
         with:
           ocaml-compiler: 4.14.x
+      # These environment variables are used by ocaml-sys to figure out which
+      # compiler we're building for
+      - name: Set up opam env
+        run: |
+          opam env >> $GITHUB_ENV
+          opam var bin >> $GITHUB_PATH
       - uses: rui314/setup-mold@v1
       # By default setup-mold replaces the linker with mold, so we don't need
       # the config.toml file in github actions.
