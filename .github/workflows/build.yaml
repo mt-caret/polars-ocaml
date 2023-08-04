@@ -11,6 +11,9 @@ jobs:
         with:
           components: clippy
       - uses: rui314/setup-mold@v1
+      # By default setup-mold replaces the linker with mold, so we don't need
+      # the config.toml file in github actions.
+      - run: rm ./rust/.cargo/config.toml
       - name: Check
         run: cargo check --verbose
         working-directory: ./rust
