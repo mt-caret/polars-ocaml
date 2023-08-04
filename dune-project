@@ -22,6 +22,6 @@
  (name polars)
  (synopsis "OCaml bindings to the Polars dataframe library")
  (description "OCaml bindings to the Polars dataframe library")
- (depends ocaml dune core core_kernel.nonempty_list ppx_jane)
+ (depends ocaml dune core ppx_jane)
  (tags
   (data-science polars rust)))

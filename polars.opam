@@ -13,7 +13,6 @@ depends: [
   "ocaml"
   "dune" {>= "3.7"}
   "core"
-  "core_kernel.nonempty_list"
   "ppx_jane"
   "odoc" {with-doc}
 ]
