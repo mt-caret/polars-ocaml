@@ -180,16 +180,17 @@ ocaml_export! {
     fn rust_data_frame_vertical_concat(cr, data_frames: OCamlRef<OCamlList<DynBox<DataFrame>>>) -> OCaml<Result<DynBox<DataFrame>,String>> {
         let data_frames = unwrap_abstract_vec(data_frames.to_rust(cr));
 
-        let result: PolarsResult<_> = try {
+        let stack = || {
             let mut data_frames = data_frames.into_iter();
             let first = data_frames.next().ok_or(PolarsError::NoData("No dataframes provided for vertical concatenation".into()))?;
             let mut result = first.clone();
             for data_frame in data_frames {
                 result = result.vstack(&data_frame)?;
             }
-            result
+            Ok(result)
         };
-        result.map(Abstract).map_err(|err| err.to_string()).to_ocaml(cr)
+
+        stack().map(Abstract).map_err(|err: PolarsError| err.to_string()).to_ocaml(cr)
     }
 
     fn rust_data_frame_horizontal_concat(cr, data_frames: OCamlRef<OCamlList<DynBox<DataFrame>>>) -> OCaml<Result<DynBox<DataFrame>,String>> {

@@ -1,4 +1,3 @@
-#![feature(try_blocks)]
 mod data_frame;
 mod expr;
 mod lazy_frame;
