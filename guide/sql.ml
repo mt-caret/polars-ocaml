@@ -170,8 +170,8 @@ let%expect_test "SELECT" =
     │ ---         ┆ ---            │
     │ str         ┆ f64            │
     ╞═════════════╪════════════════╡
-    │ Netherlands ┆ 900000.0       │
     │ USA         ┆ 3.8202e6       │
+    │ Netherlands ┆ 900000.0       │
     └─────────────┴────────────────┘ |}];
   Sql_context.execute_exn
     ctx

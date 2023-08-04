@@ -1,0 +1,11 @@
+(library
+ (name polars_guide)
+ (libraries core expect_test_helpers_core shell.filename_extended polars)
+ (inline_tests
+  ; see ../test/dune for why this is commented out
+  ; (modes native byte)
+  (deps
+   (glob_files ./data/*.csv)))
+ (library_flags -ccopt -fuse-ld=mold)
+ (preprocess
+  (pps ppx_jane)))

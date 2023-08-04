@@ -654,7 +654,6 @@ let%expect_test "Aggregation" =
   Data_frame.print df;
   [%expect
     {|
-
     shape: (5, 3)
     ┌───────┬──────┬─────┐
     │ state ┆ anti ┆ pro │
@@ -685,7 +684,6 @@ let%expect_test "Aggregation" =
   Data_frame.print df;
   [%expect
     {|
-
     shape: (5, 3)
     ┌───────┬─────────────────────┬───────┐
     │ state ┆ party               ┆ count │
@@ -723,7 +721,6 @@ let%expect_test "Aggregation" =
   Data_frame.print df;
   [%expect
     {|
-
     shape: (5, 5)
     ┌───────┬────────────────┬────────────────┬────────┬──────────┐
     │ state ┆ avg M birthday ┆ avg F birthday ┆ # male ┆ # female │
@@ -754,7 +751,6 @@ let%expect_test "Aggregation" =
   Data_frame.print df;
   [%expect
     {|
-
     shape: (5, 3)
     ┌───────┬──────────────────┬───────────────────────┐
     │ state ┆ youngest         ┆ oldest                │
@@ -785,7 +781,6 @@ let%expect_test "Aggregation" =
   Data_frame.print df;
   [%expect
     {|
-
     shape: (5, 4)
     ┌───────┬──────────────────┬───────────────────────┬────────────────────┐
     │ state ┆ youngest         ┆ oldest                ┆ alphabetical_first │
@@ -821,7 +816,6 @@ let%expect_test "Aggregation" =
   Data_frame.print df;
   [%expect
     {|
-
     shape: (5, 5)
     ┌───────┬──────────────────┬────────────────┬────────────────────┬────────┐
     │ state ┆ youngest         ┆ oldest         ┆ alphabetical_first ┆ gender │
