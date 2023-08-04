@@ -8,12 +8,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
+
       # We need nightly, at least until
       # https://github.com/mt-caret/polars-ocaml/pull/30 is merged.
       - uses: dtolnay/rust-toolchain@nightly
         with:
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
+
+      - name: OCaml/opam cache
+        id: polars-ocaml-opam-cache
+        uses: actions/cache@v3
+        with:
+          path: "~/.opam"
+          # TODO: this should actually should be keyed by variables as done in
+          # https://github.com/zshipko/ocaml-rs/blob/3e73b04764e1e633874be029e1626bdbe1640135/.github/workflows/ocaml.yml
+          key: polars-ocaml-opam-4.14.x-ubuntu-latest
       - uses: ocaml/setup-ocaml@v2
         with:
           ocaml-compiler: 4.14.x
@@ -23,10 +33,12 @@ jobs:
         run: opam env | tr '\n' ' ' >> $GITHUB_ENV
       - name: Add opam switch to PATH
         run: opam var bin >> $GITHUB_PATH
+
       - uses: rui314/setup-mold@v1
       # By default setup-mold replaces the default linker with mold, so we don't
       # need the config.toml file in github actions.
       - run: rm ./rust/.cargo/config.toml
+
       - name: Check
         run: cargo check --verbose
         working-directory: ./rust
