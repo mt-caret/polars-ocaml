@@ -82,3 +82,5 @@ jobs:
         run: opam var bin >> $GITHUB_PATH
 
       - run: opam install . --deps-only --with-doc --with-test
+
+      - run: opam exec -- dune build @fmt @runtest @doc
