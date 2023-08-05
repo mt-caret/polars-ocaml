@@ -2,7 +2,10 @@
  (targets libpolars_ocaml.a dllpolars_ocaml.so)
  (deps
   (glob_files ../rust/Cargo.*)
-  (glob_files ../rust/src/*.rs))
+  (glob_files ../rust/polars-ocaml/Cargo.*)
+  (glob_files ../rust/polars-ocaml/src/*.rs)
+  (glob_files ../rust/polars-ocaml-macros/Cargo.*)
+  (glob_files ../rust/polars-ocaml-macros/src/*.rs))
  ;(action
  ; (progn
  ;  (run sh -c "cd %{project_root}/rust && cargo build --release")
