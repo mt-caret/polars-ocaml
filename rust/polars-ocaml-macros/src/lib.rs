@@ -1,7 +1,7 @@
 use proc_macro::TokenStream;
 use proc_macro2::Span;
 use proc_macro2::TokenStream as TokenStream2;
-use quote::{quote, ToTokens};
+use quote::quote;
 use syn::{parse_macro_input, punctuated::Punctuated};
 
 fn ocaml_interop_export_implementation(item_fn: syn::ItemFn) -> TokenStream2 {
@@ -10,11 +10,14 @@ fn ocaml_interop_export_implementation(item_fn: syn::ItemFn) -> TokenStream2 {
         syn::FnArg::Typed(pat_type) => pat_type.clone(),
     });
 
+    // The first argument to the function corresponds to the OCaml runtime.
     let runtime_name = match *inputs_iter.next().unwrap().pat {
         syn::Pat::Ident(pat_ident) => pat_ident.ident,
         _ => panic!("expected ident"),
     };
 
+    // The remaining arguments are stripped of their types and converted to
+    // `RawOCaml` values.
     let new_inputs: Punctuated<_, _> = inputs_iter
         .clone()
         .map(|pat_type| {
@@ -38,6 +41,8 @@ fn ocaml_interop_export_implementation(item_fn: syn::ItemFn) -> TokenStream2 {
         ..item_fn.sig.clone()
     };
 
+    // We take each non-runtime argument to the function and convert them to the
+    // appropriate Rust type.
     let locals = inputs_iter.map(|pat_type| match *pat_type.pat {
         syn::Pat::Ident(pat_ident) => {
             let ident = pat_ident.ident;
@@ -52,8 +57,8 @@ fn ocaml_interop_export_implementation(item_fn: syn::ItemFn) -> TokenStream2 {
     });
 
     let return_type = match item_fn.sig.output.clone() {
-        syn::ReturnType::Default => quote! { () },
-        syn::ReturnType::Type(_, ty) => ty.into_token_stream(),
+        syn::ReturnType::Default => panic!("functions with no return type are not supported"),
+        syn::ReturnType::Type(_, ty) => ty,
     };
     let block = item_fn.block.clone();
 
@@ -72,6 +77,9 @@ fn ocaml_interop_export_implementation(item_fn: syn::ItemFn) -> TokenStream2 {
         }
     };
 
+    // We need to generate different functions for the bytecode and native
+    // versions of the function if there is more than a certain number of arguments.
+    // See https://v2.ocaml.org/manual/intfc.html#ss:c-prim-impl for details.
     if number_of_arguments > 5 {
         let native_function_name = item_fn.sig.ident;
 
