@@ -15,6 +15,7 @@ ocaml-interop = "0.9.1"
 ocaml-sys = "0.23.0"
 polars-sql = "0.31.1"
 smartstring = "1.0.1"
+polars-ocaml-macros = { path = "../polars-ocaml-macros" }
 
 [dependencies.polars]
 version = "0.31.0"
