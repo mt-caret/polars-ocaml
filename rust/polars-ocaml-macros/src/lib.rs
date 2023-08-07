@@ -84,7 +84,17 @@ fn ocaml_interop_export_implementation(item_fn: syn::ItemFn) -> TokenStream2 {
                 }
             }) {
                 Ok(value) => value,
-                Err(cause) => raise_ocaml_exception_from_panic(cause),
+                Err(cause) =>
+                    // This is only safe if the runtime lock is held, which
+                    // *won't* be the case if any Rust code panics while we have
+                    // given up the runtime lock. I think when we start adding
+                    // code that does this we'll need some thread local variable
+                    // that keeps track of whether we have the runtime lock or
+                    // not (since prior to OCaml 5 there's not built-in way to
+                    // keep track of this[1]).
+                    //
+                    // [1]: https://github.com/ocaml/ocaml/issues/5299
+                    unsafe { raise_ocaml_exception_from_panic(cause) },
             }
         }
     };
@@ -174,30 +184,47 @@ pub fn ocaml_interop_backtrace_support(_item: TokenStream) -> TokenStream {
             ::ocaml_interop::OCaml::unit()
         }
 
-        pub fn raise_ocaml_exception_from_panic(
+        // `raise_ocaml_exception_from_panic` allocates an OCaml string, so this
+        //  function is not safe to call when the OCaml runtime lock is not held.
+        pub unsafe fn raise_ocaml_exception_from_panic(
             cause: Box<dyn ::core::any::Any + Send>
         ) -> ! {
-            let cause = if let Some(cause) = cause.downcast_ref::<&str>() {
-                cause.to_string()
-            } else if let Some(cause) = cause.downcast_ref::<String>() {
-                cause.to_string()
-            } else {
-                format!("{:?}", cause)
+            let error_message = {
+                let cause = if let Some(cause) = cause.downcast_ref::<&str>() {
+                    cause.to_string()
+                } else if let Some(cause) = cause.downcast_ref::<String>() {
+                    cause.to_string()
+                } else {
+                    format!("{:?}", cause)
+                };
+
+                let last_backtrace = LAST_BACKTRACE.with(|last_backtrace| last_backtrace.take());
+
+                let error_message = match last_backtrace {
+                    None => format!("Polars panicked: {}\nbacktrace not captured", cause),
+                    Some(last_backtrace) => {
+                        format!("Polars panicked: {}\nBacktrace:\n{}", cause, last_backtrace)
+                    }
+                };
+
+                // Below three lines are in essence an OCaml string allocation,
+                // and why this function is unsafe to call when the OCaml
+                // runtime lock is not held.
+                let cr = unsafe { &mut ::ocaml_interop::OCamlRuntime::recover_handle() };
+                let error_message: OCaml<String> = error_message.to_ocaml(cr);
+                unsafe { error_message.raw() }
             };
 
-            let last_backtrace = LAST_BACKTRACE.with(|last_backtrace| last_backtrace.take());
-
-            let error_message = match last_backtrace {
-                None => format!("Polars panicked: {}\nbacktrace not captured", cause),
-                Some(last_backtrace) => {
-                    format!("Polars panicked: {}\nBacktrace:\n{}", cause, last_backtrace)
-                }
-            };
-
-            let error_message = ::std::ffi::CString::new(error_message).expect("CString::new failed");
+            // Since OCaml exceptions directly jump back into OCaml code without
+            // unwinding the stack, we need to make sure that we don't have any
+            // un-dropped Rust values around (like `cause`), since they will leak.
+            //
+            // `error_message` is fine, since it's an OCaml value which will be
+            // garbage-collected by the OCaml runtime.
+            drop(cause);
 
             unsafe {
-                ::ocaml_sys::caml_failwith(error_message.as_ptr());
+                ::ocaml_sys::caml_failwith_value(error_message);
             }
 
             unreachable!("caml_failwith should never return")
@@ -256,7 +283,7 @@ mod tests {
                     }
                 }) {
                     Ok(value) => value,
-                    Err(cause) => raise_ocaml_exception_from_panic(cause),
+                    Err(cause) => unsafe { raise_ocaml_exception_from_panic(cause) }
                 }
             }
         "##]]
@@ -331,7 +358,7 @@ mod tests {
                     }
                 }) {
                     Ok(value) => value,
-                    Err(cause) => raise_ocaml_exception_from_panic(cause),
+                    Err(cause) => unsafe { raise_ocaml_exception_from_panic(cause) }
                 }
             }
             #[no_mangle]
