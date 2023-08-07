@@ -132,6 +132,11 @@ pub fn ocaml_interop_export(_input: TokenStream, annotated_item: TokenStream) ->
     TokenStream::from(expanded)
 }
 
+// `std::panic::catch_unwind` only stores the error string passed to the panic,
+// which means that we can't figure out the backtrace by the time we see the Err
+// case. So, we use `std::panic::set_hook` to store the backtrace in a thread
+// local variable to be retrieved when the unwind is caught as discussed here:
+// https://stackoverflow.com/a/73711057
 #[proc_macro]
 pub fn ocaml_interop_backtrace_support(_item: TokenStream) -> TokenStream {
     let expanded = quote! {
