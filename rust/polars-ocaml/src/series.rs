@@ -64,6 +64,7 @@ fn rust_series_new_int(
 ) -> OCaml<DynBox<Series>> {
     let name: String = name.to_rust(cr);
     let values: Vec<i64> = values.to_rust(cr);
+
     OCaml::box_value(cr, Series::new(&name, values))
 }
 

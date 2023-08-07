@@ -90,3 +90,9 @@ module Naive_datetime = struct
     [%expect {| 2023-01-02 03:00:00 |}]
   ;;
 end
+
+external record_panic_backtraces : unit -> unit = "rust_record_panic_backtraces"
+
+module For_testing = struct
+  external panic : string -> unit = "rust_test_panic"
+end

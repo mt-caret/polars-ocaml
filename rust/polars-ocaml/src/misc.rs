@@ -84,6 +84,19 @@ fn rust_schema_to_fields(
 }
 
 #[ocaml_interop_export]
+fn rust_test_panic(cr: &mut &mut OCamlRuntime, error_message: OCamlRef<String>) -> OCaml<()> {
+    let error_message: String = error_message.to_rust(cr);
+
+    // We use a meaningless if branch here to get rid of the unreachable
+    // expression warning.
+    if true {
+        panic!("test panic: {}", error_message);
+    }
+
+    OCaml::unit()
+}
+
+#[ocaml_interop_export]
 fn rust_test_fill_null_strategy(
     cr: &mut &mut OCamlRuntime,
     fill_null_strategy: OCamlRef<FillNullStrategy>,
