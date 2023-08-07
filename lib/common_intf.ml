@@ -70,10 +70,4 @@ module type Common = sig
     val of_date : ?hour:int -> ?min:int -> ?sec:int -> Date.t -> t
     val of_string : string -> t
   end
-
-  module For_testing : sig
-    val panic : string -> unit
-    val raise_exception : string -> unit
-    val install_panic_hook : suppress_backtrace:bool -> unit
-  end
 end

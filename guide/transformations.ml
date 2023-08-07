@@ -1,8 +1,6 @@
 open! Core
 open! Polars
 
-let () = Common.For_testing.install_panic_hook ~suppress_backtrace:false
-
 (* Examples from https://pola-rs.github.io/polars-book/user-guide/transformations/joins/ *)
 let%expect_test "Joins" =
   let df_customers =

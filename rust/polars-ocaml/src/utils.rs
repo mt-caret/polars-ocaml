@@ -24,7 +24,6 @@ pub unsafe fn ocaml_invalid_argument(error_message: &str) -> ! {
     }
     unreachable!("caml_failwith should never return")
 }
-
 pub struct PolarsTimeUnit(pub TimeUnit);
 
 unsafe impl FromOCaml<TimeUnit> for PolarsTimeUnit {
