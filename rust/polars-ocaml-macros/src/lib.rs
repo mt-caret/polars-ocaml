@@ -4,6 +4,9 @@ use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use syn::{parse_macro_input, punctuated::Punctuated};
 
+// TODO: currently, the macro panicks all over the place which is not very nice.
+// We should instead emit compile_error! with the appropriate error messages.
+
 // TODO: a common mistake when using the attribute macro is to specify OCaml<_>
 // for arguments or OCamlRef<_> for return types, which should never happen.
 // In these cases, the macro should probably point out this issue and suggest
@@ -132,6 +135,10 @@ pub fn ocaml_interop_export(_input: TokenStream, annotated_item: TokenStream) ->
     TokenStream::from(expanded)
 }
 
+// TODO: if below code ever changes, consider extracting below code into a
+// separate create and freezing the major version, as suggested in:
+// https://github.com/mt-caret/polars-ocaml/pull/35#discussion_r1285659995
+
 // `std::panic::catch_unwind` only stores the error string passed to the panic,
 // which means that we can't figure out the backtrace by the time we see the Err
 // case. So, we use `std::panic::set_hook` to store the backtrace in a thread
@@ -141,8 +148,8 @@ pub fn ocaml_interop_export(_input: TokenStream, annotated_item: TokenStream) ->
 pub fn ocaml_interop_backtrace_support(_item: TokenStream) -> TokenStream {
     let expanded = quote! {
         thread_local! {
-            static LAST_BACKTRACE: ::std::cell::RefCell<Option<::std::backtrace::Backtrace>> =
-                ::std::cell::RefCell::new(None);
+            static LAST_BACKTRACE: ::std::cell::Cell<::std::option::Option<::std::backtrace::Backtrace>> =
+                const { ::std::cell::Cell::new(::std::option::Option::None) };
         }
 
         #[::polars_ocaml_macros::ocaml_interop_export]
@@ -158,7 +165,7 @@ pub fn ocaml_interop_backtrace_support(_item: TokenStream) -> TokenStream {
             ::std::panic::set_hook(::std::boxed::Box::new(move |panic_info| {
                 let trace = ::std::backtrace::Backtrace::force_capture();
                 LAST_BACKTRACE.with(|last_backtrace| {
-                    last_backtrace.borrow_mut().replace(trace);
+                    last_backtrace.set(::std::option::Option::Some(trace));
                 });
 
                 last_hook(panic_info);
@@ -178,7 +185,7 @@ pub fn ocaml_interop_backtrace_support(_item: TokenStream) -> TokenStream {
                 format!("{:?}", cause)
             };
 
-            let last_backtrace = LAST_BACKTRACE.with(|b| b.borrow_mut().take());
+            let last_backtrace = LAST_BACKTRACE.with(|last_backtrace| last_backtrace.take());
 
             let error_message = match last_backtrace {
                 None => format!("Polars panicked: {}\nbacktrace not captured", cause),
