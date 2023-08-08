@@ -6,7 +6,7 @@ module T = struct
   external col : string -> t = "rust_expr_col"
   external cols : string list -> t = "rust_expr_cols"
   external all : unit -> t = "rust_expr_all"
-  external exclude : string -> t = "rust_expr_exclude"
+  external exclude : t -> names:string list -> t = "rust_expr_exclude"
 
   let element () = col ""
 

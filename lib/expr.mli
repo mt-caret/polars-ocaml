@@ -12,8 +12,10 @@ type t
               ; int "foo" [ 3; 2; 1 ]
               ; string "bar" [ "a"; "b"; "c" ]
               ]
-        in
-        Data_frame.select_exn df ~exprs:Expr.[col "foo"]
+            ;;
+      ...
+
+      # Data_frame.select_exn df ~exprs:Expr.[ col "foo" ]
       - : Data_frame.t =
       shape: (3, 1)
       ┌─────┐
@@ -25,12 +27,57 @@ type t
       │ 2   │
       │ 1   │
       └─────┘
+    ]}
+
+    Use the wildcard [*] to represent all columns:
+    {@ocaml[
+      # Data_frame.select_exn df ~exprs:Expr.[ col "*" ]
+      - : Data_frame.t =
+      shape: (3, 4)
+      ┌─────┬───────────┬─────┬─────┐
+      │ ham ┆ hamburger ┆ foo ┆ bar │
+      │ --- ┆ ---       ┆ --- ┆ --- │
+      │ i64 ┆ i64       ┆ i64 ┆ str │
+      ╞═════╪═══════════╪═════╪═════╡
+      │ 1   ┆ 11        ┆ 3   ┆ a   │
+      │ 2   ┆ 22        ┆ 2   ┆ b   │
+      │ 3   ┆ 33        ┆ 1   ┆ c   │
+      └─────┴───────────┴─────┴─────┘
+
+      # Data_frame.select_exn df ~exprs:Expr.[ col "*" |> exclude ~names:[ "ham" ] ]
+      - : Data_frame.t =
+      shape: (3, 3)
+      ┌───────────┬─────┬─────┐
+      │ hamburger ┆ foo ┆ bar │
+      │ ---       ┆ --- ┆ --- │
+      │ i64       ┆ i64 ┆ str │
+      ╞═══════════╪═════╪═════╡
+      │ 11        ┆ 3   ┆ a   │
+      │ 22        ┆ 2   ┆ b   │
+      │ 33        ┆ 1   ┆ c   │
+      └───────────┴─────┴─────┘
+    ]}
+
+    Regular expressions are also supported:
+    {@ocaml[
+      # Data_frame.select_exn df ~exprs:Expr.[ col "^ham.*$" ]
+      - : Data_frame.t =
+      shape: (3, 2)
+      ┌─────┬───────────┐
+      │ ham ┆ hamburger │
+      │ --- ┆ ---       │
+      │ i64 ┆ i64       │
+      ╞═════╪═══════════╡
+      │ 1   ┆ 11        │
+      │ 2   ┆ 22        │
+      │ 3   ┆ 33        │
+      └─────┴───────────┘
     ]} *)
 val col : string -> t
 
 val cols : string list -> t
 val all : unit -> t
-val exclude : string -> t
+val exclude : t -> names:string list -> t
 val element : unit -> t
 val cast : ?strict:bool -> t -> to_:Data_type.t -> t
 val null : unit -> t

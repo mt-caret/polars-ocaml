@@ -1343,11 +1343,15 @@ let%expect_test "Lists and Arrays" =
   in
   Data_frame.with_columns_exn
     weather_by_day
-    ~exprs:Expr.[ concat_list [ exclude "station" ] |> alias ~name:"all_temps" ]
+    ~exprs:
+      Expr.
+        [ concat_list [ all () |> exclude ~names:[ "station" ] ]
+          |> alias ~name:"all_temps"
+        ]
   |> Data_frame.select_exn
        ~exprs:
          Expr.
-           [ exclude "all_temps"
+           [ all () |> exclude ~names:[ "all_temps" ]
            ; col "all_temps" |> List.eval ~expr:rank_pct |> alias ~name:"temps_rank"
            ]
   |> Data_frame.print;

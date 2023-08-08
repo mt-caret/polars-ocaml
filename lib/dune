@@ -32,10 +32,10 @@
 (library
  (name polars)
  (foreign_archives polars_ocaml)
- (libraries core core_kernel.nonempty_list)
+ (libraries core core_kernel.nonempty_list core_unix)
  (inline_tests)
  (preprocess
-  (pps ppx_jane)))
+  (pps ppx_jane ppx_typed_fields)))
 
 (mdx
  (files :standard - *.mli)

@@ -83,9 +83,13 @@ fn rust_expr_all(cr: &mut &mut OCamlRuntime, unit: OCamlRef<()>) -> OCaml<DynBox
 }
 
 #[ocaml_interop_export]
-fn rust_expr_exclude(cr: &mut &mut OCamlRuntime, name: OCamlRef<String>) -> OCaml<DynBox<Expr>> {
-    let name: String = name.to_rust(cr);
-    OCaml::box_value(cr, all().exclude([name]))
+fn rust_expr_exclude(
+    cr: &mut &mut OCamlRuntime,
+    expr: OCamlRef<DynBox<Expr>>,
+    names: OCamlRef<OCamlList<String>>,
+) -> OCaml<DynBox<Expr>> {
+    let names: Vec<String> = names.to_rust(cr);
+    expr_unary_op(cr, expr, |expr| expr.exclude(names))
 }
 
 #[ocaml_interop_export]
