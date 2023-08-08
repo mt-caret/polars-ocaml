@@ -117,7 +117,61 @@ val cols : string list -> t
     ]} *)
 val all : unit -> t
 
+(** [exclude] excludes columns from a multi-column expression:
+
+    {@ocaml[
+      # let df =
+        Data_frame.create_exn
+          Series.
+            [ int "aa" [ 1; 2; 3 ]
+            ; string_option "ba" [ Some "a"; Some "b"; None ]
+            ; float_option "cc" [ None; Some 2.5; Some 1.5 ]
+            ]
+          ;;
+      val df : Data_frame.t =
+        shape: (3, 3)
+      ┌─────┬──────┬──────┐
+      │ aa  ┆ ba   ┆ cc   │
+      │ --- ┆ ---  ┆ ---  │
+      │ i64 ┆ str  ┆ f64  │
+      ╞═════╪══════╪══════╡
+      │ 1   ┆ a    ┆ null │
+      │ 2   ┆ b    ┆ 2.5  │
+      │ 3   ┆ null ┆ 1.5  │
+      └─────┴──────┴──────┘
+
+      # Data_frame.select_exn df ~exprs:Expr.[ all () |> exclude ~names:[ "ba" ] ]
+      - : Data_frame.t =
+      shape: (3, 2)
+      ┌─────┬──────┐
+      │ aa  ┆ cc   │
+      │ --- ┆ ---  │
+      │ i64 ┆ f64  │
+      ╞═════╪══════╡
+      │ 1   ┆ null │
+      │ 2   ┆ 2.5  │
+      │ 3   ┆ 1.5  │
+      └─────┴──────┘
+    ]}
+
+    Regular expressions are also supported:
+
+    {@ocaml[
+      # Data_frame.select_exn df ~exprs:Expr.[ all () |> exclude ~names:[ "^.*a$" ] ]
+      - : Data_frame.t =
+      shape: (3, 1)
+      ┌──────┐
+      │ cc   │
+      │ ---  │
+      │ f64  │
+      ╞══════╡
+      │ null │
+      │ 2.5  │
+      │ 1.5  │
+      └──────┘
+    ]} *)
 val exclude : t -> names:string list -> t
+
 val element : unit -> t
 val cast : ?strict:bool -> t -> to_:Data_type.t -> t
 val null : unit -> t
