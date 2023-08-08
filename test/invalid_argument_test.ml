@@ -20,5 +20,5 @@ let%expect_test "type conversion" =
   [%expect
     {|
     (Failure
-     "Failed to convert OCaml<Option<i64>> (from Option<isize>) to Rust<Option<usize>>: TryFromIntError(())") |}]
+     "Polars panicked: Failed to convert OCaml<Option<i64>> (from Option<isize>) to Rust<Option<usize>>: TryFromIntError(())\nbacktrace not captured") |}]
 ;;

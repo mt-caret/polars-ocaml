@@ -1,7 +1,7 @@
 use crate::utils::*;
 use ocaml_interop::{DynBox, OCaml, OCamlInt, OCamlList, OCamlRef, ToOCaml};
 use polars::prelude::*;
-use polars_ocaml_macros::ocaml_interop_export;
+use polars_ocaml_macros::{ocaml_interop_export, ocaml_interop_export_fallible};
 use smartstring::{LazyCompact, SmartString};
 use std::path::Path;
 
@@ -112,14 +112,14 @@ fn rust_lazy_frame_collect_all(
         .to_ocaml(cr)
 }
 
-#[ocaml_interop_export]
+#[ocaml_interop_export_fallible]
 fn rust_lazy_frame_fetch(
     cr: &mut &mut OCamlRuntime,
     lazy_frame: OCamlRef<DynBox<LazyFrame>>,
     n_rows: OCamlRef<OCamlInt>,
 ) -> OCaml<Result<DynBox<DataFrame>, String>> {
     let Abstract(lazy_frame) = lazy_frame.to_rust(cr);
-    let n_rows = n_rows.to_rust::<Coerce<_, i64, usize>>(cr).get();
+    let n_rows = n_rows.to_rust::<Coerce<_, i64, usize>>(cr).get()?;
 
     lazy_frame
         .fetch(n_rows)
@@ -376,13 +376,13 @@ fn rust_lazy_frame_melt(
     Abstract(lazy_frame.melt(melt_args)).to_ocaml(cr)
 }
 
-#[ocaml_interop_export]
+#[ocaml_interop_export_fallible]
 fn rust_lazy_frame_limit(
     cr: &mut &mut OCamlRuntime,
     lazy_frame: OCamlRef<DynBox<LazyFrame>>,
     n: OCamlRef<OCamlInt>,
 ) -> OCaml<DynBox<LazyFrame>> {
-    let n = n.to_rust::<Coerce<_, i64, u32>>(cr).get();
+    let n = n.to_rust::<Coerce<_, i64, u32>>(cr).get()?;
     let Abstract(lazy_frame) = lazy_frame.to_rust(cr);
     Abstract(lazy_frame.limit(n)).to_ocaml(cr)
 }

@@ -1,7 +1,7 @@
 use crate::utils::*;
 use ocaml_interop::{DynBox, OCaml, OCamlFloat, OCamlInt, OCamlList, OCamlRef, ToOCaml};
 use polars::prelude::*;
-use polars_ocaml_macros::ocaml_interop_export;
+use polars_ocaml_macros::{ocaml_interop_export, ocaml_interop_export_fallible};
 use smartstring::{LazyCompact, SmartString};
 use std::fs::File;
 
@@ -415,7 +415,7 @@ fn rust_data_frame_sort(
         .to_ocaml(cr)
 }
 
-#[ocaml_interop_export]
+#[ocaml_interop_export_fallible]
 fn rust_data_frame_head(
     cr: &mut &mut OCamlRuntime,
     data_frame: OCamlRef<DynBox<DataFrame>>,
@@ -424,12 +424,12 @@ fn rust_data_frame_head(
     let Abstract(data_frame) = data_frame.to_rust(cr);
     let length = length
         .to_rust::<Coerce<_, Option<i64>, Option<usize>>>(cr)
-        .get();
+        .get()?;
 
     Abstract(data_frame.head(length)).to_ocaml(cr)
 }
 
-#[ocaml_interop_export]
+#[ocaml_interop_export_fallible]
 fn rust_data_frame_tail(
     cr: &mut &mut OCamlRuntime,
     data_frame: OCamlRef<DynBox<DataFrame>>,
@@ -438,12 +438,12 @@ fn rust_data_frame_tail(
     let Abstract(data_frame) = data_frame.to_rust(cr);
     let length = length
         .to_rust::<Coerce<_, Option<i64>, Option<usize>>>(cr)
-        .get();
+        .get()?;
 
     Abstract(data_frame.tail(length)).to_ocaml(cr)
 }
 
-#[ocaml_interop_export]
+#[ocaml_interop_export_fallible]
 fn rust_data_frame_sample_n(
     cr: &mut &mut OCamlRuntime,
     data_frame: OCamlRef<DynBox<DataFrame>>,
@@ -453,12 +453,12 @@ fn rust_data_frame_sample_n(
     seed: OCamlRef<Option<OCamlInt>>,
 ) -> OCaml<Result<DynBox<DataFrame>, String>> {
     let Abstract(data_frame) = data_frame.to_rust(cr);
-    let n = n.to_rust::<Coerce<_, i64, usize>>(cr).get();
+    let n = n.to_rust::<Coerce<_, i64, usize>>(cr).get()?;
     let with_replacement: bool = with_replacement.to_rust(cr);
     let shuffle: bool = shuffle.to_rust(cr);
     let seed: Option<u64> = seed
         .to_rust::<Coerce<_, Option<i64>, Option<u64>>>(cr)
-        .get();
+        .get()?;
 
     data_frame
         .sample_n(n, with_replacement, shuffle, seed)

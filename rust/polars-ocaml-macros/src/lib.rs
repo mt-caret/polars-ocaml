@@ -11,7 +11,7 @@ use syn::{parse_macro_input, punctuated::Punctuated};
 // for arguments or OCamlRef<_> for return types, which should never happen.
 // In these cases, the macro should probably point out this issue and suggest
 // what to do (use the other type).
-fn ocaml_interop_export_implementation(item_fn: syn::ItemFn) -> TokenStream2 {
+fn ocaml_interop_export_implementation(item_fn: syn::ItemFn, is_fallible: bool) -> TokenStream2 {
     let mut inputs_iter = item_fn.sig.inputs.iter().map(|fn_arg| match fn_arg {
         syn::FnArg::Receiver(_) => panic!("receiver not supported"),
         syn::FnArg::Typed(pat_type) => pat_type.clone(),
@@ -69,38 +69,67 @@ fn ocaml_interop_export_implementation(item_fn: syn::ItemFn) -> TokenStream2 {
     };
     let block = item_fn.block.clone();
 
-    let native_function = quote! {
-        #[no_mangle]
-        pub extern "C" #signature {
-            match ::std::panic::catch_unwind(|| {
-                let #runtime_name = unsafe { &mut ::ocaml_interop::OCamlRuntime::recover_handle() };
+    let native_function = if !is_fallible {
+        quote! {
+            #[no_mangle]
+            pub extern "C" #signature {
+                match ::std::panic::catch_unwind(|| {
+                    let #runtime_name = unsafe { &mut ::ocaml_interop::OCamlRuntime::recover_handle() };
 
-                #( #locals )*
+                    #( #locals )*
 
-                {
-                    let return_value: #return_type = #block;
+                    {
+                        let return_value: #return_type = #block;
 
-                    unsafe { return_value.raw() }
+                        unsafe { return_value.raw() }
+                    }
+                }) {
+                    Ok(value) => value,
+                    Err(cause) => {
+                        // This is only safe if the runtime lock is held, which
+                        // *won't* be the case if any Rust code panics while we have
+                        // given up the runtime lock. I think when we start adding
+                        // code that does this we'll need some thread local variable
+                        // that keeps track of whether we have the runtime lock or
+                        // not (since prior to OCaml 5 there's not built-in way to
+                        // keep track of this[1]).
+                        //
+                        // [1]: https://github.com/ocaml/ocaml/issues/5299
+                        //
+                        // After further discussion, I think this is safe (as long
+                        // as we use OCamlRuntime::releasing_runtime) since the lock
+                        // should almost always be re-acquired on the event of a panic.
+                        let cr = unsafe { &mut ::ocaml_interop::OCamlRuntime::recover_handle() };
+                        unsafe { raise_ocaml_exception_from_panic(cr, cause) }
+                    },
                 }
-            }) {
-                Ok(value) => value,
-                Err(cause) => {
-                    // This is only safe if the runtime lock is held, which
-                    // *won't* be the case if any Rust code panics while we have
-                    // given up the runtime lock. I think when we start adding
-                    // code that does this we'll need some thread local variable
-                    // that keeps track of whether we have the runtime lock or
-                    // not (since prior to OCaml 5 there's not built-in way to
-                    // keep track of this[1]).
-                    //
-                    // [1]: https://github.com/ocaml/ocaml/issues/5299
-                    //
-                    // After further discussion, I think this is safe (as long
-                    // as we use OCamlRuntime::releasing_runtime) since the lock
-                    // should almost always be re-acquired on the event of a panic.
-                    let cr = unsafe { &mut ::ocaml_interop::OCamlRuntime::recover_handle() };
-                    unsafe { raise_ocaml_exception_from_panic(cr, cause) }
-                },
+            }
+        }
+    } else {
+        quote! {
+            #[no_mangle]
+            pub extern "C" #signature {
+                match ::std::panic::catch_unwind(|| {
+                    let #runtime_name = unsafe { &mut ::ocaml_interop::OCamlRuntime::recover_handle() };
+
+                    #( #locals )*
+
+                    {
+                        let return_value: #return_type = #block;
+
+                        Ok(unsafe { return_value.raw() })
+                    }
+                }) {
+                    Ok(Ok(value)) => value,
+                    Ok(Err(error)) => {
+                        let cr = unsafe { &mut ::ocaml_interop::OCamlRuntime::recover_handle() };
+                        unsafe { raise_ocaml_exception(cr, error) }
+                    },
+                    Err(cause) => {
+                        let cr = unsafe { &mut ::ocaml_interop::OCamlRuntime::recover_handle() };
+                        unsafe { raise_ocaml_exception_from_panic(cr, cause) }
+                    },
+                }
             }
         }
     };
@@ -146,7 +175,19 @@ fn ocaml_interop_export_implementation(item_fn: syn::ItemFn) -> TokenStream2 {
 pub fn ocaml_interop_export(_input: TokenStream, annotated_item: TokenStream) -> TokenStream {
     let item_fn = parse_macro_input!(annotated_item as syn::ItemFn);
 
-    let expanded = ocaml_interop_export_implementation(item_fn);
+    let expanded = ocaml_interop_export_implementation(item_fn, false);
+
+    TokenStream::from(expanded)
+}
+
+#[proc_macro_attribute]
+pub fn ocaml_interop_export_fallible(
+    _input: TokenStream,
+    annotated_item: TokenStream,
+) -> TokenStream {
+    let item_fn = parse_macro_input!(annotated_item as syn::ItemFn);
+
+    let expanded = ocaml_interop_export_implementation(item_fn, true);
 
     TokenStream::from(expanded)
 }
@@ -258,23 +299,26 @@ mod tests {
         prettyplease::unparse(&file)
     }
 
-    fn apply_macro_and_pretty_print(input: TokenStream2) -> String {
+    fn apply_macro_and_pretty_print(input: TokenStream2, is_fallible: bool) -> String {
         let item_fn = syn::parse2(input).unwrap();
-        let expanded = ocaml_interop_export_implementation(item_fn);
+        let expanded = ocaml_interop_export_implementation(item_fn, is_fallible);
         pretty_print_item(&expanded)
     }
 
     #[test]
     fn test_simple_function() {
-        let macro_output = apply_macro_and_pretty_print(quote! {
-            fn rust_expr_col(
-                cr: &mut &mut OCamlRuntime,
-                name: OCamlRef<String>
-            ) -> OCaml<DynBox<Expr>> {
-                let name: String = name.to_rust(cr);
-                OCaml::box_value(cr, col(&name))
-            }
-        });
+        let macro_output = apply_macro_and_pretty_print(
+            quote! {
+                fn rust_expr_col(
+                    cr: &mut &mut OCamlRuntime,
+                    name: OCamlRef<String>
+                ) -> OCaml<DynBox<Expr>> {
+                    let name: String = name.to_rust(cr);
+                    OCaml::box_value(cr, col(&name))
+                }
+            },
+            false,
+        );
 
         expect![[r##"
             #[no_mangle]
@@ -303,30 +347,78 @@ mod tests {
             }
         "##]]
         .assert_eq(&macro_output);
+
+        let macro_output = apply_macro_and_pretty_print(
+            quote! {
+                fn rust_expr_col(
+                    cr: &mut &mut OCamlRuntime,
+                    name: OCamlRef<String>
+                ) -> OCaml<DynBox<Expr>> {
+                    let name: String = name.to_rust(cr);
+                    OCaml::box_value(cr, col(&name))
+                }
+            },
+            true,
+        );
+
+        expect![[r##"
+            #[no_mangle]
+            pub extern "C" fn rust_expr_col(
+                name: ::ocaml_interop::RawOCaml,
+            ) -> ::ocaml_interop::RawOCaml {
+                match ::std::panic::catch_unwind(|| {
+                    let cr = unsafe { &mut ::ocaml_interop::OCamlRuntime::recover_handle() };
+                    let name: OCamlRef<String> = &::ocaml_interop::BoxRoot::new(unsafe {
+                        OCaml::new(cr, name)
+                    });
+                    {
+                        let return_value: OCaml<DynBox<Expr>> = {
+                            let name: String = name.to_rust(cr);
+                            OCaml::box_value(cr, col(&name))
+                        };
+                        Ok(unsafe { return_value.raw() })
+                    }
+                }) {
+                    Ok(Ok(value)) => value,
+                    Ok(Err(error)) => {
+                        let cr = unsafe { &mut ::ocaml_interop::OCamlRuntime::recover_handle() };
+                        unsafe { raise_ocaml_exception(cr, error) }
+                    }
+                    Err(cause) => {
+                        let cr = unsafe { &mut ::ocaml_interop::OCamlRuntime::recover_handle() };
+                        unsafe { raise_ocaml_exception_from_panic(cr, cause) }
+                    }
+                }
+            }
+        "##]]
+        .assert_eq(&macro_output);
     }
 
     #[test]
     fn test_bytecode_generation() {
-        let macro_output = apply_macro_and_pretty_print(quote! {
-        fn rust_expr_sample_n(
-            cr: &mut &mut OCamlRuntime,
-            expr: OCamlRef<DynBox<Expr>>,
-            n: OCamlRef<OCamlInt>,
-            with_replacement: OCamlRef<bool>,
-            shuffle: OCamlRef<bool>,
-            seed: OCamlRef<Option<OCamlInt>>,
-            fixed_seed: OCamlRef<bool>
-        ) -> OCaml<DynBox<Expr>> {
-            let Abstract(expr) = expr.to_rust(cr);
-            let n = n.to_rust::<Coerce<_, i64, usize>>(cr).get();
-            let with_replacement: bool = with_replacement.to_rust(cr);
-            let shuffle: bool = shuffle.to_rust(cr);
-            let seed = seed.to_rust::<Coerce<_, Option<i64>, Option<u64>>>(cr).get();
-            let fixed_seed = fixed_seed.to_rust(cr);
+        let macro_output = apply_macro_and_pretty_print(
+            quote! {
+            fn rust_expr_sample_n(
+                cr: &mut &mut OCamlRuntime,
+                expr: OCamlRef<DynBox<Expr>>,
+                n: OCamlRef<OCamlInt>,
+                with_replacement: OCamlRef<bool>,
+                shuffle: OCamlRef<bool>,
+                seed: OCamlRef<Option<OCamlInt>>,
+                fixed_seed: OCamlRef<bool>
+            ) -> OCaml<DynBox<Expr>> {
+                let Abstract(expr) = expr.to_rust(cr);
+                let n = n.to_rust::<Coerce<_, i64, usize>>(cr).get();
+                let with_replacement: bool = with_replacement.to_rust(cr);
+                let shuffle: bool = shuffle.to_rust(cr);
+                let seed = seed.to_rust::<Coerce<_, Option<i64>, Option<u64>>>(cr).get();
+                let fixed_seed = fixed_seed.to_rust(cr);
 
-            Abstract(expr.sample_n(n, with_replacement, shuffle, seed, fixed_seed)).to_ocaml(cr)
-        }
-        });
+                Abstract(expr.sample_n(n, with_replacement, shuffle, seed, fixed_seed)).to_ocaml(cr)
+            }
+            },
+            false,
+        );
 
         expect![[r##"
             #[no_mangle]

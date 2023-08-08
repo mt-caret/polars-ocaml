@@ -3,9 +3,9 @@ use crate::utils::*;
 use chrono::naive::{NaiveDate, NaiveDateTime};
 use ocaml_interop::{DynBox, OCaml, OCamlInt, OCamlList, OCamlRef, ToOCaml};
 use polars::prelude::*;
-use polars_ocaml_macros::ocaml_interop_export;
+use polars_ocaml_macros::{ocaml_interop_export, ocaml_interop_export_fallible};
 
-#[ocaml_interop_export]
+#[ocaml_interop_export_fallible]
 fn rust_naive_date(
     cr: &mut &mut OCamlRuntime,
     year: OCamlRef<OCamlInt>,
@@ -13,15 +13,15 @@ fn rust_naive_date(
     day: OCamlRef<OCamlInt>,
 ) -> OCaml<Option<DynBox<NaiveDate>>> {
     let year: i32 = year.to_rust(cr);
-    let month = month.to_rust::<Coerce<_, i32, u32>>(cr).get();
-    let day = day.to_rust::<Coerce<_, i32, u32>>(cr).get();
+    let month = month.to_rust::<Coerce<_, i32, u32>>(cr).get()?;
+    let day = day.to_rust::<Coerce<_, i32, u32>>(cr).get()?;
 
     NaiveDate::from_ymd_opt(year, month, day)
         .map(Abstract)
         .to_ocaml(cr)
 }
 
-#[ocaml_interop_export]
+#[ocaml_interop_export_fallible]
 fn rust_naive_date_to_naive_datetime(
     cr: &mut &mut OCamlRuntime,
     date: OCamlRef<DynBox<NaiveDate>>,
@@ -33,15 +33,15 @@ fn rust_naive_date_to_naive_datetime(
 
     let hour: u32 = hour
         .to_rust::<Coerce<_, Option<i64>, Option<u32>>>(cr)
-        .get()
+        .get()?
         .unwrap_or(0);
     let min: u32 = min
         .to_rust::<Coerce<_, Option<i64>, Option<u32>>>(cr)
-        .get()
+        .get()?
         .unwrap_or(0);
     let sec: u32 = sec
         .to_rust::<Coerce<_, Option<i64>, Option<u32>>>(cr)
-        .get()
+        .get()?
         .unwrap_or(0);
 
     date.and_hms_opt(hour, min, sec).map(Abstract).to_ocaml(cr)
