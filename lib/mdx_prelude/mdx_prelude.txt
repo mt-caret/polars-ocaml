@@ -1,7 +1,7 @@
 (* This file is not technically syntactically correct OCaml, since it's meant
   to be evaluated by the toplevel so also contains toplevel directives.
-  to avoid ocamlformat from messing with stuff here, we use a ".txt" extension
-  instead of the usual ".ml".
+  This seems to confuse ocamlformat which then formats this file in way that
+  breaks MDX. To avoid this, we use a ".txt" extension instead of the usual ".ml".
 *)
 
 open Core;;
