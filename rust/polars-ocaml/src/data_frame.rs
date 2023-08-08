@@ -1,7 +1,7 @@
 use crate::utils::*;
 use ocaml_interop::{DynBox, OCaml, OCamlFloat, OCamlInt, OCamlList, OCamlRef, ToOCaml};
 use polars::prelude::*;
-use polars_ocaml_macros::{ocaml_interop_export, ocaml_interop_export_fallible};
+use polars_ocaml_macros::ocaml_interop_export;
 use smartstring::{LazyCompact, SmartString};
 use std::fs::File;
 
@@ -415,7 +415,7 @@ fn rust_data_frame_sort(
         .to_ocaml(cr)
 }
 
-#[ocaml_interop_export_fallible]
+#[ocaml_interop_export(fallible)]
 fn rust_data_frame_head(
     cr: &mut &mut OCamlRuntime,
     data_frame: OCamlRef<DynBox<DataFrame>>,
@@ -429,7 +429,7 @@ fn rust_data_frame_head(
     Abstract(data_frame.head(length)).to_ocaml(cr)
 }
 
-#[ocaml_interop_export_fallible]
+#[ocaml_interop_export(fallible)]
 fn rust_data_frame_tail(
     cr: &mut &mut OCamlRuntime,
     data_frame: OCamlRef<DynBox<DataFrame>>,
@@ -443,7 +443,7 @@ fn rust_data_frame_tail(
     Abstract(data_frame.tail(length)).to_ocaml(cr)
 }
 
-#[ocaml_interop_export_fallible]
+#[ocaml_interop_export(fallible)]
 fn rust_data_frame_sample_n(
     cr: &mut &mut OCamlRuntime,
     data_frame: OCamlRef<DynBox<DataFrame>>,

@@ -6,7 +6,7 @@ use ocaml_interop::{
 };
 use polars::prelude::prelude::*;
 use polars::prelude::*;
-use polars_ocaml_macros::{ocaml_interop_export, ocaml_interop_export_fallible};
+use polars_ocaml_macros::ocaml_interop_export;
 
 fn series_binary_op<'a>(
     cr: &'a mut &'a mut OCamlRuntime,
@@ -251,7 +251,7 @@ fn rust_series_sort(
     OCaml::box_value(cr, series.sort(descending))
 }
 
-#[ocaml_interop_export_fallible]
+#[ocaml_interop_export(fallible)]
 fn rust_series_head(
     cr: &mut &mut OCamlRuntime,
     series: OCamlRef<DynBox<Series>>,
@@ -265,7 +265,7 @@ fn rust_series_head(
     Abstract(series.head(length)).to_ocaml(cr)
 }
 
-#[ocaml_interop_export_fallible]
+#[ocaml_interop_export(fallible)]
 fn rust_series_tail(
     cr: &mut &mut OCamlRuntime,
     series: OCamlRef<DynBox<Series>>,
@@ -279,7 +279,7 @@ fn rust_series_tail(
     Abstract(series.tail(length)).to_ocaml(cr)
 }
 
-#[ocaml_interop_export_fallible]
+#[ocaml_interop_export(fallible)]
 fn rust_series_sample_n(
     cr: &mut &mut OCamlRuntime,
     series: OCamlRef<DynBox<Series>>,

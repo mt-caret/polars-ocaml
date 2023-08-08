@@ -2,7 +2,7 @@ use proc_macro::TokenStream;
 use proc_macro2::Span;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use syn::{parse_macro_input, punctuated::Punctuated};
+use syn::{parse::Parser, parse_macro_input, punctuated::Punctuated};
 
 // TODO: currently, the macro panicks all over the place which is not very nice.
 // We should instead emit compile_error! with the appropriate error messages.
@@ -172,22 +172,20 @@ fn ocaml_interop_export_implementation(item_fn: syn::ItemFn, is_fallible: bool) 
 }
 
 #[proc_macro_attribute]
-pub fn ocaml_interop_export(_input: TokenStream, annotated_item: TokenStream) -> TokenStream {
+pub fn ocaml_interop_export(args: TokenStream, annotated_item: TokenStream) -> TokenStream {
+    let args = syn::punctuated::Punctuated::<syn::Ident, syn::Token![,]>::parse_terminated
+        .parse(args)
+        .unwrap()
+        .into_iter()
+        .map(|ident| format!("{}", ident))
+        .collect::<Vec<_>>();
     let item_fn = parse_macro_input!(annotated_item as syn::ItemFn);
 
-    let expanded = ocaml_interop_export_implementation(item_fn, false);
-
-    TokenStream::from(expanded)
-}
-
-#[proc_macro_attribute]
-pub fn ocaml_interop_export_fallible(
-    _input: TokenStream,
-    annotated_item: TokenStream,
-) -> TokenStream {
-    let item_fn = parse_macro_input!(annotated_item as syn::ItemFn);
-
-    let expanded = ocaml_interop_export_implementation(item_fn, true);
+    let expanded = match &args[..] {
+        [] => ocaml_interop_export_implementation(item_fn, false),
+        [arg] if arg == "fallible" => ocaml_interop_export_implementation(item_fn, true),
+        _ => panic!("unexpected arguments to ocaml_interop_export: {:?}", args),
+    };
 
     TokenStream::from(expanded)
 }

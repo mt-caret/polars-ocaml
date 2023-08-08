@@ -4,7 +4,7 @@ use ocaml_interop::{
 };
 use polars::lazy::dsl::GetOutput;
 use polars::prelude::*;
-use polars_ocaml_macros::{ocaml_interop_export, ocaml_interop_export_fallible};
+use polars_ocaml_macros::ocaml_interop_export;
 
 use crate::utils::PolarsDataType;
 use crate::utils::*;
@@ -205,7 +205,7 @@ fn rust_expr_reverse(
 // - tail
 // - sample_n
 
-#[ocaml_interop_export_fallible]
+#[ocaml_interop_export(fallible)]
 fn rust_expr_head(
     cr: &mut &mut OCamlRuntime,
     expr: OCamlRef<DynBox<Expr>>,
@@ -219,7 +219,7 @@ fn rust_expr_head(
     Abstract(expr.head(length)).to_ocaml(cr)
 }
 
-#[ocaml_interop_export_fallible]
+#[ocaml_interop_export(fallible)]
 fn rust_expr_tail(
     cr: &mut &mut OCamlRuntime,
     expr: OCamlRef<DynBox<Expr>>,
@@ -233,7 +233,7 @@ fn rust_expr_tail(
     Abstract(expr.tail(length)).to_ocaml(cr)
 }
 
-#[ocaml_interop_export_fallible]
+#[ocaml_interop_export(fallible)]
 fn rust_expr_sample_n(
     cr: &mut &mut OCamlRuntime,
     expr: OCamlRef<DynBox<Expr>>,
@@ -430,7 +430,7 @@ fn rust_expr_fill_nan(
     expr_binary_op(cr, expr, with, |expr, with| expr.fill_nan(with))
 }
 
-#[ocaml_interop_export_fallible]
+#[ocaml_interop_export(fallible)]
 fn rust_expr_rank(
     cr: &mut &mut OCamlRuntime,
     expr: OCamlRef<DynBox<Expr>>,
@@ -583,7 +583,7 @@ fn rust_expr_suffix(
     expr_unary_op(cr, expr, |expr| expr.suffix(&suffix))
 }
 
-#[ocaml_interop_export_fallible]
+#[ocaml_interop_export(fallible)]
 fn rust_expr_round(
     cr: &mut &mut OCamlRuntime,
     expr: OCamlRef<DynBox<Expr>>,
@@ -995,7 +995,7 @@ fn rust_expr_str_ends_with(
     )
 }
 
-#[ocaml_interop_export_fallible]
+#[ocaml_interop_export(fallible)]
 fn rust_expr_str_extract(
     cr: &mut &mut OCamlRuntime,
     expr: OCamlRef<DynBox<Expr>>,
@@ -1129,7 +1129,7 @@ fn rust_expr_str_to_uppercase(
     expr_unary_op(cr, expr, |expr| expr.str().to_uppercase())
 }
 
-#[ocaml_interop_export_fallible]
+#[ocaml_interop_export(fallible)]
 fn rust_expr_str_slice(
     cr: &mut &mut OCamlRuntime,
     expr: OCamlRef<DynBox<Expr>>,
