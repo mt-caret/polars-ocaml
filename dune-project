@@ -1,4 +1,4 @@
-(lang dune 3.7)
+(lang dune 3.8)
 
 (name polars_ocaml)
 
@@ -14,6 +14,8 @@
 (license LICENSE)
 
 (documentation https://url/to/documentation)
+
+(using mdx 0.4)
 
 (package
  (name polars_ocaml)

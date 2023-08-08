@@ -2,7 +2,35 @@ open! Core
 
 type t
 
+(** [col] and [cols] return column(s) in a dataframe:
+    {@ocaml[
+      # open Core;;
+      # open Polars;;
+      # #install_printer Data_frame.pp
+      # let df =
+          Data_frame.create_exn
+            Series.
+              [ int "ham" [ 1; 2; 3 ]
+              ; int "hamburger" [ 11; 22; 33 ]
+              ; int "foo" [ 3; 2; 1 ]
+              ; string "bar" [ "a"; "b"; "c" ]
+              ]
+        in
+        Data_frame.select_exn df ~exprs:Expr.[col "foo"]
+      - : Data_frame.t =
+      shape: (3, 1)
+      ┌─────┐
+      │ foo │
+      │ --- │
+      │ i64 │
+      ╞═════╡
+      │ 3   │
+      │ 2   │
+      │ 1   │
+      └─────┘
+    ]} *)
 val col : string -> t
+
 val cols : string list -> t
 val all : unit -> t
 val exclude : string -> t

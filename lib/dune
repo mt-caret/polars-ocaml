@@ -37,6 +37,10 @@
  (preprocess
   (pps ppx_jane)))
 
+(mdx
+ (files :standard - *.mli)
+ (libraries core polars))
+
 (env
  (utop
   (env-vars
