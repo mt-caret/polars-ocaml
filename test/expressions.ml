@@ -1496,3 +1496,28 @@ let%expect_test "join_asof" =
     │ 99.9 ┆ 100.0 │
     └──────┴───────┘ |}]
 ;;
+
+let%expect_test "take" =
+  let values = Series.float "val" [ 1.; 2.; 3.; 4.; 5.; 6. ] in
+  let idxs = Series.int "idx"   [ 1;  0;  1;  2;  0;  2 ] in
+  let ldf = Data_frame.create_exn[ values; idxs ] |> Data_frame.lazy_ in
+  let filtered = Lazy_frame.filter ldf ~predicate:(
+      (* Remove index 0, keep index 1 and 2 *)
+      Expr.series (Series.bool "filter" [ false; true; true ])
+      |> Expr.take ~idx:(Expr.col "idx"))
+    |> Lazy_frame.collect_exn
+  in
+  Data_frame.print filtered;
+  [%expect {|
+    shape: (4, 2)
+    ┌─────┬─────┐
+    │ val ┆ idx │
+    │ --- ┆ --- │
+    │ f64 ┆ i64 │
+    ╞═════╪═════╡
+    │ 1.0 ┆ 1   │
+    │ 3.0 ┆ 1   │
+    │ 4.0 ┆ 2   │
+    │ 6.0 ┆ 2   │
+    └─────┴─────┘ |}]
+;;

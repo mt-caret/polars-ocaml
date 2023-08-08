@@ -15,6 +15,7 @@ val bool : bool -> t
 val string : string -> t
 val naive_date : Common.Naive_date.t -> t
 val naive_datetime : Common.Naive_datetime.t -> t
+val series : Series.t -> t
 val sort : ?descending:bool -> t -> t
 val sort_by : ?descending:bool -> t -> by:t list -> t
 val set_sorted_flag : t -> sorted:Series.IsSorted.t -> t
@@ -23,6 +24,7 @@ val last : t -> t
 val reverse : t -> t
 val head : ?length:int -> t -> t
 val tail : ?length:int -> t -> t
+val take : t -> idx:t -> t
 
 val sample_n
   :  ?seed:int

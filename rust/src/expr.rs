@@ -117,6 +117,11 @@ ocaml_export! {
         OCaml::box_value(cr, lit(value))
     }
 
+    fn rust_expr_series(cr, series: OCamlRef<DynBox<Series>>) -> OCaml<DynBox<Expr>> {
+        let Abstract(series) = series.to_rust(cr);
+        OCaml::box_value(cr, lit(series))
+    }
+
     fn rust_expr_cast(cr, expr: OCamlRef<DynBox<Expr>>, data_type: OCamlRef<DataType>, is_strict: OCamlRef<bool>) -> OCaml<DynBox<Expr>> {
         let PolarsDataType(data_type): PolarsDataType = data_type.to_rust(cr);
         let is_strict: bool = is_strict.to_rust(cr);
@@ -184,6 +189,10 @@ ocaml_export! {
         let length = length.to_rust::<Coerce<_, Option<i64>, Option<usize>>>(cr).get();
 
         Abstract(expr.tail(length)).to_ocaml(cr)
+    }
+
+    fn rust_expr_take(cr, expr: OCamlRef<DynBox<Expr>>, idx: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
+        expr_binary_op(cr, expr, idx, |a, b| a.take(b))
     }
 
     fn rust_expr_sample_n|rust_expr_sample_n_bytecode(

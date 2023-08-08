@@ -21,6 +21,7 @@ module T = struct
   external string : string -> t = "rust_expr_string"
   external naive_date : Common.Naive_date.t -> t = "rust_expr_naive_date"
   external naive_datetime : Common.Naive_datetime.t -> t = "rust_expr_naive_datetime"
+  external series : Series.t -> t = "rust_expr_series"
   external sort : t -> descending:bool -> t = "rust_expr_sort"
 
   let sort ?(descending = false) t = sort t ~descending
@@ -41,6 +42,8 @@ module T = struct
   external tail : t -> length:int option -> t = "rust_expr_tail"
 
   let tail ?length t = tail t ~length
+
+  external take : t -> idx:t -> t = "rust_expr_take"
 
   external sample_n
     :  t
