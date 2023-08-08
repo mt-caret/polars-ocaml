@@ -18,6 +18,14 @@ val date_range_exn : string -> start:Date.t -> stop:Date.t -> t
 val datetime_range : string -> start:Date.t -> stop:Date.t -> (t, string) result
 val datetime_range_exn : string -> start:Date.t -> stop:Date.t -> t
 val sort : ?descending:bool -> t -> t
+
+module IsSorted : sig
+  type t =
+    | Ascending
+    | Descending
+    | Not
+end
+
 val head : ?length:int -> t -> t
 val tail : ?length:int -> t -> t
 

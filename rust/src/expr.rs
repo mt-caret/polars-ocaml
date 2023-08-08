@@ -4,6 +4,7 @@ use ocaml_interop::{
 };
 use polars::lazy::dsl::GetOutput;
 use polars::prelude::*;
+use polars::series::IsSorted;
 
 use crate::utils::PolarsDataType;
 use crate::utils::*;
@@ -139,6 +140,11 @@ ocaml_export! {
         expr_unary_op(cr, expr, |expr| expr.sort_by(by, descending))
     }
 
+    fn rust_expr_set_sorted_flag(cr, expr: OCamlRef<DynBox<Expr>>, is_sorted: OCamlRef<IsSorted>) -> OCaml<DynBox<Expr>> {
+        let PolarsIsSorted(is_sorted) = is_sorted.to_rust(cr);
+        expr_unary_op(cr, expr, |expr| expr.set_sorted_flag(is_sorted))
+    }
+
     fn rust_expr_first(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
         expr_unary_op(cr, expr, |expr| expr.first())
     }
@@ -203,6 +209,31 @@ ocaml_export! {
         expr_binary_op(cr, expr, predicate, |expr, predicate| expr.filter(predicate))
     }
 
+    fn rust_expr_ceil(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
+        expr_unary_op(cr, expr, |expr| expr.ceil())
+    }
+
+    fn rust_expr_floor(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
+        expr_unary_op(cr, expr, |expr| expr.floor())
+    }
+
+    fn rust_expr_clip_min_float(cr, expr: OCamlRef<DynBox<Expr>>, min: OCamlRef<OCamlFloat>) -> OCaml<DynBox<Expr>> {
+        let min: f64 = min.to_rust(cr);
+        expr_unary_op(cr, expr, |expr| expr.clip_min(AnyValue::Float64(min)))
+    }
+    fn rust_expr_clip_max_float(cr, expr: OCamlRef<DynBox<Expr>>, max: OCamlRef<OCamlFloat>) -> OCaml<DynBox<Expr>> {
+        let max: f64 = max.to_rust(cr);
+        expr_unary_op(cr, expr, |expr| expr.clip_max(AnyValue::Float64(max)))
+    }
+    fn rust_expr_clip_min_int(cr, expr: OCamlRef<DynBox<Expr>>, min: OCamlRef<OCamlInt>) -> OCaml<DynBox<Expr>> {
+        let min: i64 = min.to_rust(cr);
+        expr_unary_op(cr, expr, |expr| expr.clip_min(AnyValue::Int64(min)))
+    }
+    fn rust_expr_clip_max_int(cr, expr: OCamlRef<DynBox<Expr>>, max: OCamlRef<OCamlInt>) -> OCaml<DynBox<Expr>> {
+        let max: i64 = max.to_rust(cr);
+        expr_unary_op(cr, expr, |expr| expr.clip_max(AnyValue::Int64(max)))
+    }
+
     fn rust_expr_sum(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
         expr_unary_op(cr, expr, |expr| expr.sum())
     }
@@ -221,6 +252,14 @@ ocaml_export! {
 
     fn rust_expr_min(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
         expr_unary_op(cr, expr, |expr| expr.min())
+    }
+
+    fn rust_expr_arg_max(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
+        expr_unary_op(cr, expr, |expr| expr.arg_max())
+    }
+
+    fn rust_expr_arg_min(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
+        expr_unary_op(cr, expr, |expr| expr.arg_min())
     }
 
     fn rust_expr_count(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
@@ -265,6 +304,14 @@ ocaml_export! {
 
     fn rust_expr_is_not_null(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
         expr_unary_op(cr, expr, |expr| expr.is_not_null())
+    }
+
+    fn rust_expr_is_nan(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
+        expr_unary_op(cr, expr, |expr| expr.is_nan())
+    }
+
+    fn rust_expr_is_not_nan(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
+        expr_unary_op(cr, expr, |expr| expr.is_not_nan())
     }
 
     fn rust_expr_fill_null(cr, expr: OCamlRef<DynBox<Expr>>, with: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {

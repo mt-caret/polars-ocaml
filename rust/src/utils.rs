@@ -4,6 +4,7 @@ use ocaml_interop::{
     FromOCaml, OCaml, OCamlInt, OCamlList, OCamlRuntime, ToOCaml,
 };
 use polars::{lazy::dsl::WindowMapping, prelude::*};
+use polars::series::IsSorted;
 use smartstring::{LazyCompact, SmartString};
 use std::any::type_name;
 use std::borrow::Borrow;
@@ -406,6 +407,21 @@ where
                 },
             },
         }
+    }
+}
+
+pub struct PolarsIsSorted(pub IsSorted);
+unsafe impl FromOCaml<IsSorted> for PolarsIsSorted {
+    fn from_ocaml(v: OCaml<IsSorted>) -> Self {
+        let result = ocaml_unpack_variant! {
+            v => {
+                IsSorted::Ascending,
+                IsSorted::Descending,
+                IsSorted::Not,
+            }
+        };
+
+        PolarsIsSorted(result.expect("Failure when unpacking an OCaml<IsSorted> variant into PolarsIsSorted (unexpected tag value"))
     }
 }
 

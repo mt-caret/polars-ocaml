@@ -29,6 +29,8 @@ module T = struct
 
   let sort_by ?(descending = false) t ~by = sort_by t ~descending ~by
 
+  external set_sorted_flag : t -> sorted:Series.IsSorted.t -> t = "rust_expr_set_sorted_flag"
+
   external first : t -> t = "rust_expr_first"
   external last : t -> t = "rust_expr_last"
   external reverse : t -> t = "rust_expr_reverse"
@@ -55,11 +57,19 @@ module T = struct
   ;;
 
   external filter : t -> predicate:t -> t = "rust_expr_filter"
+  external ceil : t -> t = "rust_expr_ceil"
+  external floor : t -> t = "rust_expr_floor"
+  external clip_min_float : t -> min:float -> t = "rust_expr_clip_min_float"
+  external clip_max_float : t -> max:float -> t = "rust_expr_clip_max_float"
+  external clip_min_int : t -> min:int -> t = "rust_expr_clip_min_int"
+  external clip_max_int : t -> max:int -> t = "rust_expr_clip_max_int"
   external sum : t -> t = "rust_expr_sum"
   external mean : t -> t = "rust_expr_mean"
   external median : t -> t = "rust_expr_median"
   external max : t -> t = "rust_expr_max"
   external min : t -> t = "rust_expr_min"
+  external arg_max : t -> t = "rust_expr_arg_max"
+  external arg_min : t -> t = "rust_expr_arg_min"
   external count : t -> t = "rust_expr_count"
   external count_ : unit -> t = "rust_expr_count_"
   external n_unique : t -> t = "rust_expr_n_unique"
@@ -91,6 +101,8 @@ module T = struct
   external null_count : t -> t = "rust_expr_null_count"
   external is_null : t -> t = "rust_expr_is_null"
   external is_not_null : t -> t = "rust_expr_is_not_null"
+  external is_nan : t -> t = "rust_expr_is_nan"
+  external is_not_nan : t -> t = "rust_expr_is_not_nan"
   external fill_null : t -> with_:t -> t = "rust_expr_fill_null"
 
   external fill_null'
