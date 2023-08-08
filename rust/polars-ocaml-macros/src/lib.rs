@@ -184,20 +184,12 @@ pub fn ocaml_interop_backtrace_support(_item: TokenStream) -> TokenStream {
             ::ocaml_interop::OCaml::unit()
         }
 
-        // `raise_ocaml_exception_from_panic` allocates an OCaml string, so this
-        //  function is not safe to call when the OCaml runtime lock is not held.
-        pub unsafe fn raise_ocaml_exception_from_panic(
-            cause: Box<dyn ::core::any::Any + Send>
+        // `raise_ocaml_exception` allocates an OCaml string, so this function
+        // is not safe to call when the OCaml runtime lock is not held.
+        pub unsafe fn raise_ocaml_exception(
+            cause: String
         ) -> ! {
             let error_message = {
-                let cause = if let Some(cause) = cause.downcast_ref::<&str>() {
-                    cause.to_string()
-                } else if let Some(cause) = cause.downcast_ref::<String>() {
-                    cause.to_string()
-                } else {
-                    format!("{:?}", cause)
-                };
-
                 let last_backtrace = LAST_BACKTRACE.with(|last_backtrace| last_backtrace.take());
 
                 let error_message = match last_backtrace {
@@ -228,6 +220,23 @@ pub fn ocaml_interop_backtrace_support(_item: TokenStream) -> TokenStream {
             }
 
             unreachable!("caml_failwith should never return")
+        }
+
+        pub unsafe fn raise_ocaml_exception_from_panic(
+            cause: Box<dyn ::core::any::Any + Send>
+        ) -> ! {
+            let error_message =
+                if let Some(cause) = cause.downcast_ref::<&str>() {
+                    cause.to_string()
+                } else if let Some(cause) = cause.downcast_ref::<String>() {
+                    cause.to_string()
+                } else {
+                    format!("{:?}", cause)
+                };
+
+            drop(cause);
+
+            raise_ocaml_exception(error_message)
         }
     };
 
