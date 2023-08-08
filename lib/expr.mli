@@ -4,9 +4,6 @@ type t
 
 (** [col] and [cols] return column(s) in a dataframe:
     {@ocaml[
-      # open Core;;
-      # open Polars;;
-      # #install_printer Data_frame.pp
       # let df =
           Data_frame.create_exn
             Series.

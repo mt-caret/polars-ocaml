@@ -39,7 +39,8 @@
 
 (mdx
  (files :standard - *.mli)
- (libraries core polars))
+ (libraries core polars)
+ (preludes mdx_prelude/mdx_prelude.txt))
 
 (env
  (utop
