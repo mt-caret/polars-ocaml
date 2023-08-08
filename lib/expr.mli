@@ -2,7 +2,7 @@ open! Core
 
 type t
 
-(** [col] and [cols] return column(s) in a dataframe:
+(** [col] return column(s) in a dataframe:
     {@ocaml[
       # let df =
           Data_frame.create_exn
@@ -75,8 +75,48 @@ type t
     ]} *)
 val col : string -> t
 
+(** Use [cols] to specify multiple columns at once:
+    {@ocaml[
+      # Data_frame.select_exn df ~exprs:Expr.[ cols [ "hamburger"; "foo" ] ]
+      - : Data_frame.t =
+      shape: (3, 2)
+      ┌───────────┬─────┐
+      │ hamburger ┆ foo │
+      │ ---       ┆ --- │
+      │ i64       ┆ i64 │
+      ╞═══════════╪═════╡
+      │ 11        ┆ 3   │
+      │ 22        ┆ 2   │
+      │ 33        ┆ 1   │
+      └───────────┴─────┘
+    ]} *)
 val cols : string list -> t
+
+(** [all] selects all columns in the dataframe:
+
+    {@ocaml[
+      # let df =
+          Data_frame.create_exn
+            Series.
+              [ bool "a" [ true; false; true ]
+              ; bool "b" [ false; false; false ]
+              ]
+            ;;
+      ...
+
+      # Data_frame.select_exn df ~exprs:Expr.[ all () |> sum ]
+      - : Data_frame.t =
+      shape: (1, 2)
+      ┌─────┬─────┐
+      │ a   ┆ b   │
+      │ --- ┆ --- │
+      │ u32 ┆ u32 │
+      ╞═════╪═════╡
+      │ 2   ┆ 0   │
+      └─────┴─────┘
+    ]} *)
 val all : unit -> t
+
 val exclude : t -> names:string list -> t
 val element : unit -> t
 val cast : ?strict:bool -> t -> to_:Data_type.t -> t
