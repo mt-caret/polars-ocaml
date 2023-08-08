@@ -1407,7 +1407,7 @@ let%expect_test "Lists and Arrays" =
       (element ()
        |> rank ~descending:true
        |> (* Division by default doesn't convert into floats so an explicit
-          cast is required. *)
+             cast is required. *)
        cast ~to_:Float64)
       / (col "*" |> count)
       |> round ~decimals:2)

@@ -20,12 +20,12 @@ let%expect_test "check serializations" =
     ; Date
     ]
     @ List.map Data_type.Time_unit.all ~f:(fun time_unit ->
-        Data_type.Datetime (time_unit, None))
+      Data_type.Datetime (time_unit, None))
     @ List.map Data_type.Time_unit.all ~f:(fun time_unit -> Data_type.Duration time_unit)
     @ [ Time; List Boolean; Null; Unknown ]
     |> List.map ~f:(fun data_type ->
-         let name = [%sexp_of: Data_type.t] data_type |> Sexp.to_string in
-         name, data_type)
+      let name = [%sexp_of: Data_type.t] data_type |> Sexp.to_string in
+      name, data_type)
   in
   Schema.create some_fields |> [%sexp_of: Schema.t] |> print_s;
   [%expect

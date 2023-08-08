@@ -66,7 +66,7 @@ external columns
   :  t
   -> names:string list
   -> (Series.t list, string) result
-  = "rust_data_frame_column"
+  = "rust_data_frame_columns"
 
 let columns_exn t ~names =
   columns t ~names |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
