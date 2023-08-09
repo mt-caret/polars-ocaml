@@ -84,7 +84,7 @@ fn ocaml_interop_export_implementation(item_fn: syn::ItemFn) -> TokenStream2 {
                 }
             }) {
                 Ok(value) => value,
-                Err(cause) =>
+                Err(cause) => {
                     // This is only safe if the runtime lock is held, which
                     // *won't* be the case if any Rust code panics while we have
                     // given up the runtime lock. I think when we start adding
@@ -94,7 +94,13 @@ fn ocaml_interop_export_implementation(item_fn: syn::ItemFn) -> TokenStream2 {
                     // keep track of this[1]).
                     //
                     // [1]: https://github.com/ocaml/ocaml/issues/5299
-                    unsafe { raise_ocaml_exception_from_panic(cause) },
+                    //
+                    // After further discussion, I think this is safe (as long
+                    // as we use OCamlRuntime::releasing_runtime) since the lock
+                    // should almost always be re-acquired on the event of a panic.
+                    let cr = unsafe { &mut ::ocaml_interop::OCamlRuntime::recover_handle() };
+                    unsafe { raise_ocaml_exception_from_panic(cr, cause) }
+                },
             }
         }
     };
@@ -184,9 +190,12 @@ pub fn ocaml_interop_backtrace_support(_item: TokenStream) -> TokenStream {
             ::ocaml_interop::OCaml::unit()
         }
 
-        // `raise_ocaml_exception` allocates an OCaml string, so this function
-        // is not safe to call when the OCaml runtime lock is not held.
+        // Note that OCaml exceptions will jump directly back into OCaml code
+        // without unwinding Rust code, so you *must* ensure that you don't have
+        // any un-dropped (non-OCaml) Rust values around when you call this
+        // function (or drop() will never be called for them).
         pub unsafe fn raise_ocaml_exception(
+            cr: &mut &mut ::ocaml_interop::OCamlRuntime,
             cause: String
         ) -> ! {
             let error_message = {
@@ -199,19 +208,12 @@ pub fn ocaml_interop_backtrace_support(_item: TokenStream) -> TokenStream {
                     }
                 };
 
-                // Below three lines are in essence an OCaml string allocation,
-                // and why this function is unsafe to call when the OCaml
-                // runtime lock is not held.
-                let cr = unsafe { &mut ::ocaml_interop::OCamlRuntime::recover_handle() };
                 let error_message: OCaml<String> = error_message.to_ocaml(cr);
                 unsafe { error_message.raw() }
             };
 
-            // Since OCaml exceptions directly jump back into OCaml code without
-            // unwinding the stack, we need to make sure that we don't have any
-            // un-dropped Rust values around (like `cause`), since they will leak.
-            //
-            // `error_message` is fine, since it's an OCaml value which will be
+            // We need to drop `cause`, but `error_message` is fine, since it's
+            // an OCaml value which will be
             // garbage-collected by the OCaml runtime.
             drop(cause);
 
@@ -223,6 +225,7 @@ pub fn ocaml_interop_backtrace_support(_item: TokenStream) -> TokenStream {
         }
 
         pub unsafe fn raise_ocaml_exception_from_panic(
+            cr: &mut &mut ::ocaml_interop::OCamlRuntime,
             cause: Box<dyn ::core::any::Any + Send>
         ) -> ! {
             let error_message =
@@ -236,7 +239,7 @@ pub fn ocaml_interop_backtrace_support(_item: TokenStream) -> TokenStream {
 
             drop(cause);
 
-            raise_ocaml_exception(error_message)
+            raise_ocaml_exception(cr, error_message)
         }
     };
 
@@ -292,7 +295,10 @@ mod tests {
                     }
                 }) {
                     Ok(value) => value,
-                    Err(cause) => unsafe { raise_ocaml_exception_from_panic(cause) }
+                    Err(cause) => {
+                        let cr = unsafe { &mut ::ocaml_interop::OCamlRuntime::recover_handle() };
+                        unsafe { raise_ocaml_exception_from_panic(cr, cause) }
+                    }
                 }
             }
         "##]]
@@ -367,7 +373,10 @@ mod tests {
                     }
                 }) {
                     Ok(value) => value,
-                    Err(cause) => unsafe { raise_ocaml_exception_from_panic(cause) }
+                    Err(cause) => {
+                        let cr = unsafe { &mut ::ocaml_interop::OCamlRuntime::recover_handle() };
+                        unsafe { raise_ocaml_exception_from_panic(cr, cause) }
+                    }
                 }
             }
             #[no_mangle]
