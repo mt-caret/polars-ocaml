@@ -106,6 +106,13 @@ module Dt : sig
   val year : t -> t
   val month : t -> t
   val day : t -> t
+  val days : t -> t
+  val hours : t -> t
+  val minutes : t -> t
+  val seconds : t -> t
+  val milliseconds : t -> t
+  val microseconds : t -> t
+  val nanoseconds : t -> t
 end
 
 module Str : sig

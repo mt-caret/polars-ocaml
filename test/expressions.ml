@@ -356,7 +356,7 @@ let%expect_test "Casting" =
             "date"
             ~start:(Date.of_string "2022-01-01")
             ~stop:(Date.of_string "2022-01-05")
-        ; datetime_range_exn
+        ; datetime_range_exn'
             "datetime"
             ~start:(Date.of_string "2022-01-01")
             ~stop:(Date.of_string "2022-01-05")

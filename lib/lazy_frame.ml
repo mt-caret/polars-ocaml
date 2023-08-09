@@ -43,6 +43,74 @@ external groupby
 
 let groupby ?(is_stable = false) t ~by ~agg = groupby t ~is_stable ~by ~agg
 
+external groupby_dynamic
+  :  t
+  -> index_column:Expr.t
+  -> by:Expr.t list
+  -> every:string option
+  -> period:string option
+  -> offset:string option
+  -> truncate:bool option
+  -> include_boundaries:bool option
+  -> closed_window:[ `Left | `Right | `Both | `None_ ] option
+  -> start_by:
+       [ `Window_bound
+       | `Data_point
+       | `Monday
+       | `Tuesday
+       | `Wednesday
+       | `Thursday
+       | `Friday
+       | `Saturday
+       | `Sunday
+       ]
+       option
+  -> check_sorted:bool option
+  -> agg:Expr.t list
+  -> t
+  = "rust_lazy_frame_groupby_dynamic_bytecode" "rust_lazy_frame_groupby_dynamic"
+
+let groupby_dynamic
+  ?every
+  ?period
+  ?offset
+  ?truncate
+  ?include_boundaries
+  ?closed_window
+  ?start_by
+  ?check_sorted
+  t
+  ~index_column
+  ~by
+  ~agg
+  =
+  (* Following the logic of:
+    https://github.com/pola-rs/polars/blob/a8489558008652fe06e182dbdf082e8d9f0159ab/py-polars/polars/lazyframe/frame.py#L2327
+  *)
+  let offset =
+    Option.value
+      offset
+      ~default:
+        (match period with
+         | None -> "-" ^ Option.value_exn every
+         | Some _ -> "0ns")
+  in
+  let period = Option.value period ~default:(Option.value_exn every) in
+  groupby_dynamic
+    t
+    ~index_column
+    ~by
+    ~every
+    ~period:(Some period)
+    ~offset:(Some offset)
+    ~truncate
+    ~include_boundaries
+    ~closed_window
+    ~start_by
+    ~check_sorted
+    ~agg
+;;
+
 external join_
   :  t
   -> other:t

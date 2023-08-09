@@ -204,6 +204,13 @@ module Dt = struct
   external year : t -> t = "rust_expr_dt_year"
   external month : t -> t = "rust_expr_dt_month"
   external day : t -> t = "rust_expr_dt_day"
+  external days : t -> t = "rust_expr_dt_days"
+  external hours : t -> t = "rust_expr_dt_hours"
+  external minutes : t -> t = "rust_expr_dt_minutes"
+  external seconds : t -> t = "rust_expr_dt_seconds"
+  external milliseconds : t -> t = "rust_expr_dt_milliseconds"
+  external microseconds : t -> t = "rust_expr_dt_microseconds"
+  external nanoseconds : t -> t = "rust_expr_dt_nanoseconds"
 end
 
 module Str = struct

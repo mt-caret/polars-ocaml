@@ -151,11 +151,22 @@ ocaml_export! {
         data_frame.melt2(melt_args).map(Abstract).map_err(|err| err.to_string()).to_ocaml(cr)
     }
 
+    fn rust_data_frame_sort(cr, data_frame: OCamlRef<DynBox<DataFrame>>, by_column: OCamlRef<OCamlList<String>>, descending: OCamlRef<OCamlList<bool>>, maintain_order: OCamlRef<bool>) -> OCaml<Result<DynBox<DataFrame>,String>> {
+        let Abstract(data_frame) = data_frame.to_rust(cr);
+        let by_column: Vec<String> = by_column.to_rust(cr);
+        let descending: Vec<bool> = descending.to_rust(cr);
+        let maintain_order: bool = maintain_order.to_rust(cr);
+
+        data_frame.sort(&by_column, descending, maintain_order)
+        .map(Abstract).map_err(|err| err.to_string()).to_ocaml(cr)
+    }
+
     fn rust_data_frame_head(
         cr,
         data_frame: OCamlRef<DynBox<DataFrame>>,
         length: OCamlRef<Option<OCamlInt>>
     ) -> OCaml<DynBox<DataFrame>> {
+
         let Abstract(data_frame) = data_frame.to_rust(cr);
         let length = length.to_rust::<Coerce<_, Option<i64>, Option<usize>>>(cr).get();
 

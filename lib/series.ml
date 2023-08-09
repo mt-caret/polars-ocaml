@@ -41,32 +41,57 @@ module T = struct
     :  string
     -> Common.Naive_datetime.t
     -> Common.Naive_datetime.t
+    -> every:string option
     -> cast_to_date:bool
     -> (t, string) result
     = "rust_series_date_range"
 
-  let date_range_castable name ~start ~stop ~cast_to_date =
-    date_range
+  let date_range_castable ?every name ~start ~stop ~cast_to_date =
+    date_range name start stop ~every ~cast_to_date
+  ;;
+
+  let date_range ?every name ~start ~stop =
+    date_range_castable
+      ?every
       name
-      (Common.Naive_datetime.of_date start)
-      (Common.Naive_datetime.of_date stop)
-      ~cast_to_date
+      ~start:(Common.Naive_datetime.of_date start)
+      ~stop:(Common.Naive_datetime.of_date stop)
+      ~cast_to_date:true
   ;;
 
-  let date_range = date_range_castable ~cast_to_date:true
-
-  let date_range_exn name ~start ~stop =
-    date_range name ~start ~stop |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
-  ;;
-
-  let datetime_range = date_range_castable ~cast_to_date:false
-
-  let datetime_range_exn name ~start ~stop =
-    datetime_range name ~start ~stop
+  let date_range_exn ?every name ~start ~stop =
+    date_range ?every name ~start ~stop
     |> Result.map_error ~f:Error.of_string
     |> Or_error.ok_exn
   ;;
 
+  let datetime_range ?every name ~start ~stop =
+    date_range_castable ?every name ~start ~stop ~cast_to_date:false
+  ;;
+
+  let datetime_range_exn ?every name ~start ~stop =
+    datetime_range ?every name ~start ~stop
+    |> Result.map_error ~f:Error.of_string
+    |> Or_error.ok_exn
+  ;;
+
+  let datetime_range' ?every name ~start ~stop =
+    date_range_castable
+      ?every
+      name
+      ~start:(Common.Naive_datetime.of_date start)
+      ~stop:(Common.Naive_datetime.of_date stop)
+      ~cast_to_date:false
+  ;;
+
+  let datetime_range_exn' ?every name ~start ~stop =
+    datetime_range' ?every name ~start ~stop
+    |> Result.map_error ~f:Error.of_string
+    |> Or_error.ok_exn
+  ;;
+
+  external rename : t -> name:string -> t = "rust_series_rename"
+  external to_data_frame : t -> Data_frame0.t = "rust_series_to_data_frame"
   external sort : t -> descending:bool -> t = "rust_series_sort"
 
   let sort ?(descending = false) t = sort t ~descending

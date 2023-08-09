@@ -22,6 +22,57 @@ val groupby
   -> (t, string) result
 
 val groupby_exn : ?is_stable:bool -> t -> by:Expr.t list -> agg:Expr.t list -> t
+
+val groupby_dynamic
+  :  ?every:string
+  -> ?period:string
+  -> ?offset:string
+  -> ?truncate:bool
+  -> ?include_boundaries:bool
+  -> ?closed_window:[ `Both | `Left | `None_ | `Right ]
+  -> ?start_by:
+       [ `Data_point
+       | `Friday
+       | `Monday
+       | `Saturday
+       | `Sunday
+       | `Thursday
+       | `Tuesday
+       | `Wednesday
+       | `Window_bound
+       ]
+  -> ?check_sorted:bool
+  -> t
+  -> index_column:Expr.t
+  -> by:Expr.t list
+  -> agg:Expr.t list
+  -> (t, string) result
+
+val groupby_dynamic_exn
+  :  ?every:string
+  -> ?period:string
+  -> ?offset:string
+  -> ?truncate:bool
+  -> ?include_boundaries:bool
+  -> ?closed_window:[ `Both | `Left | `None_ | `Right ]
+  -> ?start_by:
+       [ `Data_point
+       | `Friday
+       | `Monday
+       | `Saturday
+       | `Sunday
+       | `Thursday
+       | `Tuesday
+       | `Wednesday
+       | `Window_bound
+       ]
+  -> ?check_sorted:bool
+  -> t
+  -> index_column:Expr.t
+  -> by:Expr.t list
+  -> agg:Expr.t list
+  -> t
+
 val column : t -> name:string -> (Series.t, string) result
 val column_exn : t -> name:string -> Series.t
 val columns : t -> names:string list -> (Series.t list, string) result
@@ -88,6 +139,20 @@ val melt_exn
   -> t
   -> id_vars:string list
   -> value_vars:string list
+  -> t
+
+val sort
+  :  ?descending:bool list
+  -> ?maintain_order:bool
+  -> t
+  -> by_column:string list
+  -> (t, string) result
+
+val sort_exn
+  :  ?descending:bool list
+  -> ?maintain_order:bool
+  -> t
+  -> by_column:string list
   -> t
 
 val head : ?length:int -> t -> t

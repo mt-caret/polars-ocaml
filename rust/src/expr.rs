@@ -524,6 +524,48 @@ ocaml_export! {
         expr_unary_op(cr, expr, |expr| expr.dt().day())
     }
 
+    fn rust_expr_dt_days(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
+        expr_series_map(cr, expr, |series| {
+            Ok(Some(series.duration()?.days().into_series()))
+        }, GetOutput::from_type(DataType::Int64))
+    }
+
+    fn rust_expr_dt_hours(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
+        expr_series_map(cr, expr, |series| {
+            Ok(Some(series.duration()?.hours().into_series()))
+        }, GetOutput::from_type(DataType::Int64))
+    }
+
+    fn rust_expr_dt_minutes(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
+        expr_series_map(cr, expr, |series| {
+            Ok(Some(series.duration()?.minutes().into_series()))
+        }, GetOutput::from_type(DataType::Int64))
+    }
+
+    fn rust_expr_dt_seconds(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
+        expr_series_map(cr, expr, |series| {
+            Ok(Some(series.duration()?.seconds().into_series()))
+        }, GetOutput::from_type(DataType::Int64))
+    }
+
+    fn rust_expr_dt_milliseconds(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
+        expr_series_map(cr, expr, |series| {
+            Ok(Some(series.duration()?.milliseconds().into_series()))
+        }, GetOutput::from_type(DataType::Int64))
+    }
+
+    fn rust_expr_dt_microseconds(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
+        expr_series_map(cr, expr, |series| {
+            Ok(Some(series.duration()?.microseconds().into_series()))
+        }, GetOutput::from_type(DataType::Int64))
+    }
+
+    fn rust_expr_dt_nanoseconds(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
+        expr_series_map(cr, expr, |series| {
+            Ok(Some(series.duration()?.nanoseconds().into_series()))
+        }, GetOutput::from_type(DataType::Int64))
+    }
+
     fn rust_expr_str_split(cr, expr: OCamlRef<DynBox<Expr>>, by: OCamlRef<String>, inclusive: OCamlRef<bool>) -> OCaml<DynBox<Expr>> {
         let by: String = by.to_rust(cr);
         let inclusive = inclusive.to_rust(cr);

@@ -30,6 +30,7 @@ features = [
     "dtype-i8",
     "dtype-u16",
     "dtype-u8",
+    "dynamic_groupby",
     "horizontal_concat",
     "interpolate",
     "lazy",
