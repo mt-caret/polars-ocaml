@@ -33,3 +33,29 @@ type t =
 [@@deriving sexp]
 
 include Stringable.S with type t := t
+
+module Typed : sig
+    type untyped
+
+    type _ t =
+      | Boolean : bool t
+      | UInt8 : int t
+      | UInt16 : int t
+      | UInt32 : int t
+      | UInt64 : int t
+      | Int8 : int t
+      | Int16 : int t
+      | Int32 : int t
+      | Int64 : int t
+      | Float32 : float t
+      | Float64 : float t
+      | Utf8 : string t
+      | Binary : string t
+      | List : 'a t -> 'a list t
+
+    type packed = T : 'a t -> packed
+
+    val to_untyped : 'a t -> untyped
+    val of_untyped : untyped -> packed option
+  end
+  with type untyped := t
