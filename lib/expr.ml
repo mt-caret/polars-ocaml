@@ -30,7 +30,11 @@ module T = struct
 
   let sort_by ?(descending = false) t ~by = sort_by t ~descending ~by
 
-  external set_sorted_flag : t -> sorted:Series.IsSorted.t -> t = "rust_expr_set_sorted_flag"
+  external set_sorted_flag
+    :  t
+    -> sorted:[ `Ascending | `Descending | `Not ]
+    -> t
+    = "rust_expr_set_sorted_flag"
 
   external first : t -> t = "rust_expr_first"
   external last : t -> t = "rust_expr_last"

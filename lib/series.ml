@@ -71,13 +71,6 @@ module T = struct
 
   let sort ?(descending = false) t = sort t ~descending
 
-  module IsSorted = struct
-      type t =
-        | Ascending
-        | Descending
-        | Not
-  end
-
   external head : t -> length:int option -> t = "rust_series_head"
 
   let head ?length t = head t ~length

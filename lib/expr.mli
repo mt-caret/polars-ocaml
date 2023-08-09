@@ -18,7 +18,7 @@ val naive_datetime : Common.Naive_datetime.t -> t
 val series : Series.t -> t
 val sort : ?descending:bool -> t -> t
 val sort_by : ?descending:bool -> t -> by:t list -> t
-val set_sorted_flag : t -> sorted:Series.IsSorted.t -> t
+val set_sorted_flag : t -> sorted:[ `Ascending | `Descending | `Not ] -> t
 val first : t -> t
 val last : t -> t
 val reverse : t -> t
