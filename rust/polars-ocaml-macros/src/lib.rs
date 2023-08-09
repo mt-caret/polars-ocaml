@@ -11,7 +11,11 @@ use syn::{parse::Parser, parse_macro_input, punctuated::Punctuated};
 // for arguments or OCamlRef<_> for return types, which should never happen.
 // In these cases, the macro should probably point out this issue and suggest
 // what to do (use the other type).
-fn ocaml_interop_export_implementation(item_fn: syn::ItemFn, is_fallible: bool) -> TokenStream2 {
+
+// When `raise_on_err` is true, the macro will expect the function to return
+// `Result<OCaml<_>, String>` and will raise an OCaml exception if the function
+// returns an error.
+fn ocaml_interop_export_implementation(item_fn: syn::ItemFn, raise_on_err: bool) -> TokenStream2 {
     let mut inputs_iter = item_fn.sig.inputs.iter().map(|fn_arg| match fn_arg {
         syn::FnArg::Receiver(_) => panic!("receiver not supported"),
         syn::FnArg::Typed(pat_type) => pat_type.clone(),
@@ -69,7 +73,7 @@ fn ocaml_interop_export_implementation(item_fn: syn::ItemFn, is_fallible: bool) 
     };
     let block = item_fn.block.clone();
 
-    let native_function = if !is_fallible {
+    let native_function = if !raise_on_err {
         quote! {
             #[no_mangle]
             pub extern "C" #signature {
@@ -183,7 +187,7 @@ pub fn ocaml_interop_export(args: TokenStream, annotated_item: TokenStream) -> T
 
     let expanded = match &args[..] {
         [] => ocaml_interop_export_implementation(item_fn, false),
-        [arg] if arg == "fallible" => ocaml_interop_export_implementation(item_fn, true),
+        [arg] if arg == "raise_on_err" => ocaml_interop_export_implementation(item_fn, true),
         _ => panic!("unexpected arguments to ocaml_interop_export: {:?}", args),
     };
 
@@ -297,9 +301,9 @@ mod tests {
         prettyplease::unparse(&file)
     }
 
-    fn apply_macro_and_pretty_print(input: TokenStream2, is_fallible: bool) -> String {
+    fn apply_macro_and_pretty_print(input: TokenStream2, raise_on_err: bool) -> String {
         let item_fn = syn::parse2(input).unwrap();
-        let expanded = ocaml_interop_export_implementation(item_fn, is_fallible);
+        let expanded = ocaml_interop_export_implementation(item_fn, raise_on_err);
         pretty_print_item(&expanded)
     }
 

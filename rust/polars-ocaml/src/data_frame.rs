@@ -415,7 +415,7 @@ fn rust_data_frame_sort(
         .to_ocaml(cr)
 }
 
-#[ocaml_interop_export(fallible)]
+#[ocaml_interop_export(raise_on_err)]
 fn rust_data_frame_head(
     cr: &mut &mut OCamlRuntime,
     data_frame: OCamlRef<DynBox<DataFrame>>,
@@ -429,7 +429,7 @@ fn rust_data_frame_head(
     Abstract(data_frame.head(length)).to_ocaml(cr)
 }
 
-#[ocaml_interop_export(fallible)]
+#[ocaml_interop_export(raise_on_err)]
 fn rust_data_frame_tail(
     cr: &mut &mut OCamlRuntime,
     data_frame: OCamlRef<DynBox<DataFrame>>,
@@ -443,7 +443,7 @@ fn rust_data_frame_tail(
     Abstract(data_frame.tail(length)).to_ocaml(cr)
 }
 
-#[ocaml_interop_export(fallible)]
+#[ocaml_interop_export(raise_on_err)]
 fn rust_data_frame_sample_n(
     cr: &mut &mut OCamlRuntime,
     data_frame: OCamlRef<DynBox<DataFrame>>,

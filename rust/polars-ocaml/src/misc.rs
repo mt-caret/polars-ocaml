@@ -5,7 +5,7 @@ use ocaml_interop::{DynBox, OCaml, OCamlInt, OCamlList, OCamlRef, ToOCaml};
 use polars::prelude::*;
 use polars_ocaml_macros::ocaml_interop_export;
 
-#[ocaml_interop_export(fallible)]
+#[ocaml_interop_export(raise_on_err)]
 fn rust_naive_date(
     cr: &mut &mut OCamlRuntime,
     year: OCamlRef<OCamlInt>,
@@ -21,7 +21,7 @@ fn rust_naive_date(
         .to_ocaml(cr)
 }
 
-#[ocaml_interop_export(fallible)]
+#[ocaml_interop_export(raise_on_err)]
 fn rust_naive_date_to_naive_datetime(
     cr: &mut &mut OCamlRuntime,
     date: OCamlRef<DynBox<NaiveDate>>,

@@ -112,7 +112,7 @@ fn rust_lazy_frame_collect_all(
         .to_ocaml(cr)
 }
 
-#[ocaml_interop_export(fallible)]
+#[ocaml_interop_export(raise_on_err)]
 fn rust_lazy_frame_fetch(
     cr: &mut &mut OCamlRuntime,
     lazy_frame: OCamlRef<DynBox<LazyFrame>>,
@@ -376,7 +376,7 @@ fn rust_lazy_frame_melt(
     Abstract(lazy_frame.melt(melt_args)).to_ocaml(cr)
 }
 
-#[ocaml_interop_export(fallible)]
+#[ocaml_interop_export(raise_on_err)]
 fn rust_lazy_frame_limit(
     cr: &mut &mut OCamlRuntime,
     lazy_frame: OCamlRef<DynBox<LazyFrame>>,

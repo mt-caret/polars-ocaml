@@ -251,7 +251,7 @@ fn rust_series_sort(
     OCaml::box_value(cr, series.sort(descending))
 }
 
-#[ocaml_interop_export(fallible)]
+#[ocaml_interop_export(raise_on_err)]
 fn rust_series_head(
     cr: &mut &mut OCamlRuntime,
     series: OCamlRef<DynBox<Series>>,
@@ -265,7 +265,7 @@ fn rust_series_head(
     Abstract(series.head(length)).to_ocaml(cr)
 }
 
-#[ocaml_interop_export(fallible)]
+#[ocaml_interop_export(raise_on_err)]
 fn rust_series_tail(
     cr: &mut &mut OCamlRuntime,
     series: OCamlRef<DynBox<Series>>,
@@ -279,7 +279,7 @@ fn rust_series_tail(
     Abstract(series.tail(length)).to_ocaml(cr)
 }
 
-#[ocaml_interop_export(fallible)]
+#[ocaml_interop_export(raise_on_err)]
 fn rust_series_sample_n(
     cr: &mut &mut OCamlRuntime,
     series: OCamlRef<DynBox<Series>>,
