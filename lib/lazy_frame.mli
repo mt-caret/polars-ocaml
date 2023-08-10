@@ -12,6 +12,7 @@ val explain : ?optimized:bool -> t -> (string, string) result
 val explain_exn : ?optimized:bool -> t -> string
 val to_dot : ?optimized:bool -> t -> (string, string) result
 val to_dot_exn : ?optimized:bool -> t -> string
+val cache : t -> t
 val collect : ?streaming:bool -> t -> (Data_frame0.t, string) result
 val collect_exn : ?streaming:bool -> t -> Data_frame0.t
 val collect_all : t list -> (Data_frame0.t list, string) result

@@ -4,6 +4,7 @@ use ocaml_interop::{
 };
 use polars::lazy::dsl::GetOutput;
 use polars::prelude::*;
+use polars::series::IsSorted;
 use polars_ocaml_macros::ocaml_interop_export;
 
 use crate::utils::PolarsDataType;
@@ -137,6 +138,15 @@ fn rust_expr_naive_datetime(
 }
 
 #[ocaml_interop_export]
+fn rust_expr_series(
+    cr: &mut &mut OCamlRuntime,
+    series: OCamlRef<DynBox<Series>>,
+) -> OCaml<DynBox<Expr>> {
+    let Abstract(series) = series.to_rust(cr);
+    OCaml::box_value(cr, lit(series))
+}
+
+#[ocaml_interop_export]
 fn rust_expr_cast(
     cr: &mut &mut OCamlRuntime,
     expr: OCamlRef<DynBox<Expr>>,
@@ -175,6 +185,16 @@ fn rust_expr_sort_by(
     let descending: bool = descending.to_rust(cr);
     let descending = vec![descending; by.len()];
     expr_unary_op(cr, expr, |expr| expr.sort_by(by, descending))
+}
+
+#[ocaml_interop_export]
+fn rust_expr_set_sorted_flag(
+    cr: &mut &mut OCamlRuntime,
+    expr: OCamlRef<DynBox<Expr>>,
+    is_sorted: OCamlRef<IsSorted>,
+) -> OCaml<DynBox<Expr>> {
+    let PolarsIsSorted(is_sorted) = is_sorted.to_rust(cr);
+    expr_unary_op(cr, expr, |expr| expr.set_sorted_flag(is_sorted))
 }
 
 #[ocaml_interop_export]
@@ -233,6 +253,15 @@ fn rust_expr_tail(
     Abstract(expr.tail(length)).to_ocaml(cr)
 }
 
+#[ocaml_interop_export]
+fn rust_expr_take(
+    cr: &mut &mut OCamlRuntime,
+    expr: OCamlRef<DynBox<Expr>>,
+    idx: OCamlRef<DynBox<Expr>>,
+) -> OCaml<DynBox<Expr>> {
+    expr_binary_op(cr, expr, idx, |a, b| a.take(b))
+}
+
 #[ocaml_interop_export(raise_on_err)]
 fn rust_expr_sample_n(
     cr: &mut &mut OCamlRuntime,
@@ -267,6 +296,59 @@ fn rust_expr_filter(
 }
 
 #[ocaml_interop_export]
+fn rust_expr_ceil(cr: &mut &mut OCamlRuntime, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
+    expr_unary_op(cr, expr, |expr| expr.ceil())
+}
+
+#[ocaml_interop_export]
+fn rust_expr_floor(
+    cr: &mut &mut OCamlRuntime,
+    expr: OCamlRef<DynBox<Expr>>,
+) -> OCaml<DynBox<Expr>> {
+    expr_unary_op(cr, expr, |expr| expr.floor())
+}
+
+#[ocaml_interop_export]
+fn rust_expr_clip_min_float(
+    cr: &mut &mut OCamlRuntime,
+    expr: OCamlRef<DynBox<Expr>>,
+    min: OCamlRef<OCamlFloat>,
+) -> OCaml<DynBox<Expr>> {
+    let min: f64 = min.to_rust(cr);
+    expr_unary_op(cr, expr, |expr| expr.clip_min(AnyValue::Float64(min)))
+}
+
+#[ocaml_interop_export]
+fn rust_expr_clip_max_float(
+    cr: &mut &mut OCamlRuntime,
+    expr: OCamlRef<DynBox<Expr>>,
+    max: OCamlRef<OCamlFloat>,
+) -> OCaml<DynBox<Expr>> {
+    let max: f64 = max.to_rust(cr);
+    expr_unary_op(cr, expr, |expr| expr.clip_max(AnyValue::Float64(max)))
+}
+
+#[ocaml_interop_export]
+fn rust_expr_clip_min_int(
+    cr: &mut &mut OCamlRuntime,
+    expr: OCamlRef<DynBox<Expr>>,
+    min: OCamlRef<OCamlInt>,
+) -> OCaml<DynBox<Expr>> {
+    let min: i64 = min.to_rust(cr);
+    expr_unary_op(cr, expr, |expr| expr.clip_min(AnyValue::Int64(min)))
+}
+
+#[ocaml_interop_export]
+fn rust_expr_clip_max_int(
+    cr: &mut &mut OCamlRuntime,
+    expr: OCamlRef<DynBox<Expr>>,
+    max: OCamlRef<OCamlInt>,
+) -> OCaml<DynBox<Expr>> {
+    let max: i64 = max.to_rust(cr);
+    expr_unary_op(cr, expr, |expr| expr.clip_max(AnyValue::Int64(max)))
+}
+
+#[ocaml_interop_export]
 fn rust_expr_sum(cr: &mut &mut OCamlRuntime, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
     expr_unary_op(cr, expr, |expr| expr.sum())
 }
@@ -292,6 +374,22 @@ fn rust_expr_max(cr: &mut &mut OCamlRuntime, expr: OCamlRef<DynBox<Expr>>) -> OC
 #[ocaml_interop_export]
 fn rust_expr_min(cr: &mut &mut OCamlRuntime, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
     expr_unary_op(cr, expr, |expr| expr.min())
+}
+
+#[ocaml_interop_export]
+fn rust_expr_arg_max(
+    cr: &mut &mut OCamlRuntime,
+    expr: OCamlRef<DynBox<Expr>>,
+) -> OCaml<DynBox<Expr>> {
+    expr_unary_op(cr, expr, |expr| expr.arg_max())
+}
+
+#[ocaml_interop_export]
+fn rust_expr_arg_min(
+    cr: &mut &mut OCamlRuntime,
+    expr: OCamlRef<DynBox<Expr>>,
+) -> OCaml<DynBox<Expr>> {
+    expr_unary_op(cr, expr, |expr| expr.arg_min())
 }
 
 #[ocaml_interop_export]
@@ -385,6 +483,22 @@ fn rust_expr_is_not_null(
     expr: OCamlRef<DynBox<Expr>>,
 ) -> OCaml<DynBox<Expr>> {
     expr_unary_op(cr, expr, |expr| expr.is_not_null())
+}
+
+#[ocaml_interop_export]
+fn rust_expr_is_nan(
+    cr: &mut &mut OCamlRuntime,
+    expr: OCamlRef<DynBox<Expr>>,
+) -> OCaml<DynBox<Expr>> {
+    expr_unary_op(cr, expr, |expr| expr.is_nan())
+}
+
+#[ocaml_interop_export]
+fn rust_expr_is_not_nan(
+    cr: &mut &mut OCamlRuntime,
+    expr: OCamlRef<DynBox<Expr>>,
+) -> OCaml<DynBox<Expr>> {
+    expr_unary_op(cr, expr, |expr| expr.is_not_nan())
 }
 
 #[ocaml_interop_export]

@@ -44,6 +44,8 @@ let to_dot_exn ?optimized t =
   to_dot ?optimized t |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
 ;;
 
+external cache : t -> t = "rust_lazy_frame_cache"
+
 external collect
   :  t
   -> streaming:bool
