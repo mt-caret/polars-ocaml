@@ -3,6 +3,7 @@ use ocaml_interop::{
     ocaml_unpack_polymorphic_variant, ocaml_unpack_variant, polymorphic_variant_tag_hash, DynBox,
     FromOCaml, OCaml, OCamlInt, OCamlList, OCamlRuntime, ToOCaml,
 };
+use polars::series::IsSorted;
 use polars::{lazy::dsl::WindowMapping, prelude::*};
 use smartstring::{LazyCompact, SmartString};
 use std::any::type_name;
@@ -131,16 +132,16 @@ unsafe impl ToOCaml<DataType> for PolarsDataType {
                 DataType::Datetime(timeunit, timezone) => {
                     let timeunit = PolarsTimeUnit(*timeunit);
                     let timezone = timezone.clone();
-                    ocaml_alloc_tagged_block!(cr, 0, timeunit : TimeUnit, timezone: Option<String>)
+                    ocaml_alloc_tagged_block!(cr, 0, timeunit: TimeUnit, timezone: Option<String>)
                 }
                 DataType::Duration(timeunit) => {
                     let timeunit = PolarsTimeUnit(*timeunit);
-                    ocaml_alloc_tagged_block!(cr, 1,  timeunit: TimeUnit)
+                    ocaml_alloc_tagged_block!(cr, 1, timeunit: TimeUnit)
                 }
                 DataType::Time => ocaml_value(cr, 14),
                 DataType::List(datatype) => {
                     let datatype = PolarsDataType(*datatype.clone());
-                    ocaml_alloc_tagged_block!(cr, 2,  datatype: DataType)
+                    ocaml_alloc_tagged_block!(cr, 2, datatype: DataType)
                 }
                 DataType::Null => ocaml_value(cr, 15),
                 DataType::Struct(fields) => {
@@ -203,11 +204,11 @@ unsafe impl ToOCaml<FillNullStrategy> for PolarsFillNullStrategy {
             match fill_null_strategy {
                 FillNullStrategy::Backward(upto) => {
                     let upto = upto.map(|upto| upto as i64);
-                    ocaml_alloc_tagged_block!(cr, 0, upto : Option<OCamlInt>)
+                    ocaml_alloc_tagged_block!(cr, 0, upto: Option<OCamlInt>)
                 }
                 FillNullStrategy::Forward(upto) => {
                     let upto = upto.map(|upto| upto as i64);
-                    ocaml_alloc_tagged_block!(cr, 1, upto : Option<OCamlInt>)
+                    ocaml_alloc_tagged_block!(cr, 1, upto: Option<OCamlInt>)
                 }
                 FillNullStrategy::Mean => ocaml_value(cr, 0),
                 FillNullStrategy::Min => ocaml_value(cr, 1),
@@ -461,6 +462,21 @@ where
                 },
             },
         }
+    }
+}
+
+pub struct PolarsIsSorted(pub IsSorted);
+unsafe impl FromOCaml<IsSorted> for PolarsIsSorted {
+    fn from_ocaml(v: OCaml<IsSorted>) -> Self {
+        let result = ocaml_unpack_polymorphic_variant! {
+            v => {
+                Ascending => IsSorted::Ascending,
+                Descending => IsSorted::Descending,
+                Not => IsSorted::Not,
+            }
+        };
+
+        PolarsIsSorted(result.expect("Failure when unpacking an OCaml<IsSorted> variant into PolarsIsSorted (unexpected tag value"))
     }
 }
 

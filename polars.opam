@@ -4,15 +4,21 @@ synopsis: "OCaml bindings to the Polars dataframe library"
 description: "OCaml bindings to the Polars dataframe library"
 maintainer: ["mtakeda"]
 authors: ["mtakeda"]
-license: "LICENSE"
-tags: ["topics" "to describe" "your" "project"]
+license: "MIT"
+tags: ["data-science" "polars" "rust"]
 homepage: "https://github.com/mt-caret/polars-ocaml"
-doc: "https://url/to/documentation"
+doc: "https://github.com/mt-caret/polars-ocaml"
 bug-reports: "https://github.com/mt-caret/polars-ocaml/issues"
 depends: [
-  "ocaml"
-  "dune" {>= "3.8"}
+  "expect_test_helpers_core" {with-test}
+  "ocamlformat" {dev}
   "odoc" {with-doc}
+  "shell" {with-test}
+  "core"
+  "core_kernel"
+  "dune" {>= "3.8"}
+  "ocaml"
+  "ppx_jane"
 ]
 build: [
   ["dune" "subst"] {dev}

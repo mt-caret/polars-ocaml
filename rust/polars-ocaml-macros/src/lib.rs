@@ -4,6 +4,9 @@ use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use syn::{parse_macro_input, punctuated::Punctuated};
 
+// TODO: currently, the macro panicks all over the place which is not very nice.
+// We should instead emit compile_error! with the appropriate error messages.
+
 // TODO: a common mistake when using the attribute macro is to specify OCaml<_>
 // for arguments or OCamlRef<_> for return types, which should never happen.
 // In these cases, the macro should probably point out this issue and suggest
@@ -81,7 +84,23 @@ fn ocaml_interop_export_implementation(item_fn: syn::ItemFn) -> TokenStream2 {
                 }
             }) {
                 Ok(value) => value,
-                Err(cause) => raise_ocaml_exception_from_panic(cause),
+                Err(cause) => {
+                    // This is only safe if the runtime lock is held, which
+                    // *won't* be the case if any Rust code panics while we have
+                    // given up the runtime lock. I think when we start adding
+                    // code that does this we'll need some thread local variable
+                    // that keeps track of whether we have the runtime lock or
+                    // not (since prior to OCaml 5 there's not built-in way to
+                    // keep track of this[1]).
+                    //
+                    // [1]: https://github.com/ocaml/ocaml/issues/5299
+                    //
+                    // After further discussion, I think this is safe (as long
+                    // as we use OCamlRuntime::releasing_runtime) since the lock
+                    // should almost always be re-acquired on the event of a panic.
+                    let cr = unsafe { &mut ::ocaml_interop::OCamlRuntime::recover_handle() };
+                    unsafe { raise_ocaml_exception_from_panic(cr, cause) }
+                },
             }
         }
     };
@@ -132,6 +151,10 @@ pub fn ocaml_interop_export(_input: TokenStream, annotated_item: TokenStream) ->
     TokenStream::from(expanded)
 }
 
+// TODO: if below code ever changes, consider extracting below code into a
+// separate create and freezing the major version, as suggested in:
+// https://github.com/mt-caret/polars-ocaml/pull/35#discussion_r1285659995
+
 // `std::panic::catch_unwind` only stores the error string passed to the panic,
 // which means that we can't figure out the backtrace by the time we see the Err
 // case. So, we use `std::panic::set_hook` to store the backtrace in a thread
@@ -141,8 +164,8 @@ pub fn ocaml_interop_export(_input: TokenStream, annotated_item: TokenStream) ->
 pub fn ocaml_interop_backtrace_support(_item: TokenStream) -> TokenStream {
     let expanded = quote! {
         thread_local! {
-            static LAST_BACKTRACE: ::std::cell::RefCell<Option<::std::backtrace::Backtrace>> =
-                ::std::cell::RefCell::new(None);
+            static LAST_BACKTRACE: ::std::cell::Cell<::std::option::Option<::std::backtrace::Backtrace>> =
+                const { ::std::cell::Cell::new(::std::option::Option::None) };
         }
 
         #[::polars_ocaml_macros::ocaml_interop_export]
@@ -158,7 +181,7 @@ pub fn ocaml_interop_backtrace_support(_item: TokenStream) -> TokenStream {
             ::std::panic::set_hook(::std::boxed::Box::new(move |panic_info| {
                 let trace = ::std::backtrace::Backtrace::force_capture();
                 LAST_BACKTRACE.with(|last_backtrace| {
-                    last_backtrace.borrow_mut().replace(trace);
+                    last_backtrace.set(::std::option::Option::Some(trace));
                 });
 
                 last_hook(panic_info);
@@ -167,33 +190,56 @@ pub fn ocaml_interop_backtrace_support(_item: TokenStream) -> TokenStream {
             ::ocaml_interop::OCaml::unit()
         }
 
-        pub fn raise_ocaml_exception_from_panic(
-            cause: Box<dyn ::core::any::Any + Send>
+        // Note that OCaml exceptions will jump directly back into OCaml code
+        // without unwinding Rust code, so you *must* ensure that you don't have
+        // any un-dropped (non-OCaml) Rust values around when you call this
+        // function (or drop() will never be called for them).
+        pub unsafe fn raise_ocaml_exception(
+            cr: &mut &mut ::ocaml_interop::OCamlRuntime,
+            cause: String
         ) -> ! {
-            let cause = if let Some(cause) = cause.downcast_ref::<&str>() {
-                cause.to_string()
-            } else if let Some(cause) = cause.downcast_ref::<String>() {
-                cause.to_string()
-            } else {
-                format!("{:?}", cause)
+            let error_message = {
+                let last_backtrace = LAST_BACKTRACE.with(|last_backtrace| last_backtrace.take());
+
+                let error_message = match last_backtrace {
+                    None => format!("Polars panicked: {}\nbacktrace not captured", cause),
+                    Some(last_backtrace) => {
+                        format!("Polars panicked: {}\nBacktrace:\n{}", cause, last_backtrace)
+                    }
+                };
+
+                let error_message: OCaml<String> = error_message.to_ocaml(cr);
+                unsafe { error_message.raw() }
             };
 
-            let last_backtrace = LAST_BACKTRACE.with(|b| b.borrow_mut().take());
-
-            let error_message = match last_backtrace {
-                None => format!("Polars panicked: {}\nbacktrace not captured", cause),
-                Some(last_backtrace) => {
-                    format!("Polars panicked: {}\nBacktrace:\n{}", cause, last_backtrace)
-                }
-            };
-
-            let error_message = ::std::ffi::CString::new(error_message).expect("CString::new failed");
+            // We need to drop `cause`, but `error_message` is fine, since it's
+            // an OCaml value which will be
+            // garbage-collected by the OCaml runtime.
+            drop(cause);
 
             unsafe {
-                ::ocaml_sys::caml_failwith(error_message.as_ptr());
+                ::ocaml_sys::caml_failwith_value(error_message);
             }
 
             unreachable!("caml_failwith should never return")
+        }
+
+        pub unsafe fn raise_ocaml_exception_from_panic(
+            cr: &mut &mut ::ocaml_interop::OCamlRuntime,
+            cause: Box<dyn ::core::any::Any + Send>
+        ) -> ! {
+            let error_message =
+                if let Some(cause) = cause.downcast_ref::<&str>() {
+                    cause.to_string()
+                } else if let Some(cause) = cause.downcast_ref::<String>() {
+                    cause.to_string()
+                } else {
+                    format!("{:?}", cause)
+                };
+
+            drop(cause);
+
+            raise_ocaml_exception(cr, error_message)
         }
     };
 
@@ -249,7 +295,10 @@ mod tests {
                     }
                 }) {
                     Ok(value) => value,
-                    Err(cause) => raise_ocaml_exception_from_panic(cause),
+                    Err(cause) => {
+                        let cr = unsafe { &mut ::ocaml_interop::OCamlRuntime::recover_handle() };
+                        unsafe { raise_ocaml_exception_from_panic(cr, cause) }
+                    }
                 }
             }
         "##]]
@@ -324,7 +373,10 @@ mod tests {
                     }
                 }) {
                     Ok(value) => value,
-                    Err(cause) => raise_ocaml_exception_from_panic(cause),
+                    Err(cause) => {
+                        let cr = unsafe { &mut ::ocaml_interop::OCamlRuntime::recover_handle() };
+                        unsafe { raise_ocaml_exception_from_panic(cr, cause) }
+                    }
                 }
             }
             #[no_mangle]

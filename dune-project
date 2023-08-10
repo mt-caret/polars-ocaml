@@ -1,6 +1,6 @@
 (lang dune 3.8)
 
-(name polars_ocaml)
+(name polars)
 
 (generate_opam_files true)
 
@@ -11,16 +11,28 @@
 
 (maintainers "mtakeda")
 
-(license LICENSE)
+(license MIT)
 
-(documentation https://url/to/documentation)
+; TODO: update below link once we start generating documentation
+; (https://github.com/mt-caret/polars-ocaml/issues/5)
+
+(documentation https://github.com/mt-caret/polars-ocaml)
 
 (using mdx 0.4)
 
 (package
- (name polars_ocaml)
+ (name polars)
  (synopsis "OCaml bindings to the Polars dataframe library")
  (description "OCaml bindings to the Polars dataframe library")
- (depends ocaml dune)
+ (depends
+  (expect_test_helpers_core :with-test)
+  (ocamlformat :dev)
+  (odoc :with-doc)
+  (shell :with-test)
+  core
+  core_kernel
+  dune
+  ocaml
+  ppx_jane)
  (tags
-  (topics "to describe" your project)))
+  (data-science polars rust)))
