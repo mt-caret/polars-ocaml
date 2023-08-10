@@ -6,6 +6,8 @@ polars-ocaml is a project to provide idiomatic OCaml bindings to the Polars data
 
 ## status
 
+![build](https://github.com/mt-caret/polars-ocaml/actions/workflows/build.yaml/badge.svg)
+
 Currently very much WIP; see progress of examples ported from the Polars user guide
 in the test directory.
 
