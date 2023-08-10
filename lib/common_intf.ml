@@ -75,5 +75,11 @@ module type Common = sig
 
   module For_testing : sig
     val panic : string -> unit
+
+    (** [clear_panic_hook] sets the panic handler to a no-op. We've found that
+        the output of the default panic hook does not seem to be stable across
+        Rust versions, so this should be used in expect tests where we expect
+        panic-driven exceptions. *)
+    val clear_panic_hook : unit -> unit
   end
 end
