@@ -184,8 +184,21 @@ pub fn ocaml_interop_backtrace_support(_item: TokenStream) -> TokenStream {
                     last_backtrace.set(::std::option::Option::Some(trace));
                 });
 
+
                 last_hook(panic_info);
             }));
+
+            ::ocaml_interop::OCaml::unit()
+        }
+
+        #[::polars_ocaml_macros::ocaml_interop_export]
+        fn rust_clear_panic_hook(
+            cr: &mut &mut ::ocaml_interop::OCamlRuntime,
+            unit: ::ocaml_interop::OCamlRef<()>
+        ) -> ::ocaml_interop::OCaml<()> {
+            let () = unit.to_rust(cr);
+
+            ::std::panic::set_hook(::std::boxed::Box::new(|_panic_info| ()));
 
             ::ocaml_interop::OCaml::unit()
         }

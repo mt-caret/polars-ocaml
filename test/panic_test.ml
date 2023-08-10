@@ -1,13 +1,13 @@
 open! Core
 open Polars
 
+let () = Common.For_testing.clear_panic_hook ()
+
 let%expect_test "test" =
   Expect_test_helpers_core.require_does_raise [%here] (fun () ->
     Common.For_testing.panic "This is a panic");
   [%expect
     {|
-    thread '<unnamed>' panicked at 'test panic: This is a panic', polars-ocaml/src/misc.rs:93:9
-    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
     (Failure
      "Polars panicked: test panic: This is a panic\nbacktrace not captured") |}];
   Common.record_panic_backtraces ();

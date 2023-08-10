@@ -95,4 +95,5 @@ external record_panic_backtraces : unit -> unit = "rust_record_panic_backtraces"
 
 module For_testing = struct
   external panic : string -> unit = "rust_test_panic"
+  external clear_panic_hook : unit -> unit = "rust_clear_panic_hook"
 end
