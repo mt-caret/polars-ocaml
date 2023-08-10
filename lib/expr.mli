@@ -1,5 +1,10 @@
 open! Core
 
+(** An [Expr.t] is the basic building block of how to select columns from a
+    dataframe. It is a representation of a lazy computation over a dataframe
+    which can be executed via functions such as [Lazy_frame.select]/
+    [Data_frame.select] and [Lazy_frame.with_columns]/[Data_frame.with_columns]. *)
+
 type t
 
 (** [col] return column(s) in a dataframe:

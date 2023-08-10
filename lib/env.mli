@@ -7,7 +7,7 @@ open! Core
 
     See https://docs.rs/polars/latest/polars/#config-with-env-vars and
     https://github.com/pola-rs/polars/blob/9c194a24ad6aac33004c8fb0515a90239a376f44/py-polars/polars/config.py
-    for more details on which environment variables exist. *)
+    for more details on which environment variables exist and what they mean. *)
 
 module Table_formatting : sig
   type t =
