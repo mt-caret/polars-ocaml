@@ -30,6 +30,11 @@ ocaml_export! {
         lazy_frame.to_dot(false).map_err(|err| err.to_string()).to_ocaml(cr)
     }
 
+    fn rust_lazy_frame_cache(cr, lazy_frame: OCamlRef<DynBox<LazyFrame>>)-> OCaml<DynBox<LazyFrame>> {
+        let Abstract(lazy_frame) = lazy_frame.to_rust(cr);
+        OCaml::box_value(cr, lazy_frame.cache())
+    }
+
     fn rust_lazy_frame_collect(cr, lazy_frame: OCamlRef<DynBox<LazyFrame>>)-> OCaml<Result<DynBox<DataFrame>, String>> {
         let Abstract(lazy_frame) = lazy_frame.to_rust(cr);
         lazy_frame.collect()

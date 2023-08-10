@@ -15,13 +15,16 @@ val bool : bool -> t
 val string : string -> t
 val naive_date : Common.Naive_date.t -> t
 val naive_datetime : Common.Naive_datetime.t -> t
+val series : Series.t -> t
 val sort : ?descending:bool -> t -> t
 val sort_by : ?descending:bool -> t -> by:t list -> t
+val set_sorted_flag : t -> sorted:[ `Ascending | `Descending | `Not ] -> t
 val first : t -> t
 val last : t -> t
 val reverse : t -> t
 val head : ?length:int -> t -> t
 val tail : ?length:int -> t -> t
+val take : t -> idx:t -> t
 
 val sample_n
   :  ?seed:int
@@ -33,11 +36,19 @@ val sample_n
   -> t
 
 val filter : t -> predicate:t -> t
+val ceil : t -> t
+val floor : t -> t
+val clip_min_float : t -> min:float -> t
+val clip_max_float : t -> max:float -> t
+val clip_min_int : t -> min:int -> t
+val clip_max_int : t -> max:int -> t
 val sum : t -> t
 val mean : t -> t
 val median : t -> t
 val max : t -> t
 val min : t -> t
+val arg_max : t -> t
+val arg_min : t -> t
 val count : t -> t
 val count_ : unit -> t
 val n_unique : t -> t
@@ -54,6 +65,8 @@ val concat_list : t Nonempty_list.t -> t
 val null_count : t -> t
 val is_null : t -> t
 val is_not_null : t -> t
+val is_nan : t -> t
+val is_not_nan : t -> t
 val fill_null : t -> with_:t -> t
 val fill_null' : t -> strategy:Fill_null_strategy.t -> t
 val interpolate : ?method_:[ `Linear | `Nearest ] -> t -> t
