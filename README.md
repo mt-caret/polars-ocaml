@@ -10,6 +10,8 @@ can do with polars-ocaml!
 
 ## project status
 
+![build](https://github.com/mt-caret/polars-ocaml/actions/workflows/build.yaml/badge.svg)
+
 Currently very much WIP. Please expect breakages and large changes in API.
 
 Note that the current code assumes that the OCaml version is 4.14.1.
