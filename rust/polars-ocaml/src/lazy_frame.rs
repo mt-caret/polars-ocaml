@@ -83,6 +83,15 @@ fn rust_lazy_frame_to_dot(
 }
 
 #[ocaml_interop_export]
+fn rust_lazy_frame_cache(
+    cr: &mut &mut OCamlRuntime,
+    lazy_frame: OCamlRef<DynBox<LazyFrame>>,
+) -> OCaml<DynBox<LazyFrame>> {
+    let Abstract(lazy_frame) = lazy_frame.to_rust(cr);
+    OCaml::box_value(cr, lazy_frame.cache())
+}
+
+#[ocaml_interop_export]
 fn rust_lazy_frame_collect(
     cr: &mut &mut OCamlRuntime,
     lazy_frame: OCamlRef<DynBox<LazyFrame>>,
