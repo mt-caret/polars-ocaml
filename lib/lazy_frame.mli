@@ -7,6 +7,7 @@ val scan_parquet_exn : string -> t
 val scan_csv : string -> (t, string) result
 val scan_csv_exn : string -> t
 val to_dot : t -> (string, string) result
+val cache : t -> t
 val collect : t -> (Data_frame0.t, string) result
 val collect_exn : t -> Data_frame0.t
 val collect_all : t list -> (Data_frame0.t list, string) result
