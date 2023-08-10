@@ -40,7 +40,7 @@
 
 (mdx
  (files :standard - *.mli)
- (libraries core polars)
+ (libraries core core_kernel.nonempty_list polars)
  (preludes mdx_prelude/mdx_prelude.txt))
 
 (env

@@ -106,10 +106,8 @@ val cols : string list -> t
               [ bool "a" [ true; false; true ]
               ; bool "b" [ false; false; false ]
               ]
-            ;;
-      ...
-
-      # Data_frame.select_exn df ~exprs:Expr.[ all () |> sum ]
+        in
+        Data_frame.select_exn df ~exprs:Expr.[ all () |> sum ]
       - : Data_frame.t =
       shape: (1, 2)
       +-----+-----+
@@ -177,7 +175,66 @@ val all : unit -> t
     ]} *)
 val exclude : t -> names:string list -> t
 
+(** [element ()] is an alias for an element being evaluated in an [List.eval]
+    expression.
+
+    A horizontal rank computation by taking the elements of a list:
+
+    {@ocaml[
+      # let df =
+          Data_frame.create_exn
+            Series.
+              [ int "a" [ 1; 8; 3 ]
+              ; int "b" [4; 5; 2 ]
+              ]
+        in
+        Data_frame.with_columns_exn df ~exprs:Expr.[
+          concat_list [ cols ["a"; "b"] ]
+          |> List.eval ~expr:(element () |> rank)
+          |> alias ~name:"rank"
+        ]
+      - : Data_frame.t =
+      shape: (3, 3)
+      +-----+-----+-----------+
+      | a   | b   | rank      |
+      | --- | --- | ---       |
+      | i64 | i64 | list[u32] |
+      +=======================+
+      | 1   | 4   | [1, 2]    |
+      | 8   | 5   | [2, 1]    |
+      | 3   | 2   | [2, 1]    |
+      +-----+-----+-----------+
+    ]}
+
+    A mathematical operation on array elements:
+
+    {@ocaml[
+      # let df =
+          Data_frame.create_exn
+            Series.
+              [ int "a" [ 1; 8; 3 ]
+              ; int "b" [4; 5; 2 ]
+              ]
+        in
+        Data_frame.with_columns_exn df ~exprs:Expr.[
+          concat_list [ cols ["a"; "b"] ]
+          |> List.eval ~expr:(element () * int 2)
+          |> alias ~name:"a_b_doubled"
+        ]
+      - : Data_frame.t =
+      shape: (3, 3)
+      +-----+-----+-------------+
+      | a   | b   | a_b_doubled |
+      | --- | --- | ---         |
+      | i64 | i64 | list[i64]   |
+      +=========================+
+      | 1   | 4   | [2, 8]      |
+      | 8   | 5   | [16, 10]    |
+      | 3   | 2   | [6, 4]      |
+      +-----+-----+-------------+
+    ]} *)
 val element : unit -> t
+
 val cast : ?strict:bool -> t -> to_:Data_type.t -> t
 val null : unit -> t
 val int : int -> t
