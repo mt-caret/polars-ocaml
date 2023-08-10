@@ -18,15 +18,15 @@ type t
       # Data_frame.select_exn df ~exprs:Expr.[ col "foo" ]
       - : Data_frame.t =
       shape: (3, 1)
-      ┌─────┐
-      │ foo │
-      │ --- │
-      │ i64 │
-      ╞═════╡
-      │ 3   │
-      │ 2   │
-      │ 1   │
-      └─────┘
+      +-----+
+      | foo |
+      | --- |
+      | i64 |
+      +=====+
+      | 3   |
+      | 2   |
+      | 1   |
+      +-----+
     ]}
 
     Use the wildcard [*] to represent all columns:
@@ -34,28 +34,28 @@ type t
       # Data_frame.select_exn df ~exprs:Expr.[ col "*" ]
       - : Data_frame.t =
       shape: (3, 4)
-      ┌─────┬───────────┬─────┬─────┐
-      │ ham ┆ hamburger ┆ foo ┆ bar │
-      │ --- ┆ ---       ┆ --- ┆ --- │
-      │ i64 ┆ i64       ┆ i64 ┆ str │
-      ╞═════╪═══════════╪═════╪═════╡
-      │ 1   ┆ 11        ┆ 3   ┆ a   │
-      │ 2   ┆ 22        ┆ 2   ┆ b   │
-      │ 3   ┆ 33        ┆ 1   ┆ c   │
-      └─────┴───────────┴─────┴─────┘
+      +-----+-----------+-----+-----+
+      | ham | hamburger | foo | bar |
+      | --- | ---       | --- | --- |
+      | i64 | i64       | i64 | str |
+      +=============================+
+      | 1   | 11        | 3   | a   |
+      | 2   | 22        | 2   | b   |
+      | 3   | 33        | 1   | c   |
+      +-----+-----------+-----+-----+
 
       # Data_frame.select_exn df ~exprs:Expr.[ col "*" |> exclude ~names:[ "ham" ] ]
       - : Data_frame.t =
       shape: (3, 3)
-      ┌───────────┬─────┬─────┐
-      │ hamburger ┆ foo ┆ bar │
-      │ ---       ┆ --- ┆ --- │
-      │ i64       ┆ i64 ┆ str │
-      ╞═══════════╪═════╪═════╡
-      │ 11        ┆ 3   ┆ a   │
-      │ 22        ┆ 2   ┆ b   │
-      │ 33        ┆ 1   ┆ c   │
-      └───────────┴─────┴─────┘
+      +-----------+-----+-----+
+      | hamburger | foo | bar |
+      | ---       | --- | --- |
+      | i64       | i64 | str |
+      +=======================+
+      | 11        | 3   | a   |
+      | 22        | 2   | b   |
+      | 33        | 1   | c   |
+      +-----------+-----+-----+
     ]}
 
     Regular expressions are also supported:
@@ -63,15 +63,15 @@ type t
       # Data_frame.select_exn df ~exprs:Expr.[ col "^ham.*$" ]
       - : Data_frame.t =
       shape: (3, 2)
-      ┌─────┬───────────┐
-      │ ham ┆ hamburger │
-      │ --- ┆ ---       │
-      │ i64 ┆ i64       │
-      ╞═════╪═══════════╡
-      │ 1   ┆ 11        │
-      │ 2   ┆ 22        │
-      │ 3   ┆ 33        │
-      └─────┴───────────┘
+      +-----+-----------+
+      | ham | hamburger |
+      | --- | ---       |
+      | i64 | i64       |
+      +=================+
+      | 1   | 11        |
+      | 2   | 22        |
+      | 3   | 33        |
+      +-----+-----------+
     ]} *)
 val col : string -> t
 
@@ -80,15 +80,15 @@ val col : string -> t
       # Data_frame.select_exn df ~exprs:Expr.[ cols [ "hamburger"; "foo" ] ]
       - : Data_frame.t =
       shape: (3, 2)
-      ┌───────────┬─────┐
-      │ hamburger ┆ foo │
-      │ ---       ┆ --- │
-      │ i64       ┆ i64 │
-      ╞═══════════╪═════╡
-      │ 11        ┆ 3   │
-      │ 22        ┆ 2   │
-      │ 33        ┆ 1   │
-      └───────────┴─────┘
+      +-----------+-----+
+      | hamburger | foo |
+      | ---       | --- |
+      | i64       | i64 |
+      +=================+
+      | 11        | 3   |
+      | 22        | 2   |
+      | 33        | 1   |
+      +-----------+-----+
     ]} *)
 val cols : string list -> t
 
@@ -107,13 +107,13 @@ val cols : string list -> t
       # Data_frame.select_exn df ~exprs:Expr.[ all () |> sum ]
       - : Data_frame.t =
       shape: (1, 2)
-      ┌─────┬─────┐
-      │ a   ┆ b   │
-      │ --- ┆ --- │
-      │ u32 ┆ u32 │
-      ╞═════╪═════╡
-      │ 2   ┆ 0   │
-      └─────┴─────┘
+      +-----+-----+
+      | a   | b   |
+      | --- | --- |
+      | u32 | u32 |
+      +===========+
+      | 2   | 0   |
+      +-----+-----+
     ]} *)
 val all : unit -> t
 
@@ -130,28 +130,28 @@ val all : unit -> t
           ;;
       val df : Data_frame.t =
         shape: (3, 3)
-      ┌─────┬──────┬──────┐
-      │ aa  ┆ ba   ┆ cc   │
-      │ --- ┆ ---  ┆ ---  │
-      │ i64 ┆ str  ┆ f64  │
-      ╞═════╪══════╪══════╡
-      │ 1   ┆ a    ┆ null │
-      │ 2   ┆ b    ┆ 2.5  │
-      │ 3   ┆ null ┆ 1.5  │
-      └─────┴──────┴──────┘
+      +-----+------+------+
+      | aa  | ba   | cc   |
+      | --- | ---  | ---  |
+      | i64 | str  | f64  |
+      +===================+
+      | 1   | a    | null |
+      | 2   | b    | 2.5  |
+      | 3   | null | 1.5  |
+      +-----+------+------+
 
       # Data_frame.select_exn df ~exprs:Expr.[ all () |> exclude ~names:[ "ba" ] ]
       - : Data_frame.t =
       shape: (3, 2)
-      ┌─────┬──────┐
-      │ aa  ┆ cc   │
-      │ --- ┆ ---  │
-      │ i64 ┆ f64  │
-      ╞═════╪══════╡
-      │ 1   ┆ null │
-      │ 2   ┆ 2.5  │
-      │ 3   ┆ 1.5  │
-      └─────┴──────┘
+      +-----+------+
+      | aa  | cc   |
+      | --- | ---  |
+      | i64 | f64  |
+      +============+
+      | 1   | null |
+      | 2   | 2.5  |
+      | 3   | 1.5  |
+      +-----+------+
     ]}
 
     Regular expressions are also supported:
@@ -160,15 +160,15 @@ val all : unit -> t
       # Data_frame.select_exn df ~exprs:Expr.[ all () |> exclude ~names:[ "^.*a$" ] ]
       - : Data_frame.t =
       shape: (3, 1)
-      ┌──────┐
-      │ cc   │
-      │ ---  │
-      │ f64  │
-      ╞══════╡
-      │ null │
-      │ 2.5  │
-      │ 1.5  │
-      └──────┘
+      +------+
+      | cc   |
+      | ---  |
+      | f64  |
+      +======+
+      | null |
+      | 2.5  |
+      | 1.5  |
+      +------+
     ]} *)
 val exclude : t -> names:string list -> t
 

@@ -9,3 +9,7 @@ open Polars;;
 
 #install_printer Series.pp;;
 #install_printer Data_frame.pp;;
+
+(* The default value (Utf8_full_condensed) does not render well in the font
+  that odoc uses. *)
+Env.set Fmt_table_formatting ~value:Env.Table_formatting.Ascii_full_condensed;;
