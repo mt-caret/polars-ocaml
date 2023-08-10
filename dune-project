@@ -33,6 +33,7 @@
   core_kernel
   dune
   ocaml
-  ppx_jane)
+  ppx_jane
+  ppx_typed_fields)
  (tags
   (data-science polars rust)))
