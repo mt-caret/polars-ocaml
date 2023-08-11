@@ -1,8 +1,8 @@
 use crate::utils::*;
 use chrono::naive::{NaiveDate, NaiveDateTime};
 use ocaml_interop::{
-    impl_to_ocaml_variant, DynBox, OCaml, OCamlBytes, OCamlFloat, OCamlInt, OCamlInt32, OCamlList,
-    OCamlRef, OCamlRuntime, ToOCaml,
+    impl_to_ocaml_variant, BoxRoot, DynBox, FromOCaml, OCaml, OCamlBytes, OCamlFloat, OCamlInt,
+    OCamlInt32, OCamlList, OCamlRef, OCamlRuntime, ToOCaml,
 };
 use polars::prelude::prelude::*;
 use polars::prelude::*;
@@ -54,6 +54,99 @@ impl_to_ocaml_variant! {
         TypedList::String(l: OCamlList<Option<String>>),
         TypedList::Bytes(l: OCamlList<Option<OCamlBytes>>),
     }
+}
+
+pub struct DummyBoxRoot(BoxRoot<DummyBoxRoot>);
+
+unsafe impl FromOCaml<DummyBoxRoot> for DummyBoxRoot {
+    fn from_ocaml(v: OCaml<DummyBoxRoot>) -> Self {
+        DummyBoxRoot(v.root())
+    }
+}
+
+impl DummyBoxRoot {
+    fn interpret<T>(self, cr: &OCamlRuntime) -> OCaml<T> {
+        let ocaml_value: OCaml<DummyBoxRoot> = self.0.get(cr);
+
+        unsafe { std::mem::transmute(ocaml_value) }
+    }
+}
+
+fn series_new(
+    cr: &mut &mut OCamlRuntime,
+    name: String,
+    data_type: &GADTDataType,
+    // TODO: can we just pass a DummyBoxRoot here instead of a Vec, and save a copy?
+    values: Vec<DummyBoxRoot>,
+) -> Result<Series, String> {
+    macro_rules! create_series {
+        ($ocaml_type:ty, $rust_type:ty) => {{
+            let values: Vec<$rust_type> = values
+                .into_iter()
+                .map(|v| v.interpret::<$ocaml_type>(cr).to_rust())
+                .collect();
+            Ok(Series::new(&name, values))
+        }};
+    }
+
+    macro_rules! create_int_series {
+        ($rust_type:ty) => {{
+            let values = values
+                .into_iter()
+                .map(|v| v.interpret::<OCamlInt>(cr).to_rust::<i64>().try_into())
+                .collect::<Result<Vec<$rust_type>, _>>()
+                .map_err(|err| err.to_string())?;
+            Ok(Series::new(&name, values))
+        }};
+    }
+
+    match data_type {
+        GADTDataType::Boolean => create_series!(bool, bool),
+        GADTDataType::UInt8 => create_int_series!(u8),
+        GADTDataType::UInt16 => create_int_series!(u16),
+        GADTDataType::UInt32 => create_int_series!(u32),
+        GADTDataType::UInt64 => create_int_series!(u64),
+        GADTDataType::Int8 => create_int_series!(i8),
+        GADTDataType::Int16 => create_int_series!(i16),
+        GADTDataType::Int32 => create_int_series!(i32),
+        GADTDataType::Int64 => create_int_series!(i64),
+        GADTDataType::Float32 => {
+            let values: Vec<f32> = values
+                .into_iter()
+                .map(|v| v.interpret::<OCamlFloat>(cr).to_rust::<f64>() as f32)
+                .collect();
+            Ok(Series::new(&name, values))
+        }
+        GADTDataType::Float64 => create_series!(OCamlFloat, f64),
+        GADTDataType::Utf8 => create_series!(String, String),
+        GADTDataType::Binary => create_series!(OCamlBytes, Vec<u8>),
+        GADTDataType::List(data_type) => {
+            let values: Vec<Series> = values
+                .into_iter()
+                .map(|v| {
+                    let list = v.interpret::<OCamlList<DummyBoxRoot>>(cr).to_rust();
+                    series_new(cr, name.clone(), data_type, list)
+                })
+                .collect::<Result<Vec<Series>, _>>()?;
+            Ok(Series::new(&name, values))
+        }
+    }
+}
+
+#[ocaml_interop_export(raise_on_err)]
+fn rust_series_new(
+    cr: &mut &mut OCamlRuntime,
+    name: OCamlRef<String>,
+    data_type: OCamlRef<GADTDataType>,
+    values: OCamlRef<OCamlList<DummyBoxRoot>>,
+) -> OCaml<DynBox<Series>> {
+    let name: String = name.to_rust(cr);
+    let data_type: GADTDataType = data_type.to_rust(cr);
+    let values: Vec<DummyBoxRoot> = values.to_rust(cr);
+
+    let series = series_new(cr, name, &data_type, values)?;
+
+    OCaml::box_value(cr, series)
 }
 
 #[ocaml_interop_export]

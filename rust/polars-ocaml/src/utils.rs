@@ -1,7 +1,8 @@
 use ocaml_interop::{
-    ocaml_alloc_polymorphic_variant, ocaml_alloc_tagged_block, ocaml_alloc_variant,
-    ocaml_unpack_polymorphic_variant, ocaml_unpack_variant, polymorphic_variant_tag_hash, DynBox,
-    FromOCaml, OCaml, OCamlInt, OCamlList, OCamlRuntime, ToOCaml,
+    impl_from_ocaml_variant, ocaml_alloc_polymorphic_variant, ocaml_alloc_tagged_block,
+    ocaml_alloc_variant, ocaml_unpack_polymorphic_variant, ocaml_unpack_variant,
+    polymorphic_variant_tag_hash, DynBox, FromOCaml, OCaml, OCamlInt, OCamlList, OCamlRuntime,
+    RawOCaml, ToOCaml,
 };
 use polars::series::IsSorted;
 use polars::{lazy::dsl::WindowMapping, prelude::*};
@@ -154,6 +155,42 @@ unsafe impl ToOCaml<DataType> for PolarsDataType {
                 DataType::Unknown => ocaml_value(cr, 16),
             }
         }
+    }
+}
+
+pub enum GADTDataType {
+    Boolean,
+    UInt8,
+    UInt16,
+    UInt32,
+    UInt64,
+    Int8,
+    Int16,
+    Int32,
+    Int64,
+    Float32,
+    Float64,
+    Utf8,
+    Binary,
+    List(Box<GADTDataType>),
+}
+
+impl_from_ocaml_variant! {
+    GADTDataType {
+        GADTDataType::Boolean,
+        GADTDataType::UInt8,
+        GADTDataType::UInt16,
+        GADTDataType::UInt32,
+        GADTDataType::UInt64,
+        GADTDataType::Int8,
+        GADTDataType::Int16,
+        GADTDataType::Int32,
+        GADTDataType::Int64,
+        GADTDataType::Float32,
+        GADTDataType::Float64,
+        GADTDataType::Utf8,
+        GADTDataType::Binary,
+        GADTDataType::List(data_type: GADTDataType),
     }
 }
 
@@ -442,6 +479,7 @@ where
         Coerce(try_into_result, PhantomData, PhantomData)
     }
 }
+
 unsafe impl<OCamlType, Via, T> FromOCaml<Option<OCamlType>>
     for Coerce<OCamlType, Option<Via>, Option<T>>
 where
@@ -464,6 +502,33 @@ where
                     )),
             },
         };
+
+        Coerce(try_into_result, PhantomData, PhantomData)
+    }
+}
+
+unsafe impl<OCamlType, Via, T> FromOCaml<OCamlList<OCamlType>>
+    for Coerce<OCamlType, Vec<Via>, Vec<T>>
+where
+    Via: FromOCaml<OCamlType>,
+    T: TryFrom<Via>,
+    <T as TryFrom<Via>>::Error: std::fmt::Debug,
+{
+    fn from_ocaml(v: OCaml<OCamlList<OCamlType>>) -> Self {
+        let try_into_result = v
+            .to_rust::<Vec<Via>>()
+            .into_iter()
+            .map(|v| T::try_from(v))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| {
+                format!(
+                    "Failed to convert OCaml<Vec<{}>> (from Vec<{}>) to Rust<Vec<{}>>: {:?}",
+                    type_name::<Via>(),
+                    type_name::<OCamlType>(),
+                    type_name::<T>(),
+                    e
+                )
+            });
 
         Coerce(try_into_result, PhantomData, PhantomData)
     }
@@ -496,6 +561,14 @@ unsafe impl<T: 'static + Clone> ToOCaml<DynBox<T>> for Abstract<T> {
         // TODO: I don't fully understand why ToOCaml takes a &self, since that
         // prevents us from using box_value without a clone() call.
         OCaml::box_value(cr, self.0.clone())
+    }
+}
+
+pub struct UnsafeRawOCaml(pub RawOCaml);
+
+unsafe impl FromOCaml<RawOCaml> for UnsafeRawOCaml {
+    fn from_ocaml(v: OCaml<RawOCaml>) -> Self {
+        UnsafeRawOCaml(unsafe { v.raw() })
     }
 }
 
