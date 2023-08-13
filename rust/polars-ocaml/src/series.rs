@@ -8,6 +8,7 @@ use polars::prelude::prelude::*;
 use polars::prelude::*;
 use polars_ocaml_macros::ocaml_interop_export;
 
+// TODO: These helper fuctions should be replaced by a macro.
 fn series_binary_op<'a>(
     cr: &'a mut &'a mut OCamlRuntime,
     series: OCamlRef<'a, DynBox<Series>>,
