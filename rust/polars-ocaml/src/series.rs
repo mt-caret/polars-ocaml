@@ -74,29 +74,52 @@ impl DummyBoxRoot {
 
 fn series_new(
     cr: &mut &mut OCamlRuntime,
-    name: String,
     data_type: &GADTDataType,
+    name: String,
     // TODO: can we just pass a DummyBoxRoot here instead of a Vec, and save a copy?
     values: Vec<DummyBoxRoot>,
+    are_values_options: bool,
 ) -> Result<Series, String> {
     macro_rules! create_series {
         ($ocaml_type:ty, $rust_type:ty) => {{
-            let values: Vec<$rust_type> = values
-                .into_iter()
-                .map(|v| v.interpret::<$ocaml_type>(cr).to_rust())
-                .collect();
-            Ok(Series::new(&name, values))
+            if are_values_options {
+                let values: Vec<Option<$rust_type>> = values
+                    .into_iter()
+                    .map(|v| v.interpret::<Option<$ocaml_type>>(cr).to_rust())
+                    .collect();
+                Ok(Series::new(&name, values))
+            } else {
+                let values: Vec<$rust_type> = values
+                    .into_iter()
+                    .map(|v| v.interpret::<$ocaml_type>(cr).to_rust())
+                    .collect();
+                Ok(Series::new(&name, values))
+            }
         }};
     }
 
     macro_rules! create_int_series {
         ($rust_type:ty) => {{
-            let values = values
-                .into_iter()
-                .map(|v| v.interpret::<OCamlInt>(cr).to_rust::<i64>().try_into())
-                .collect::<Result<Vec<$rust_type>, _>>()
-                .map_err(|err| err.to_string())?;
-            Ok(Series::new(&name, values))
+            if are_values_options {
+                let values = values
+                    .into_iter()
+                    .map(
+                        |v| match v.interpret::<Option<OCamlInt>>(cr).to_rust::<Option<i64>>() {
+                            None => Ok(None),
+                            Some(int) => int.try_into().map(Some),
+                        },
+                    )
+                    .collect::<Result<Vec<Option<$rust_type>>, _>>()
+                    .map_err(|err| err.to_string())?;
+                Ok(Series::new(&name, values))
+            } else {
+                let values = values
+                    .into_iter()
+                    .map(|v| v.interpret::<OCamlInt>(cr).to_rust::<i64>().try_into())
+                    .collect::<Result<Vec<$rust_type>, _>>()
+                    .map_err(|err| err.to_string())?;
+                Ok(Series::new(&name, values))
+            }
         }};
     }
 
@@ -111,24 +134,64 @@ fn series_new(
         GADTDataType::Int32 => create_int_series!(i32),
         GADTDataType::Int64 => create_int_series!(i64),
         GADTDataType::Float32 => {
-            let values: Vec<f32> = values
-                .into_iter()
-                .map(|v| v.interpret::<OCamlFloat>(cr).to_rust::<f64>() as f32)
-                .collect();
-            Ok(Series::new(&name, values))
+            if are_values_options {
+                let values: Vec<Option<f32>> = values
+                    .into_iter()
+                    .map(|v| {
+                        v.interpret::<Option<OCamlFloat>>(cr)
+                            .to_rust::<Option<f64>>()
+                            .map(|f64| f64 as f32)
+                    })
+                    .collect();
+                Ok(Series::new(&name, values))
+            } else {
+                let values: Vec<f32> = values
+                    .into_iter()
+                    .map(|v| v.interpret::<OCamlFloat>(cr).to_rust::<f64>() as f32)
+                    .collect();
+                Ok(Series::new(&name, values))
+            }
         }
         GADTDataType::Float64 => create_series!(OCamlFloat, f64),
         GADTDataType::Utf8 => create_series!(String, String),
         GADTDataType::Binary => create_series!(OCamlBytes, Vec<u8>),
         GADTDataType::List(data_type) => {
-            let values: Vec<Series> = values
-                .into_iter()
-                .map(|v| {
-                    let list = v.interpret::<OCamlList<DummyBoxRoot>>(cr).to_rust();
-                    series_new(cr, name.clone(), data_type, list)
-                })
-                .collect::<Result<Vec<Series>, _>>()?;
-            Ok(Series::new(&name, values))
+            if are_values_options {
+                let values: Vec<Option<Series>> = values
+                    .into_iter()
+                    .map(|v| {
+                        match v.interpret::<Option<OCamlList<DummyBoxRoot>>>(cr).to_rust() {
+                            None => Ok(None),
+                            Some(list) => series_new(
+                                cr,
+                                data_type,
+                                name.clone(),
+                                list,
+                                // TODO: explain why this needs to be false
+                                false,
+                            )
+                            .map(Some),
+                        }
+                    })
+                    .collect::<Result<Vec<Option<Series>>, _>>()?;
+                Ok(Series::new(&name, values))
+            } else {
+                let values: Vec<Series> = values
+                    .into_iter()
+                    .map(|v| {
+                        let list = v.interpret::<OCamlList<DummyBoxRoot>>(cr).to_rust();
+                        series_new(
+                            cr,
+                            data_type,
+                            name.clone(),
+                            list,
+                            // TODO: explain why this needs to be false
+                            false,
+                        )
+                    })
+                    .collect::<Result<Vec<Series>, _>>()?;
+                Ok(Series::new(&name, values))
+            }
         }
     }
 }
@@ -136,106 +199,33 @@ fn series_new(
 #[ocaml_interop_export(raise_on_err)]
 fn rust_series_new(
     cr: &mut &mut OCamlRuntime,
-    name: OCamlRef<String>,
     data_type: OCamlRef<GADTDataType>,
+    name: OCamlRef<String>,
     values: OCamlRef<OCamlList<DummyBoxRoot>>,
 ) -> OCaml<DynBox<Series>> {
     let name: String = name.to_rust(cr);
     let data_type: GADTDataType = data_type.to_rust(cr);
     let values: Vec<DummyBoxRoot> = values.to_rust(cr);
 
-    let series = series_new(cr, name, &data_type, values)?;
+    let series = series_new(cr, &data_type, name, values, false)?;
 
     OCaml::box_value(cr, series)
 }
 
-#[ocaml_interop_export]
-fn rust_series_new_int(
+#[ocaml_interop_export(raise_on_err)]
+fn rust_series_new_option(
     cr: &mut &mut OCamlRuntime,
+    data_type: OCamlRef<GADTDataType>,
     name: OCamlRef<String>,
-    values: OCamlRef<OCamlList<OCamlInt>>,
+    values: OCamlRef<OCamlList<DummyBoxRoot>>,
 ) -> OCaml<DynBox<Series>> {
     let name: String = name.to_rust(cr);
-    let values: Vec<i64> = values.to_rust(cr);
+    let data_type: GADTDataType = data_type.to_rust(cr);
+    let values: Vec<DummyBoxRoot> = values.to_rust(cr);
 
-    OCaml::box_value(cr, Series::new(&name, values))
-}
+    let series = series_new(cr, &data_type, name, values, true)?;
 
-#[ocaml_interop_export]
-fn rust_series_new_int_option(
-    cr: &mut &mut OCamlRuntime,
-    name: OCamlRef<String>,
-    values: OCamlRef<OCamlList<Option<OCamlInt>>>,
-) -> OCaml<DynBox<Series>> {
-    let name: String = name.to_rust(cr);
-    let values: Vec<Option<i64>> = values.to_rust(cr);
-    OCaml::box_value(cr, Series::new(&name, values))
-}
-
-#[ocaml_interop_export]
-fn rust_series_new_float(
-    cr: &mut &mut OCamlRuntime,
-    name: OCamlRef<String>,
-    values: OCamlRef<OCamlList<OCamlFloat>>,
-) -> OCaml<DynBox<Series>> {
-    let name: String = name.to_rust(cr);
-    let values: Vec<f64> = values.to_rust(cr);
-    OCaml::box_value(cr, Series::new(&name, values))
-}
-
-#[ocaml_interop_export]
-fn rust_series_new_float_option(
-    cr: &mut &mut OCamlRuntime,
-    name: OCamlRef<String>,
-    values: OCamlRef<OCamlList<Option<OCamlFloat>>>,
-) -> OCaml<DynBox<Series>> {
-    let name: String = name.to_rust(cr);
-    let values: Vec<Option<f64>> = values.to_rust(cr);
-    OCaml::box_value(cr, Series::new(&name, values))
-}
-
-#[ocaml_interop_export]
-fn rust_series_new_string(
-    cr: &mut &mut OCamlRuntime,
-    name: OCamlRef<String>,
-    values: OCamlRef<OCamlList<String>>,
-) -> OCaml<DynBox<Series>> {
-    let name: String = name.to_rust(cr);
-    let values: Vec<String> = values.to_rust(cr);
-    OCaml::box_value(cr, Series::new(&name, values))
-}
-
-#[ocaml_interop_export]
-fn rust_series_new_string_option(
-    cr: &mut &mut OCamlRuntime,
-    name: OCamlRef<String>,
-    values: OCamlRef<OCamlList<Option<String>>>,
-) -> OCaml<DynBox<Series>> {
-    let name: String = name.to_rust(cr);
-    let values: Vec<Option<String>> = values.to_rust(cr);
-    OCaml::box_value(cr, Series::new(&name, values))
-}
-
-#[ocaml_interop_export]
-fn rust_series_new_bool(
-    cr: &mut &mut OCamlRuntime,
-    name: OCamlRef<String>,
-    values: OCamlRef<OCamlList<bool>>,
-) -> OCaml<DynBox<Series>> {
-    let name: String = name.to_rust(cr);
-    let values: Vec<bool> = values.to_rust(cr);
-    OCaml::box_value(cr, Series::new(&name, values))
-}
-
-#[ocaml_interop_export]
-fn rust_series_new_bool_option(
-    cr: &mut &mut OCamlRuntime,
-    name: OCamlRef<String>,
-    values: OCamlRef<OCamlList<Option<bool>>>,
-) -> OCaml<DynBox<Series>> {
-    let name: String = name.to_rust(cr);
-    let values: Vec<Option<bool>> = values.to_rust(cr);
-    OCaml::box_value(cr, Series::new(&name, values))
+    OCaml::box_value(cr, series)
 }
 
 #[ocaml_interop_export]

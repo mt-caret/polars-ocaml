@@ -3,19 +3,26 @@ open! Core
 module T = struct
   type t
 
-  external int : string -> int list -> t = "rust_series_new_int"
-  external int_option : string -> int option list -> t = "rust_series_new_int_option"
-  external float : string -> float list -> t = "rust_series_new_float"
+  external create : 'a Data_type.Typed.t -> string -> 'a list -> t = "rust_series_new"
 
-  external float_option
-    :  string
-    -> float option list
+  external create'
+    :  'a Data_type.Typed.t
+    -> string
+    -> 'a option list
     -> t
-    = "rust_series_new_float_option"
+    = "rust_series_new_option"
 
-  external bool : string -> bool list -> t = "rust_series_new_bool"
-  external bool_option : string -> bool option list -> t = "rust_series_new_bool_option"
-  external string : string -> string list -> t = "rust_series_new_string"
+  let int = create Int64
+  let int' = create' Int64
+  let float = create Float64
+  let float' = create' Float64
+  let bool = create Boolean
+  let bool' = create' Boolean
+
+  (* TODO: perhaps this should actually be Bytes? *)
+
+  let string = create Utf8
+  let string' = create' Utf8
 
   external datetime
     :  string
@@ -30,12 +37,6 @@ module T = struct
   external date : string -> Common.Naive_date.t list -> t = "rust_series_new_date"
 
   let date name dates = date name (List.map dates ~f:Common.Naive_date.of_date)
-
-  external string_option
-    :  string
-    -> string option list
-    -> t
-    = "rust_series_new_string_option"
 
   external date_range
     :  string

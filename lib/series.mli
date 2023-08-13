@@ -2,14 +2,16 @@ open! Core
 
 type t
 
+val create : 'a Data_type.Typed.t -> string -> 'a list -> t
+val create' : 'a Data_type.Typed.t -> string -> 'a option list -> t
 val int : string -> int list -> t
-val int_option : string -> int option list -> t
+val int' : string -> int option list -> t
 val float : string -> float list -> t
-val float_option : string -> float option list -> t
+val float' : string -> float option list -> t
 val bool : string -> bool list -> t
-val bool_option : string -> bool option list -> t
+val bool' : string -> bool option list -> t
 val string : string -> string list -> t
-val string_option : string -> string option list -> t
+val string' : string -> string option list -> t
 val date : string -> Date.t list -> t
 val datetime : string -> Common.Naive_datetime.t list -> t
 val datetime' : string -> Date.t list -> t
