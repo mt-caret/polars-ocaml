@@ -69,7 +69,7 @@ impl DummyBoxRoot {
     fn interpret<T>(self, cr: &OCamlRuntime) -> OCaml<T> {
         let ocaml_value: OCaml<DummyBoxRoot> = self.0.get(cr);
 
-        unsafe { std::mem::transmute(ocaml_value) }
+        unsafe { OCaml::new(cr, ocaml_value.raw()) }
     }
 }
 
