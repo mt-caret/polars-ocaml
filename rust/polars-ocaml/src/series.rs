@@ -66,7 +66,7 @@ unsafe impl FromOCaml<DummyBoxRoot> for DummyBoxRoot {
 }
 
 impl DummyBoxRoot {
-    fn interpret<T>(self, cr: &OCamlRuntime) -> OCaml<T> {
+    fn interpret<'a, T>(&self, cr: &'a OCamlRuntime) -> OCaml<'a, T> {
         let ocaml_value: OCaml<DummyBoxRoot> = self.0.get(cr);
 
         unsafe { OCaml::new(cr, ocaml_value.raw()) }
