@@ -836,3 +836,79 @@ let%expect_test "Grouping" =
     │ b      ┆ 2021-12-16 02:00:00 ┆ 2021-12-16 03:00:00 ┆ 2021-12-16 02:00:00 ┆ 1     │
     └────────┴─────────────────────┴─────────────────────┴─────────────────────┴───────┘ |}]
 ;;
+
+(* Examples from https://pola-rs.github.io/polars-book/user-guide/transformations/time-series/resampling/#upsampling-strategies *)
+let%expect_test "Resampling" =
+  let df =
+    Data_frame.create_exn
+      Series.
+        [ datetime_range_exn
+            ~every:"30m"
+            ~start:(Common.Naive_datetime.of_string "2021-12-16")
+            ~stop:(Common.Naive_datetime.of_string "2021-12-16 3")
+            "time"
+        ; string "groups" [ "a"; "a"; "a"; "b"; "b"; "a"; "a" ]
+        ; float "values" [ 1.0; 2.0; 3.0; 4.0; 5.0; 6.0; 7.0 ]
+        ]
+  in
+  Data_frame.print df;
+  [%expect
+    {|
+    shape: (7, 3)
+    ┌─────────────────────┬────────┬────────┐
+    │ time                ┆ groups ┆ values │
+    │ ---                 ┆ ---    ┆ ---    │
+    │ datetime[ms]        ┆ str    ┆ f64    │
+    ╞═════════════════════╪════════╪════════╡
+    │ 2021-12-16 00:00:00 ┆ a      ┆ 1.0    │
+    │ 2021-12-16 00:30:00 ┆ a      ┆ 2.0    │
+    │ 2021-12-16 01:00:00 ┆ a      ┆ 3.0    │
+    │ 2021-12-16 01:30:00 ┆ b      ┆ 4.0    │
+    │ 2021-12-16 02:00:00 ┆ b      ┆ 5.0    │
+    │ 2021-12-16 02:30:00 ┆ a      ┆ 6.0    │
+    │ 2021-12-16 03:00:00 ┆ a      ┆ 7.0    │
+    └─────────────────────┴────────┴────────┘ |}];
+  Data_frame.upsample_exn df ~by:[] ~time_column:"time" ~every:"15m" ~offset:"0m"
+  |> Data_frame.fill_null_exn ~strategy:(Forward None)
+  |> Data_frame.print;
+  [%expect
+    {|
+    shape: (13, 3)
+    ┌─────────────────────┬────────┬────────┐
+    │ time                ┆ groups ┆ values │
+    │ ---                 ┆ ---    ┆ ---    │
+    │ datetime[ms]        ┆ str    ┆ f64    │
+    ╞═════════════════════╪════════╪════════╡
+    │ 2021-12-16 00:00:00 ┆ a      ┆ 1.0    │
+    │ 2021-12-16 00:15:00 ┆ a      ┆ 1.0    │
+    │ 2021-12-16 00:30:00 ┆ a      ┆ 2.0    │
+    │ 2021-12-16 00:45:00 ┆ a      ┆ 2.0    │
+    │ …                   ┆ …      ┆ …      │
+    │ 2021-12-16 02:15:00 ┆ b      ┆ 5.0    │
+    │ 2021-12-16 02:30:00 ┆ a      ┆ 6.0    │
+    │ 2021-12-16 02:45:00 ┆ a      ┆ 6.0    │
+    │ 2021-12-16 03:00:00 ┆ a      ┆ 7.0    │
+    └─────────────────────┴────────┴────────┘ |}];
+  Data_frame.upsample_exn df ~by:[] ~time_column:"time" ~every:"15m" ~offset:"0m"
+  |> Data_frame.interpolate_exn ~method_:`Linear
+  |> Data_frame.fill_null_exn ~strategy:(Forward None)
+  |> Data_frame.print;
+  [%expect
+    {|
+    shape: (13, 3)
+    ┌─────────────────────┬────────┬────────┐
+    │ time                ┆ groups ┆ values │
+    │ ---                 ┆ ---    ┆ ---    │
+    │ datetime[ms]        ┆ str    ┆ f64    │
+    ╞═════════════════════╪════════╪════════╡
+    │ 2021-12-16 00:00:00 ┆ a      ┆ 1.0    │
+    │ 2021-12-16 00:15:00 ┆ a      ┆ 1.5    │
+    │ 2021-12-16 00:30:00 ┆ a      ┆ 2.0    │
+    │ 2021-12-16 00:45:00 ┆ a      ┆ 2.5    │
+    │ …                   ┆ …      ┆ …      │
+    │ 2021-12-16 02:15:00 ┆ b      ┆ 5.5    │
+    │ 2021-12-16 02:30:00 ┆ a      ┆ 6.0    │
+    │ 2021-12-16 02:45:00 ┆ a      ┆ 6.5    │
+    │ 2021-12-16 03:00:00 ┆ a      ┆ 7.0    │
+    └─────────────────────┴────────┴────────┘ |}]
+;;

@@ -275,6 +275,46 @@ external mean : t -> t = "rust_data_frame_mean"
 external median : t -> t = "rust_data_frame_median"
 external null_count : t -> t = "rust_data_frame_null_count"
 
+external fill_null
+  :  t
+  -> strategy:Fill_null_strategy.t
+  -> (t, string) result
+  = "rust_data_frame_fill_null_with_strategy"
+
+let fill_null_exn t ~strategy =
+  fill_null t ~strategy |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
+;;
+
+external interpolate
+  :  t
+  -> method_:[ `Linear | `Nearest ]
+  -> (t, string) result
+  = "rust_data_frame_interpolate"
+
+let interpolate_exn t ~method_ =
+  interpolate t ~method_ |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
+;;
+
+external upsample
+  :  t
+  -> by:string list
+  -> time_column:string
+  -> every:string
+  -> offset:string
+  -> stable:bool
+  -> (t, string) result
+  = "rust_data_frame_upsample_bytecode" "rust_data_frame_upsample"
+
+let upsample ?(stable = true) t ~by ~time_column ~every ~offset =
+  upsample t ~by ~time_column ~every ~offset ~stable
+;;
+
+let upsample_exn ?stable t ~by ~time_column ~every ~offset =
+  upsample ?stable t ~by ~time_column ~every ~offset
+  |> Result.map_error ~f:Error.of_string
+  |> Or_error.ok_exn
+;;
+
 external explode
   :  t
   -> columns:string list

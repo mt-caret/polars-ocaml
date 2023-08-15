@@ -171,6 +171,29 @@ val sum : t -> t
 val mean : t -> t
 val median : t -> t
 val null_count : t -> t
+val fill_null : t -> strategy:Fill_null_strategy.t -> (t, string) result
+val fill_null_exn : t -> strategy:Fill_null_strategy.t -> t
+val interpolate : t -> method_:[ `Linear | `Nearest ] -> (t, string) result
+val interpolate_exn : t -> method_:[ `Linear | `Nearest ] -> t
+
+val upsample
+  :  ?stable:bool
+  -> t
+  -> by:string list
+  -> time_column:string
+  -> every:string
+  -> offset:string
+  -> (t, string) result
+
+val upsample_exn
+  :  ?stable:bool
+  -> t
+  -> by:string list
+  -> time_column:string
+  -> every:string
+  -> offset:string
+  -> t
+
 val explode : t -> columns:string list -> (t, string) result
 val explode_exn : t -> columns:string list -> t
 val schema : t -> Schema.t

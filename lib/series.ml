@@ -123,6 +123,26 @@ module T = struct
     |> Or_error.ok_exn
   ;;
 
+  external fill_null
+    :  t
+    -> strategy:Fill_null_strategy.t
+    -> (t, string) result
+    = "rust_series_fill_null_with_strategy"
+
+  let fill_null_exn t ~strategy =
+    fill_null t ~strategy |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
+  ;;
+
+  external interpolate
+    :  t
+    -> method_:[ `Linear | `Nearest ]
+    -> (t, string) result
+    = "rust_series_interpolate"
+
+  let interpolate_exn t ~method_ =
+    interpolate t ~method_ |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
+  ;;
+
   let binary_op op t1 t2 =
     op t1 t2 |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
   ;;

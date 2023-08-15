@@ -223,6 +223,62 @@ ocaml_export! {
         Abstract(data_frame.null_count()).to_ocaml(cr)
     }
 
+    fn rust_data_frame_fill_null_with_strategy(
+        cr,
+        data_frame: OCamlRef<DynBox<DataFrame>>,
+        strategy: OCamlRef<FillNullStrategy>
+    ) -> OCaml<Result<DynBox<DataFrame>,String>> {
+        let Abstract(data_frame) = data_frame.to_rust(cr);
+        let PolarsFillNullStrategy(strategy) = strategy.to_rust(cr);
+
+        data_frame.fill_null(strategy)
+        .map(Abstract).map_err(|err| err.to_string())
+        .to_ocaml(cr)
+    }
+
+    fn rust_data_frame_interpolate(
+        cr,
+        data_frame: OCamlRef<DynBox<DataFrame>>,
+        method: OCamlRef<InterpolationMethod>,
+    ) -> OCaml<Result<DynBox<DataFrame>,String>> {
+        let Abstract(data_frame) = data_frame.to_rust(cr);
+        let PolarsInterpolationMethod(method) = method.to_rust(cr);
+
+        let series =
+            data_frame.get_columns()
+            .into_iter()
+            .map(|series| interpolate(series, method))
+            .collect::<Vec<_>>();
+
+        DataFrame::new(series)
+        .map(Abstract)
+        .map_err(|err| err.to_string())
+        .to_ocaml(cr)
+    }
+
+    fn rust_data_frame_upsample|rust_data_frame_upsample_bytecode(
+        cr,
+        data_frame: OCamlRef<DynBox<DataFrame>>,
+        by: OCamlRef<OCamlList<String>>,
+        time_column: OCamlRef<String>,
+        every: OCamlRef<String>,
+        offset: OCamlRef<String>,
+        stable: OCamlRef<bool>,
+    ) -> OCaml<Result<DynBox<DataFrame>,String>> {
+        let Abstract(data_frame) = data_frame.to_rust(cr);
+        let by: Vec<String> = by.to_rust(cr);
+        let time_column: String = time_column.to_rust(cr);
+        let every: String = every.to_rust(cr);
+        let offset: String = offset.to_rust(cr);
+        let stable: bool = stable.to_rust(cr);
+
+        if stable {
+            data_frame.upsample_stable(&by, &time_column, Duration::parse(&every), Duration::parse(&offset))
+        } else {
+            data_frame.upsample(&by, &time_column, Duration::parse(&every), Duration::parse(&offset))
+        }.map(Abstract).map_err(|err| err.to_string()).to_ocaml(cr)
+    }
+
     fn rust_data_frame_explode(cr, data_frame: OCamlRef<DynBox<DataFrame>>, columns: OCamlRef<OCamlList<String>>) -> OCaml<Result<DynBox<DataFrame>, String>> {
         let Abstract(data_frame) = data_frame.to_rust(cr);
         let columns: Vec<String> = columns.to_rust(cr);
