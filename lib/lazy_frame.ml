@@ -14,11 +14,43 @@ let scan_csv_exn path =
   scan_csv path |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
 ;;
 
-external to_dot : t -> (string, string) result = "rust_lazy_frame_to_dot"
-external cache : t -> t = "rust_lazy_frame_cache"
-external collect : t -> (Data_frame0.t, string) result = "rust_lazy_frame_collect"
+external explain
+  :  t
+  -> optimized:bool
+  -> (string, string) result
+  = "rust_lazy_frame_explain"
 
-let collect_exn t = collect t |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
+let explain ?(optimized = true) t = explain t ~optimized
+
+let explain_exn ?optimized t =
+  explain ?optimized t |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
+;;
+
+external to_dot
+  :  t
+  -> optimized:bool
+  -> (string, string) result
+  = "rust_lazy_frame_to_dot"
+
+let to_dot ?(optimized = true) t = to_dot t ~optimized
+
+let to_dot_exn ?optimized t =
+  to_dot ?optimized t |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
+;;
+
+external cache : t -> t = "rust_lazy_frame_cache"
+
+external collect
+  :  t
+  -> streaming:bool
+  -> (Data_frame0.t, string) result
+  = "rust_lazy_frame_collect"
+
+let collect ?(streaming = false) t = collect t ~streaming
+
+let collect_exn ?streaming t =
+  collect ?streaming t |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
+;;
 
 external collect_all
   :  t list
@@ -27,6 +59,16 @@ external collect_all
 
 let collect_all_exn ts =
   collect_all ts |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
+;;
+
+external fetch
+  :  t
+  -> n_rows:int
+  -> (Data_frame0.t, string) result
+  = "rust_lazy_frame_fetch"
+
+let fetch_exn t ~n_rows =
+  fetch t ~n_rows |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
 ;;
 
 external filter : t -> predicate:Expr.t -> t = "rust_lazy_frame_filter"

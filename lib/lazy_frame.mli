@@ -6,12 +6,17 @@ val scan_parquet : string -> (t, string) result
 val scan_parquet_exn : string -> t
 val scan_csv : string -> (t, string) result
 val scan_csv_exn : string -> t
-val to_dot : t -> (string, string) result
+val explain : ?optimized:bool -> t -> (string, string) result
+val explain_exn : ?optimized:bool -> t -> string
+val to_dot : ?optimized:bool -> t -> (string, string) result
+val to_dot_exn : ?optimized:bool -> t -> string
 val cache : t -> t
-val collect : t -> (Data_frame0.t, string) result
-val collect_exn : t -> Data_frame0.t
+val collect : ?streaming:bool -> t -> (Data_frame0.t, string) result
+val collect_exn : ?streaming:bool -> t -> Data_frame0.t
 val collect_all : t list -> (Data_frame0.t list, string) result
 val collect_all_exn : t list -> Data_frame0.t list
+val fetch : t -> n_rows:int -> (Data_frame0.t, string) result
+val fetch_exn : t -> n_rows:int -> Data_frame0.t
 val filter : t -> predicate:Expr.t -> t
 val select : t -> exprs:Expr.t list -> t
 val with_columns : t -> exprs:Expr.t list -> t

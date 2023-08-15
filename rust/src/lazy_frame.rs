@@ -23,11 +23,15 @@ ocaml_export! {
         .to_ocaml(cr)
     }
 
-    fn rust_lazy_frame_to_dot(cr, lazy_frame: OCamlRef<DynBox<LazyFrame>>) -> OCaml<Result<String,String>>{
+    fn rust_lazy_frame_explain(
+        cr,
+        lazy_frame: OCamlRef<DynBox<LazyFrame>>,
+        optimized: OCamlRef<bool>
+    ) -> OCaml<Result<String,String>>{
         let Abstract(lazy_frame) = lazy_frame.to_rust(cr);
+        let optimized = optimized.to_rust(cr);
 
-        // TODO: make configurable
-        lazy_frame.to_dot(false).map_err(|err| err.to_string()).to_ocaml(cr)
+        lazy_frame.explain(optimized).map_err(|err| err.to_string()).to_ocaml(cr)
     }
 
     fn rust_lazy_frame_cache(cr, lazy_frame: OCamlRef<DynBox<LazyFrame>>)-> OCaml<DynBox<LazyFrame>> {
@@ -35,9 +39,28 @@ ocaml_export! {
         OCaml::box_value(cr, lazy_frame.cache())
     }
 
-    fn rust_lazy_frame_collect(cr, lazy_frame: OCamlRef<DynBox<LazyFrame>>)-> OCaml<Result<DynBox<DataFrame>, String>> {
+    fn rust_lazy_frame_to_dot(
+        cr,
+        lazy_frame: OCamlRef<DynBox<LazyFrame>>,
+        optimized: OCamlRef<bool>
+    ) -> OCaml<Result<String,String>>{
+       let Abstract(lazy_frame) = lazy_frame.to_rust(cr);
+        let optimized = optimized.to_rust(cr);
+
+        lazy_frame.to_dot(optimized).map_err(|err| err.to_string()).to_ocaml(cr)
+    }
+
+    fn rust_lazy_frame_collect(
+        cr,
+        lazy_frame: OCamlRef<DynBox<LazyFrame>>,
+        streaming: OCamlRef<bool>,
+     )-> OCaml<Result<DynBox<DataFrame>, String>> {
         let Abstract(lazy_frame) = lazy_frame.to_rust(cr);
-        lazy_frame.collect()
+        let streaming = streaming.to_rust(cr);
+
+        lazy_frame
+        .with_streaming(streaming)
+        .collect()
         .map(Abstract).map_err(|err| err.to_string())
         .to_ocaml(cr)
     }
@@ -48,6 +71,19 @@ ocaml_export! {
         collect_all(lazy_frames)
         .map(|data_frames| data_frames.into_iter().map(Abstract).collect::<Vec<_>>())
         .map_err(|err| err.to_string())
+        .to_ocaml(cr)
+    }
+
+    fn rust_lazy_frame_fetch(
+        cr,
+        lazy_frame: OCamlRef<DynBox<LazyFrame>>,
+        n_rows: OCamlRef<OCamlInt>,
+    ) -> OCaml<Result<DynBox<DataFrame>, String>> {
+        let Abstract(lazy_frame) = lazy_frame.to_rust(cr);
+        let n_rows = n_rows.to_rust::<Coerce<_, i64, usize>>(cr).get();
+
+        lazy_frame.fetch(n_rows)
+        .map(Abstract).map_err(|err| err.to_string())
         .to_ocaml(cr)
     }
 

@@ -679,6 +679,58 @@ ocaml_export! {
         }, GetOutput::from_type(DataType::List(Box::new(DataType::Utf8))))
     }
 
+    fn rust_expr_str_strip(
+        cr,
+        expr: OCamlRef<DynBox<Expr>>,
+        matches: OCamlRef<Option<String>>,
+    ) -> OCaml<DynBox<Expr>> {
+        let matches: Option<String> = matches.to_rust(cr);
+        expr_unary_op(cr, expr, |expr| expr.str().strip(matches))
+    }
+
+    fn rust_expr_str_lstrip(
+        cr,
+        expr: OCamlRef<DynBox<Expr>>,
+        matches: OCamlRef<Option<String>>,
+    ) -> OCaml<DynBox<Expr>> {
+        let matches: Option<String> = matches.to_rust(cr);
+        expr_unary_op(cr, expr, |expr| expr.str().lstrip(matches))
+    }
+
+    fn rust_expr_str_rstrip(
+        cr,
+        expr: OCamlRef<DynBox<Expr>>,
+        matches: OCamlRef<Option<String>>,
+    ) -> OCaml<DynBox<Expr>> {
+        let matches: Option<String> = matches.to_rust(cr);
+        expr_unary_op(cr, expr, |expr| expr.str().rstrip(matches))
+    }
+
+    fn rust_expr_str_to_lowercase(
+        cr,
+        expr: OCamlRef<DynBox<Expr>>,
+    ) -> OCaml<DynBox<Expr>> {
+        expr_unary_op(cr, expr, |expr| expr.str().to_lowercase())
+    }
+
+    fn rust_expr_str_to_uppercase(
+        cr,
+        expr: OCamlRef<DynBox<Expr>>,
+    ) -> OCaml<DynBox<Expr>> {
+        expr_unary_op(cr, expr, |expr| expr.str().to_uppercase())
+    }
+
+    fn rust_expr_str_slice(
+        cr,
+        expr: OCamlRef<DynBox<Expr>>,
+        start: OCamlRef<OCamlInt>,
+        length: OCamlRef<Option<OCamlInt>>,
+    ) -> OCaml<DynBox<Expr>> {
+        let start: i64 = start.to_rust(cr);
+        let length = length.to_rust::<Coerce<_, Option<i64>, Option<u64>>>(cr).get();
+        expr_unary_op(cr, expr, |expr| expr.str().str_slice(start, length))
+    }
+
     fn rust_expr_list_lengths(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
         expr_unary_op(cr, expr, |expr| expr.list().lengths())
     }
