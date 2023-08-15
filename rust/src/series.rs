@@ -311,7 +311,7 @@ ocaml_export! {
                     .and_then(|series| series
                         .i32()
                         .map(|elems| elems.into_iter().collect())
-                        .map(|list : Vec<Option<i32>>| TypedList::Int32(list))
+                        .map(TypedList::Int32)
                     )
                     .map_err(|e| e.to_string())
             },
@@ -320,14 +320,14 @@ ocaml_export! {
                     .i32()
                     .map_err(|e| e.to_string())
                     .map(|elems| elems.into_iter().collect())
-                    .map(|list : Vec<Option<i32>>| TypedList::Int32(list))
+                    .map(TypedList::Int32)
             }
             DataType::Int64 => {
                 series
                     .i64()
                     .map_err(|e| e.to_string())
                     .map(|elems| elems.into_iter().collect())
-                    .map(|list : Vec<Option<i64>>| TypedList::Int(list))
+                    .map(TypedList::Int)
             }
             DataType::Float32 => {
                 series
@@ -335,7 +335,7 @@ ocaml_export! {
                     .and_then(|series| series
                         .f64()
                         .map(|elems| elems.into_iter().collect())
-                        .map(|list : Vec<Option<f64>>| TypedList::Float(list))
+                        .map(TypedList::Float)
                     )
                     .map_err(|e| e.to_string())
             }
@@ -344,21 +344,21 @@ ocaml_export! {
                     .f64()
                     .map_err(|e| e.to_string())
                     .map(|elems| elems.into_iter().collect())
-                    .map(|list : Vec<Option<f64>>| TypedList::Float(list))
+                    .map(TypedList::Float)
             }
             DataType::Utf8 => {
                 series
                     .utf8()
                     .map_err(|e| e.to_string())
                     .map(|elems| elems.into_iter().map(|s_opt| s_opt.map(|s| s.to_string())).collect())
-                    .map(|list : Vec<Option<String>>| TypedList::String(list))
+                    .map(TypedList::String)
             }
             DataType::Binary => {
                 series
                 .binary()
                 .map_err(|e| e.to_string())
                 .map(|elems| elems.into_iter().map(|s_opt| s_opt.map(|b| b.to_vec())).collect())
-                .map(|list : Vec<Option<Vec<u8>>>| TypedList::Bytes(list))
+                .map(TypedList::Bytes)
             }
             dtype => Result::Err(format!("Unsupported dtype: {:?}", dtype)),
         };

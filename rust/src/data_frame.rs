@@ -23,7 +23,7 @@ ocaml_export! {
         let schema = schema.to_rust::<Option<Abstract<Schema>>>(cr).map(|Abstract(schema)| Arc::new(schema));
         let try_parse_dates: Option<bool> = try_parse_dates.to_rust(cr);
 
-        CsvReader::from_path(&path)
+        CsvReader::from_path(path)
         .and_then(|csv_reader| {
             let csv_reader = csv_reader.with_dtypes(schema);
             match try_parse_dates {
@@ -182,8 +182,7 @@ ocaml_export! {
 
         let stack = || {
             let mut data_frames = data_frames.into_iter();
-            let first = data_frames.next().ok_or(PolarsError::NoData("No dataframes provided for vertical concatenation".into()))?;
-            let mut result = first.clone();
+            let mut result = data_frames.next().ok_or(PolarsError::NoData("No dataframes provided for vertical concatenation".into()))?;
             for data_frame in data_frames {
                 result = result.vstack(&data_frame)?;
             }
@@ -262,7 +261,7 @@ ocaml_export! {
         let descending: Vec<bool> = descending.to_rust(cr);
         let maintain_order: bool = maintain_order.to_rust(cr);
 
-        data_frame.sort(&by_column, descending, maintain_order)
+        data_frame.sort(by_column, descending, maintain_order)
         .map(Abstract).map_err(|err| err.to_string()).to_ocaml(cr)
     }
 

@@ -69,7 +69,7 @@ ocaml_export! {
 
     fn rust_expr_cols(cr, names: OCamlRef<OCamlList<String>>) -> OCaml<DynBox<Expr>> {
         let names: Vec<String> = names.to_rust(cr);
-        OCaml::box_value(cr, cols(&names))
+        OCaml::box_value(cr, cols(names))
     }
 
     fn rust_expr_all(cr, unit: OCamlRef<()>) -> OCaml<DynBox<Expr>> {
