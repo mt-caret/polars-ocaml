@@ -201,6 +201,16 @@ module Dt = struct
 
   (* TODO: consider supporting Time_ns.Zone.t *)
   external convert_time_zone : t -> to_:string -> t = "rust_expr_dt_convert_time_zone"
+
+  external replace_time_zone
+    :  t
+    -> to_:string option
+    -> use_earliest:bool option
+    -> t
+    = "rust_expr_dt_replace_time_zone"
+
+  let replace_time_zone ?use_earliest t ~to_ = replace_time_zone t ~to_ ~use_earliest
+
   external year : t -> t = "rust_expr_dt_year"
   external month : t -> t = "rust_expr_dt_month"
   external day : t -> t = "rust_expr_dt_day"
