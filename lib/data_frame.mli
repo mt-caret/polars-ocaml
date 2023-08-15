@@ -199,3 +199,4 @@ val explode_exn : t -> columns:string list -> t
 val schema : t -> Schema.t
 val to_string_hum : t -> string
 val print : t -> unit
+val pp : Format.formatter -> t -> unit [@@ocaml.toplevel_printer]

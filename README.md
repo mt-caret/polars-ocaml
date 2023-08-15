@@ -13,6 +13,16 @@ in the test directory.
 
 Note that the current code assumes that the OCaml version is 4.14.1.
 
+## utop
+
+polars-ocaml works in utop!
+
+`$ dune utop --profile utop`[^utop-workaround]
+
+[^utop-workaround]: The special profile is a workaround for a [known limitation in a library we use](https://github.com/tizoc/ocaml-interop/issues/49#issuecomment-1627842973)).
+
+![polars-ocaml running in utop](https://user-images.githubusercontent.com/4996739/253110945-c8ffb606-bcbb-4297-acef-602d3cecd15b.png)
+
 ## license
 
 This project is licensed under the terms of the MIT license, with the exception of the following files:

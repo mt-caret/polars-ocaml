@@ -176,9 +176,6 @@ module T = struct
   external sub : t -> t -> t = "rust_series_sub"
   external mul : t -> t -> t = "rust_series_mul"
   external div : t -> t -> t = "rust_series_div"
-  external to_string_hum : t -> string = "rust_series_to_string_hum"
-
-  let print t = print_endline (to_string_hum t)
 
   type typed_list =
     | Int of int option list
@@ -193,6 +190,11 @@ module T = struct
   let to_typed_list_exn t =
     t |> to_typed_list |> Result.map_error ~f:Error.of_string |> ok_exn
   ;;
+
+  external to_string_hum : t -> string = "rust_series_to_string_hum"
+
+  let print t = print_endline (to_string_hum t)
+  let pp formatter t = Stdlib.Format.pp_print_string formatter (to_string_hum t)
 end
 
 include T
