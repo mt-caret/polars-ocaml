@@ -244,16 +244,13 @@ ocaml_export! {
         let Abstract(data_frame) = data_frame.to_rust(cr);
         let PolarsInterpolationMethod(method) = method.to_rust(cr);
 
-        // TODO: I expected there to be a way to get an iterator over a series
-        // directly, but I couldn't find anything; if this doesn't exist perhaps
-        // this should be added to upstream.
-        data_frame.get_column_names().into_iter().map(|column_name| {
-            data_frame.column(column_name).map(|series|
-                interpolate(&series, method)
-            )
-        })
-        .collect::<PolarsResult<Vec<_>>>()
-        .and_then(|columns| DataFrame::new(columns))
+        let series =
+            data_frame.get_columns()
+            .into_iter()
+            .map(|series| interpolate(series, method))
+            .collect::<Vec<_>>();
+
+        DataFrame::new(series)
         .map(Abstract)
         .map_err(|err| err.to_string())
         .to_ocaml(cr)
