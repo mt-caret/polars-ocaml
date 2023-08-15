@@ -21,6 +21,7 @@ module T = struct
   external string : string -> t = "rust_expr_string"
   external naive_date : Common.Naive_date.t -> t = "rust_expr_naive_date"
   external naive_datetime : Common.Naive_datetime.t -> t = "rust_expr_naive_datetime"
+  external series : Series.t -> t = "rust_expr_series"
   external sort : t -> descending:bool -> t = "rust_expr_sort"
 
   let sort ?(descending = false) t = sort t ~descending
@@ -29,16 +30,24 @@ module T = struct
 
   let sort_by ?(descending = false) t ~by = sort_by t ~descending ~by
 
+  external set_sorted_flag
+    :  t
+    -> sorted:[ `Ascending | `Descending | `Not ]
+    -> t
+    = "rust_expr_set_sorted_flag"
+
   external first : t -> t = "rust_expr_first"
   external last : t -> t = "rust_expr_last"
   external reverse : t -> t = "rust_expr_reverse"
-  external head : t -> length:int option -> t option = "rust_expr_head"
+  external head : t -> length:int option -> t = "rust_expr_head"
 
-  let head ?length t = head t ~length |> Option.value_exn ~here:[%here]
+  let head ?length t = head t ~length
 
-  external tail : t -> length:int option -> t option = "rust_expr_tail"
+  external tail : t -> length:int option -> t = "rust_expr_tail"
 
-  let tail ?length t = tail t ~length |> Option.value_exn ~here:[%here]
+  let tail ?length t = tail t ~length
+
+  external take : t -> idx:t -> t = "rust_expr_take"
 
   external sample_n
     :  t
@@ -47,20 +56,27 @@ module T = struct
     -> shuffle:bool
     -> seed:int option
     -> fixed_seed:bool
-    -> t option
+    -> t
     = "rust_expr_sample_n_bytecode" "rust_expr_sample_n"
 
   let sample_n ?seed ?(fixed_seed = true) t ~n ~with_replacement ~shuffle =
     sample_n t ~n ~with_replacement ~shuffle ~seed ~fixed_seed
-    |> Option.value_exn ~here:[%here]
   ;;
 
   external filter : t -> predicate:t -> t = "rust_expr_filter"
+  external ceil : t -> t = "rust_expr_ceil"
+  external floor : t -> t = "rust_expr_floor"
+  external clip_min_float : t -> min:float -> t = "rust_expr_clip_min_float"
+  external clip_max_float : t -> max:float -> t = "rust_expr_clip_max_float"
+  external clip_min_int : t -> min:int -> t = "rust_expr_clip_min_int"
+  external clip_max_int : t -> max:int -> t = "rust_expr_clip_max_int"
   external sum : t -> t = "rust_expr_sum"
   external mean : t -> t = "rust_expr_mean"
   external median : t -> t = "rust_expr_median"
   external max : t -> t = "rust_expr_max"
   external min : t -> t = "rust_expr_min"
+  external arg_max : t -> t = "rust_expr_arg_max"
+  external arg_min : t -> t = "rust_expr_arg_min"
   external count : t -> t = "rust_expr_count"
   external count_ : unit -> t = "rust_expr_count_"
   external n_unique : t -> t = "rust_expr_n_unique"
@@ -92,6 +108,8 @@ module T = struct
   external null_count : t -> t = "rust_expr_null_count"
   external is_null : t -> t = "rust_expr_is_null"
   external is_not_null : t -> t = "rust_expr_is_not_null"
+  external is_nan : t -> t = "rust_expr_is_nan"
+  external is_not_nan : t -> t = "rust_expr_is_not_nan"
   external fill_null : t -> with_:t -> t = "rust_expr_fill_null"
 
   external fill_null'
@@ -115,11 +133,11 @@ module T = struct
     -> method_:[ `Average | `Min | `Max | `Dense | `Ordinal | `Random ]
     -> descending:bool
     -> seed:int option
-    -> t option
+    -> t
     = "rust_expr_rank"
 
   let rank ?(method_ = `Dense) ?(descending = false) ?seed t =
-    rank t ~method_ ~descending ~seed |> Option.value_exn ~here:[%here]
+    rank t ~method_ ~descending ~seed
   ;;
 
   external when_ : (t * t) list -> otherwise:t -> t = "rust_expr_when_then"
@@ -151,10 +169,7 @@ module T = struct
   external alias : t -> name:string -> t = "rust_expr_alias"
   external prefix : t -> prefix:string -> t = "rust_expr_prefix"
   external suffix : t -> suffix:string -> t = "rust_expr_suffix"
-  external round : t -> decimals:int -> t option = "rust_expr_round"
-
-  let round t ~decimals = round t ~decimals |> Option.value_exn ~here:[%here]
-
+  external round : t -> decimals:int -> t = "rust_expr_round"
   external equal : t -> t -> t = "rust_expr_eq"
 
   let ( = ) = equal
@@ -186,9 +201,26 @@ module Dt = struct
 
   (* TODO: consider supporting Time_ns.Zone.t *)
   external convert_time_zone : t -> to_:string -> t = "rust_expr_dt_convert_time_zone"
+
+  external replace_time_zone
+    :  t
+    -> to_:string option
+    -> use_earliest:bool option
+    -> t
+    = "rust_expr_dt_replace_time_zone"
+
+  let replace_time_zone ?use_earliest t ~to_ = replace_time_zone t ~to_ ~use_earliest
+
   external year : t -> t = "rust_expr_dt_year"
   external month : t -> t = "rust_expr_dt_month"
   external day : t -> t = "rust_expr_dt_day"
+  external days : t -> t = "rust_expr_dt_days"
+  external hours : t -> t = "rust_expr_dt_hours"
+  external minutes : t -> t = "rust_expr_dt_minutes"
+  external seconds : t -> t = "rust_expr_dt_seconds"
+  external milliseconds : t -> t = "rust_expr_dt_milliseconds"
+  external microseconds : t -> t = "rust_expr_dt_microseconds"
+  external nanoseconds : t -> t = "rust_expr_dt_nanoseconds"
 end
 
 module Str = struct
@@ -211,10 +243,7 @@ module Str = struct
 
   external starts_with : t -> prefix:string -> t = "rust_expr_str_starts_with"
   external ends_with : t -> suffix:string -> t = "rust_expr_str_ends_with"
-  external extract : t -> pat:string -> group:int -> t option = "rust_expr_str_extract"
-
-  let extract t ~pat ~group = extract t ~pat ~group |> Option.value_exn ~here:[%here]
-
+  external extract : t -> pat:string -> group:int -> t = "rust_expr_str_extract"
   external extract_all : t -> pat:string -> t = "rust_expr_str_extract_all"
 
   external replace
@@ -236,6 +265,22 @@ module Str = struct
     = "rust_expr_str_replace_all"
 
   let replace_all ?(literal = false) t ~pat ~with_ = replace_all t ~pat ~with_ ~literal
+
+  external strip : t -> matches:string option -> t = "rust_expr_str_strip"
+
+  let strip ?matches t = strip t ~matches
+
+  external lstrip : t -> matches:string option -> t = "rust_expr_str_lstrip"
+
+  let lstrip ?matches t = lstrip t ~matches
+
+  external rstrip : t -> matches:string option -> t = "rust_expr_str_rstrip"
+
+  let rstrip ?matches t = rstrip t ~matches
+
+  external to_lowercase : t -> t = "rust_expr_str_to_lowercase"
+  external to_uppercase : t -> t = "rust_expr_str_to_uppercase"
+  external slice : t -> start:int -> length:int option -> t = "rust_expr_str_slice"
 end
 
 module List = struct

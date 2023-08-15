@@ -23,16 +23,44 @@ ocaml_export! {
         .to_ocaml(cr)
     }
 
-    fn rust_lazy_frame_to_dot(cr, lazy_frame: OCamlRef<DynBox<LazyFrame>>) -> OCaml<Result<String,String>>{
+    fn rust_lazy_frame_explain(
+        cr,
+        lazy_frame: OCamlRef<DynBox<LazyFrame>>,
+        optimized: OCamlRef<bool>
+    ) -> OCaml<Result<String,String>>{
         let Abstract(lazy_frame) = lazy_frame.to_rust(cr);
+        let optimized = optimized.to_rust(cr);
 
-        // TODO: make configurable
-        lazy_frame.to_dot(false).map_err(|err| err.to_string()).to_ocaml(cr)
+        lazy_frame.explain(optimized).map_err(|err| err.to_string()).to_ocaml(cr)
     }
 
-    fn rust_lazy_frame_collect(cr, lazy_frame: OCamlRef<DynBox<LazyFrame>>)-> OCaml<Result<DynBox<DataFrame>, String>> {
+    fn rust_lazy_frame_cache(cr, lazy_frame: OCamlRef<DynBox<LazyFrame>>)-> OCaml<DynBox<LazyFrame>> {
         let Abstract(lazy_frame) = lazy_frame.to_rust(cr);
-        lazy_frame.collect()
+        OCaml::box_value(cr, lazy_frame.cache())
+    }
+
+    fn rust_lazy_frame_to_dot(
+        cr,
+        lazy_frame: OCamlRef<DynBox<LazyFrame>>,
+        optimized: OCamlRef<bool>
+    ) -> OCaml<Result<String,String>>{
+       let Abstract(lazy_frame) = lazy_frame.to_rust(cr);
+        let optimized = optimized.to_rust(cr);
+
+        lazy_frame.to_dot(optimized).map_err(|err| err.to_string()).to_ocaml(cr)
+    }
+
+    fn rust_lazy_frame_collect(
+        cr,
+        lazy_frame: OCamlRef<DynBox<LazyFrame>>,
+        streaming: OCamlRef<bool>,
+     )-> OCaml<Result<DynBox<DataFrame>, String>> {
+        let Abstract(lazy_frame) = lazy_frame.to_rust(cr);
+        let streaming = streaming.to_rust(cr);
+
+        lazy_frame
+        .with_streaming(streaming)
+        .collect()
         .map(Abstract).map_err(|err| err.to_string())
         .to_ocaml(cr)
     }
@@ -43,6 +71,29 @@ ocaml_export! {
         collect_all(lazy_frames)
         .map(|data_frames| data_frames.into_iter().map(Abstract).collect::<Vec<_>>())
         .map_err(|err| err.to_string())
+        .to_ocaml(cr)
+    }
+
+    fn rust_lazy_frame_profile(cr, lazy_frame: OCamlRef<DynBox<LazyFrame>>)-> OCaml<Result<(DynBox<DataFrame>, DynBox<DataFrame>), String>> {
+        let Abstract(lazy_frame) = lazy_frame.to_rust(cr);
+
+        lazy_frame
+        .profile()
+        .map(|(materialized, profile)| (Abstract(materialized), Abstract(profile)))
+        .map_err(|err| err.to_string())
+        .to_ocaml(cr)
+    }
+
+    fn rust_lazy_frame_fetch(
+        cr,
+        lazy_frame: OCamlRef<DynBox<LazyFrame>>,
+        n_rows: OCamlRef<OCamlInt>,
+    ) -> OCaml<Result<DynBox<DataFrame>, String>> {
+        let Abstract(lazy_frame) = lazy_frame.to_rust(cr);
+        let n_rows = n_rows.to_rust::<Coerce<_, i64, usize>>(cr).get();
+
+        lazy_frame.fetch(n_rows)
+        .map(Abstract).map_err(|err| err.to_string())
         .to_ocaml(cr)
     }
 
@@ -71,6 +122,53 @@ ocaml_export! {
         let Abstract(lazy_frame) = lazy_frame.to_rust(cr);
         let groupby = if is_stable { lazy_frame.groupby_stable(by) } else { lazy_frame.groupby(by) };
         OCaml::box_value(cr, groupby.agg(agg))
+    }
+
+    fn rust_lazy_frame_groupby_dynamic|rust_lazy_frame_groupby_dynamic_bytecode(
+        cr,
+        lazy_frame: OCamlRef<DynBox<LazyFrame>>,
+        index_column: OCamlRef<DynBox<Expr>>,
+        by: OCamlRef<OCamlList<DynBox<Expr>>>,
+        every: OCamlRef<Option<String>>,
+        period: OCamlRef<Option<String>>,
+        offset: OCamlRef<Option<String>>,
+        truncate: OCamlRef<Option<bool>>,
+        include_boundaries: OCamlRef<Option<bool>>,
+        closed_window: OCamlRef<Option<ClosedWindow>>,
+        start_by: OCamlRef<Option<StartBy>>,
+        check_sorted: OCamlRef<Option<bool>>,
+        agg: OCamlRef<OCamlList<DynBox<Expr>>>,
+    ) -> OCaml<DynBox<LazyFrame>> {
+        let every = every.to_rust::<Option<String>>(cr).as_deref().map(Duration::parse);
+        let period = period.to_rust::<Option<String>>(cr).as_deref().map(Duration::parse);
+        let offset = offset.to_rust::<Option<String>>(cr).as_deref().map(Duration::parse);
+        let truncate: Option<bool> = truncate.to_rust(cr);
+        let include_boundaries: Option<bool> = include_boundaries.to_rust(cr);
+        let closed_window = closed_window.to_rust::<Option<PolarsClosedWindow>>(cr).map(|PolarsClosedWindow(closed_window)| closed_window);
+        let start_by = start_by.to_rust::<Option<PolarsStartBy>>(cr).map(|PolarsStartBy(start_by)| start_by);
+        let check_sorted: Option<bool> = check_sorted.to_rust(cr);
+
+        let options: DynamicGroupOptions = Default::default();
+        let options = DynamicGroupOptions {
+            // index_column is set within LazyFrame::groupby_dynamic()
+            index_column: "".into(),
+            every: every.unwrap_or(options.every),
+            period: period.unwrap_or(options.period),
+            offset: offset.unwrap_or(options.offset),
+            truncate: truncate.unwrap_or(options.truncate),
+            include_boundaries: include_boundaries.unwrap_or(options.include_boundaries),
+            closed_window: closed_window.unwrap_or(options.closed_window),
+            start_by: start_by.unwrap_or(options.start_by),
+            check_sorted: check_sorted.unwrap_or(options.check_sorted),
+        };
+
+        let Abstract(lazy_frame) = lazy_frame.to_rust(cr);
+        let Abstract(index_column) = index_column.to_rust(cr);
+        let by = unwrap_abstract_vec(by.to_rust(cr));
+
+        let agg = unwrap_abstract_vec(agg.to_rust(cr));
+
+        OCaml::box_value(cr, lazy_frame.groupby_dynamic(index_column, by, options).agg(agg))
     }
 
     fn rust_lazy_frame_join(cr, lazy_frame: OCamlRef<DynBox<LazyFrame>>, other: OCamlRef<DynBox<LazyFrame>>, left_on: OCamlRef<OCamlList<DynBox<Expr>>>, right_on: OCamlRef<OCamlList<DynBox<Expr>>>, how: OCamlRef<JoinType>) -> OCaml<DynBox<LazyFrame>> {
@@ -139,13 +237,14 @@ ocaml_export! {
         Abstract(lazy_frame.melt(melt_args)).to_ocaml(cr)
     }
 
-    fn rust_lazy_frame_limit(cr, lazy_frame: OCamlRef<DynBox<LazyFrame>>, n: OCamlRef<OCamlInt>) -> OCaml<Option<DynBox<LazyFrame>>> {
-        let result: Option<_> = try {
-            let n = n.to_rust::<i64>(cr).try_into().ok()?;
-            let Abstract(lazy_frame) = lazy_frame.to_rust(cr);
-            Abstract(lazy_frame.limit(n))
-        };
-        result.to_ocaml(cr)
+    fn rust_lazy_frame_limit(
+        cr,
+        lazy_frame: OCamlRef<DynBox<LazyFrame>>,
+        n: OCamlRef<OCamlInt>
+    ) -> OCaml<DynBox<LazyFrame>> {
+        let n = n.to_rust::<Coerce<_, i64, u32>>(cr).get();
+        let Abstract(lazy_frame) = lazy_frame.to_rust(cr);
+        Abstract(lazy_frame.limit(n)).to_ocaml(cr)
     }
 
     fn rust_lazy_frame_explode(cr, lazy_frame: OCamlRef<DynBox<LazyFrame>>, columns: OCamlRef<OCamlList<DynBox<Expr>>>) -> OCaml<DynBox<LazyFrame>> {

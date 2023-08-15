@@ -1,7 +1,8 @@
 use crate::utils::*;
 use chrono::naive::{NaiveDate, NaiveDateTime};
 use ocaml_interop::{
-    ocaml_export, DynBox, OCaml, OCamlFloat, OCamlInt, OCamlList, OCamlRef, OCamlRuntime, ToOCaml,
+    impl_to_ocaml_variant, ocaml_export, DynBox, OCaml, OCamlBytes, OCamlFloat, OCamlInt,
+    OCamlInt32, OCamlList, OCamlRef, OCamlRuntime, ToOCaml,
 };
 use polars::prelude::prelude::*;
 use polars::prelude::*;
@@ -32,6 +33,26 @@ fn series_binary_op_result<'a>(
         .map_err(|err| err.to_string());
 
     series.to_ocaml(cr)
+}
+
+pub enum TypedList {
+    Int(Vec<Option<i64>>),
+    Int32(Vec<Option<i32>>),
+    Float(Vec<Option<f64>>),
+    String(Vec<Option<String>>),
+    Bytes(Vec<Option<Vec<u8>>>),
+}
+
+impl_to_ocaml_variant! {
+    // Optionally, if Rust and OCaml types don't match:
+    // RustType => OCamlType { ... }
+    TypedList {
+        TypedList::Int(l: OCamlList<Option<OCamlInt>>),
+        TypedList::Int32(l: OCamlList<Option<OCamlInt32>>),
+        TypedList::Float(l: OCamlList<Option<OCamlFloat>>),
+        TypedList::String(l: OCamlList<Option<String>>),
+        TypedList::Bytes(l: OCamlList<Option<OCamlBytes>>),
+    }
 }
 
 ocaml_export! {
@@ -95,16 +116,33 @@ ocaml_export! {
         OCaml::box_value(cr, Series::new(&name, values))
     }
 
-    fn rust_series_date_range(cr, name: OCamlRef<String>, start: OCamlRef<DynBox<NaiveDateTime>>, stop: OCamlRef<DynBox<NaiveDateTime>>, cast_to_date: OCamlRef<bool>) -> OCaml<Result<DynBox<Series>,String>> {
+    fn rust_series_date_range(
+        cr,
+        name: OCamlRef<String>, start: OCamlRef<DynBox<NaiveDateTime>>,
+        stop: OCamlRef<DynBox<NaiveDateTime>>,
+        every: OCamlRef<Option<String>>,
+        cast_to_date: OCamlRef<bool>,
+    ) -> OCaml<Result<DynBox<Series>,String>> {
         let name: String = name.to_rust(cr);
 
         let Abstract(start) = start.to_rust(cr);
         let Abstract(stop) = stop.to_rust(cr);
 
+        let every: String =
+            every.to_rust::<Option<String>>(cr).unwrap_or("1d".to_string());
+
         let cast_to_date: bool = cast_to_date.to_rust(cr);
 
         let series =
-            date_range(&name, start, stop, Duration::parse("1d"), ClosedWindow::Both, TimeUnit::Milliseconds, None)
+            date_range(
+                &name,
+                start,
+                stop,
+                Duration::parse(&every),
+                ClosedWindow::Both,
+                TimeUnit::Milliseconds,
+                None
+            )
             .and_then(|date_range| {
                 let series = date_range.into_series();
                 if cast_to_date {
@@ -119,6 +157,25 @@ ocaml_export! {
         series.to_ocaml(cr)
     }
 
+    fn rust_series_name(cr, series: OCamlRef<DynBox<Series>>) -> OCaml<String> {
+        let Abstract(series) = series.to_rust(cr);
+        series.name().to_ocaml(cr)
+    }
+
+    fn rust_series_rename(cr, series: OCamlRef<DynBox<Series>>, name: OCamlRef<String>) -> OCaml<DynBox<Series>> {
+        let Abstract(mut series) = series.to_rust(cr);
+        let name: String = name.to_rust(cr);
+
+        let _ = series.rename(&name);
+
+        OCaml::box_value(cr, series)
+    }
+
+    fn rust_series_to_data_frame(cr, series: OCamlRef<DynBox<Series>>) -> OCaml<DynBox<DataFrame>> {
+        let Abstract(series) = series.to_rust(cr);
+        OCaml::box_value(cr, series.into_frame())
+    }
+
     fn rust_series_sort(cr, series: OCamlRef<DynBox<Series>>, descending: OCamlRef<bool>) -> OCaml<DynBox<Series>> {
         let Abstract(series) = series.to_rust(cr);
         let descending: bool = descending.to_rust(cr);
@@ -126,41 +183,69 @@ ocaml_export! {
         OCaml::box_value(cr, series.sort(descending))
     }
 
-    fn rust_series_head(cr, series: OCamlRef<DynBox<Series>>, length: OCamlRef<Option<OCamlInt>>) -> OCaml<Option<DynBox<Series>>> {
+    fn rust_series_head(
+        cr,
+        series: OCamlRef<DynBox<Series>>,
+        length: OCamlRef<Option<OCamlInt>>
+    ) -> OCaml<DynBox<Series>> {
         let Abstract(series) = series.to_rust(cr);
-        let length: Option<i64> = length.to_rust(cr);
+        let length = length.to_rust::<Coerce<_, Option<i64>, Option<usize>>>(cr).get();
 
-        match length.map(|length| length.try_into().ok()) {
-            None => Some(Abstract(series.head(None))),
-            Some(None) => None,
-            Some(Some(length)) => Some(Abstract(series.head(Some(length)))),
-        }.to_ocaml(cr)
+        Abstract(series.head(length)).to_ocaml(cr)
     }
 
-    fn rust_series_tail(cr, series: OCamlRef<DynBox<Series>>, length: OCamlRef<Option<OCamlInt>>) -> OCaml<Option<DynBox<Series>>> {
+    fn rust_series_tail(
+        cr,
+        series: OCamlRef<DynBox<Series>>,
+        length: OCamlRef<Option<OCamlInt>>
+    ) -> OCaml<DynBox<Series>> {
         let Abstract(series) = series.to_rust(cr);
-        let length: Option<i64> = length.to_rust(cr);
+        let length = length.to_rust::<Coerce<_, Option<i64>, Option<usize>>>(cr).get();
 
-        match length.map(|length| length.try_into().ok()) {
-            None => Some(Abstract(series.tail(None))),
-            Some(None) => None,
-            Some(Some(length)) => Some(Abstract(series.tail(Some(length)))),
-        }.to_ocaml(cr)
+        Abstract(series.tail(length)).to_ocaml(cr)
     }
 
-    fn rust_series_sample_n(cr, series: OCamlRef<DynBox<Series>>, n: OCamlRef<OCamlInt>, with_replacement: OCamlRef<bool>, shuffle: OCamlRef<bool>, seed: OCamlRef<Option<OCamlInt>>) -> OCaml<Option<Result<DynBox<Series>,String>>> {
-        let result: Option<_> = try {
-            let Abstract(series) = series.to_rust(cr);
-            let n: usize = n.to_rust::<i64>(cr).try_into().ok()?;
-            let with_replacement: bool = with_replacement.to_rust(cr);
-            let shuffle: bool = shuffle.to_rust(cr);
-            let seed: Option<Result<u64,_>> = seed.to_rust::<Option<i64>>(cr).map(|seed| seed.try_into());
-            let seed: Option<u64> = seed.map_or(Ok(None), |seed| seed.map(Some)).ok()?;
+    fn rust_series_sample_n(
+        cr,
+        series: OCamlRef<DynBox<Series>>,
+        n: OCamlRef<OCamlInt>,
+        with_replacement: OCamlRef<bool>,
+        shuffle: OCamlRef<bool>,
+        seed: OCamlRef<Option<OCamlInt>>
+    ) -> OCaml<Result<DynBox<Series>,String>> {
+        let Abstract(series) = series.to_rust(cr);
+        let n = n.to_rust::<Coerce<_, i64, usize>>(cr).get();
+        let with_replacement: bool = with_replacement.to_rust(cr);
+        let shuffle: bool = shuffle.to_rust(cr);
+        let seed = seed.to_rust::<Coerce<_, Option<i64>, Option<u64>>>(cr).get();
 
-            series.sample_n(n, with_replacement, shuffle, seed)
-            .map(Abstract).map_err(|err| err.to_string())
-        };
-        result.to_ocaml(cr)
+        series.sample_n(n, with_replacement, shuffle, seed)
+        .map(Abstract).map_err(|err| err.to_string())
+        .to_ocaml(cr)
+    }
+
+    fn rust_series_fill_null_with_strategy(
+        cr,
+        series: OCamlRef<DynBox<Series>>,
+        strategy: OCamlRef<FillNullStrategy>,
+    ) -> OCaml<Result<DynBox<Series>,String>> {
+        let Abstract(series) = series.to_rust(cr);
+        let PolarsFillNullStrategy(strategy) = strategy.to_rust(cr);
+
+        series.fill_null(strategy)
+        .map(Abstract).map_err(|err| err.to_string())
+        .to_ocaml(cr)
+    }
+
+    fn rust_series_interpolate(
+        cr,
+        series: OCamlRef<DynBox<Series>>,
+        method: OCamlRef<InterpolationMethod>,
+    ) -> OCaml<DynBox<Series>> {
+        let Abstract(series) = series.to_rust(cr);
+        let PolarsInterpolationMethod(method) = method.to_rust(cr);
+
+        Abstract(interpolate(&series, method)).to_ocaml(cr)
     }
 
     fn rust_series_eq(cr, series: OCamlRef<DynBox<Series>>, other: OCamlRef<DynBox<Series>>) -> OCaml<Result<DynBox<Series>,String>> {
@@ -206,5 +291,77 @@ ocaml_export! {
     fn rust_series_to_string_hum(cr, series: OCamlRef<DynBox<Series>>) -> OCaml<String> {
         let Abstract(series) = series.to_rust(cr);
         ToString::to_string(&series).to_ocaml(cr)
+    }
+
+    // TODO: Consider using Bigarray here instead of OCamlList to keep memory outside the
+    // OCaml heap and skip a copy.
+    // TODO: Consider mapping to smaller OCaml values like Int8, Float32, etc instead of
+    // casting up
+    fn rust_series_to_typed_list(
+        cr,
+        series: OCamlRef<DynBox<Series>>,
+    ) -> OCaml<Result<TypedList, String>> {
+        let Abstract(series) = series.to_rust(cr);
+
+        // Get and process series based on its data type
+        let result : Result<TypedList, _> = match series.dtype() {
+            DataType::Int8 | DataType::Int16 => {
+                series
+                    .cast(&DataType::Int32)
+                    .and_then(|series| series
+                        .i32()
+                        .map(|elems| elems.into_iter().collect())
+                        .map(|list : Vec<Option<i32>>| TypedList::Int32(list))
+                    )
+                    .map_err(|e| e.to_string())
+            },
+            DataType::Int32 => {
+                series
+                    .i32()
+                    .map_err(|e| e.to_string())
+                    .map(|elems| elems.into_iter().collect())
+                    .map(|list : Vec<Option<i32>>| TypedList::Int32(list))
+            }
+            DataType::Int64 => {
+                series
+                    .i64()
+                    .map_err(|e| e.to_string())
+                    .map(|elems| elems.into_iter().collect())
+                    .map(|list : Vec<Option<i64>>| TypedList::Int(list))
+            }
+            DataType::Float32 => {
+                series
+                    .cast(&DataType::Float64)
+                    .and_then(|series| series
+                        .f64()
+                        .map(|elems| elems.into_iter().collect())
+                        .map(|list : Vec<Option<f64>>| TypedList::Float(list))
+                    )
+                    .map_err(|e| e.to_string())
+            }
+            DataType::Float64 => {
+                series
+                    .f64()
+                    .map_err(|e| e.to_string())
+                    .map(|elems| elems.into_iter().collect())
+                    .map(|list : Vec<Option<f64>>| TypedList::Float(list))
+            }
+            DataType::Utf8 => {
+                series
+                    .utf8()
+                    .map_err(|e| e.to_string())
+                    .map(|elems| elems.into_iter().map(|s_opt| s_opt.map(|s| s.to_string())).collect())
+                    .map(|list : Vec<Option<String>>| TypedList::String(list))
+            }
+            DataType::Binary => {
+                series
+                .binary()
+                .map_err(|e| e.to_string())
+                .map(|elems| elems.into_iter().map(|s_opt| s_opt.map(|b| b.to_vec())).collect())
+                .map(|list : Vec<Option<Vec<u8>>>| TypedList::Bytes(list))
+            }
+            dtype => Result::Err(format!("Unsupported dtype: {:?}", dtype)),
+        };
+        result.to_ocaml(cr)
     }
 }

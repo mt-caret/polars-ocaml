@@ -14,10 +14,43 @@ let scan_csv_exn path =
   scan_csv path |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
 ;;
 
-external to_dot : t -> (string, string) result = "rust_lazy_frame_to_dot"
-external collect : t -> (Data_frame0.t, string) result = "rust_lazy_frame_collect"
+external explain
+  :  t
+  -> optimized:bool
+  -> (string, string) result
+  = "rust_lazy_frame_explain"
 
-let collect_exn t = collect t |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
+let explain ?(optimized = true) t = explain t ~optimized
+
+let explain_exn ?optimized t =
+  explain ?optimized t |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
+;;
+
+external to_dot
+  :  t
+  -> optimized:bool
+  -> (string, string) result
+  = "rust_lazy_frame_to_dot"
+
+let to_dot ?(optimized = true) t = to_dot t ~optimized
+
+let to_dot_exn ?optimized t =
+  to_dot ?optimized t |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
+;;
+
+external cache : t -> t = "rust_lazy_frame_cache"
+
+external collect
+  :  t
+  -> streaming:bool
+  -> (Data_frame0.t, string) result
+  = "rust_lazy_frame_collect"
+
+let collect ?(streaming = false) t = collect t ~streaming
+
+let collect_exn ?streaming t =
+  collect ?streaming t |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
+;;
 
 external collect_all
   :  t list
@@ -26,6 +59,23 @@ external collect_all
 
 let collect_all_exn ts =
   collect_all ts |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
+;;
+
+external profile : t -> (Data_frame0.t * Data_frame0.t, string) result = "rust_lazy_frame_profile"
+
+let profile_exn t =
+  profile t |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
+
+ 
+
+external fetch
+  :  t
+  -> n_rows:int
+  -> (Data_frame0.t, string) result
+  = "rust_lazy_frame_fetch"
+
+let fetch_exn t ~n_rows =
+  fetch t ~n_rows |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
 ;;
 
 external filter : t -> predicate:Expr.t -> t = "rust_lazy_frame_filter"
@@ -41,6 +91,74 @@ external groupby
   = "rust_lazy_frame_groupby"
 
 let groupby ?(is_stable = false) t ~by ~agg = groupby t ~is_stable ~by ~agg
+
+external groupby_dynamic
+  :  t
+  -> index_column:Expr.t
+  -> by:Expr.t list
+  -> every:string option
+  -> period:string option
+  -> offset:string option
+  -> truncate:bool option
+  -> include_boundaries:bool option
+  -> closed_window:[ `Left | `Right | `Both | `None_ ] option
+  -> start_by:
+       [ `Window_bound
+       | `Data_point
+       | `Monday
+       | `Tuesday
+       | `Wednesday
+       | `Thursday
+       | `Friday
+       | `Saturday
+       | `Sunday
+       ]
+       option
+  -> check_sorted:bool option
+  -> agg:Expr.t list
+  -> t
+  = "rust_lazy_frame_groupby_dynamic_bytecode" "rust_lazy_frame_groupby_dynamic"
+
+let groupby_dynamic
+  ?every
+  ?period
+  ?offset
+  ?truncate
+  ?include_boundaries
+  ?closed_window
+  ?start_by
+  ?check_sorted
+  t
+  ~index_column
+  ~by
+  ~agg
+  =
+  (* Following the logic of:
+     https://github.com/pola-rs/polars/blob/a8489558008652fe06e182dbdf082e8d9f0159ab/py-polars/polars/lazyframe/frame.py#L2327
+  *)
+  let offset =
+    Option.value
+      offset
+      ~default:
+        (match period with
+         | None -> "-" ^ Option.value_exn every
+         | Some _ -> "0ns")
+  in
+  let period = Option.value period ~default:(Option.value_exn every) in
+  groupby_dynamic
+    t
+    ~index_column
+    ~by
+    ~every
+    ~period:(Some period)
+    ~offset:(Some offset)
+    ~truncate
+    ~include_boundaries
+    ~closed_window
+    ~start_by
+    ~check_sorted
+    ~agg
+;;
 
 external join_
   :  t
@@ -110,10 +228,7 @@ let sort ?descending ?nulls_last t ~by_column =
     ~maintain_order:(Some true)
 ;;
 
-external limit : t -> n:int -> t option = "rust_lazy_frame_limit"
-
-let limit t ~n = limit t ~n |> Option.value_exn ~here:[%here]
-
+external limit : t -> n:int -> t = "rust_lazy_frame_limit"
 external explode : t -> columns:Expr.t list -> t = "rust_lazy_frame_explode"
 external with_streaming : t -> toggle:bool -> t = "rust_lazy_frame_with_streaming"
 external schema : t -> (Schema.t, string) result = "rust_lazy_frame_schema"

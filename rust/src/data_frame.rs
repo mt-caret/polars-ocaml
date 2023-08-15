@@ -151,41 +151,56 @@ ocaml_export! {
         data_frame.melt2(melt_args).map(Abstract).map_err(|err| err.to_string()).to_ocaml(cr)
     }
 
-    fn rust_data_frame_head(cr, data_frame: OCamlRef<DynBox<DataFrame>>, length: OCamlRef<Option<OCamlInt>>) -> OCaml<Option<DynBox<DataFrame>>> {
+    fn rust_data_frame_sort(cr, data_frame: OCamlRef<DynBox<DataFrame>>, by_column: OCamlRef<OCamlList<String>>, descending: OCamlRef<OCamlList<bool>>, maintain_order: OCamlRef<bool>) -> OCaml<Result<DynBox<DataFrame>,String>> {
         let Abstract(data_frame) = data_frame.to_rust(cr);
-        let length: Option<i64> = length.to_rust(cr);
+        let by_column: Vec<String> = by_column.to_rust(cr);
+        let descending: Vec<bool> = descending.to_rust(cr);
+        let maintain_order: bool = maintain_order.to_rust(cr);
 
-        match length.map(|length| length.try_into().ok()) {
-            None => Some(Abstract(data_frame.head(None))),
-            Some(None) => None,
-            Some(Some(length)) => Some(Abstract(data_frame.head(Some(length)))),
-        }.to_ocaml(cr)
+        data_frame.sort(&by_column, descending, maintain_order)
+        .map(Abstract).map_err(|err| err.to_string()).to_ocaml(cr)
     }
 
-    fn rust_data_frame_tail(cr, data_frame: OCamlRef<DynBox<DataFrame>>, length: OCamlRef<Option<OCamlInt>>) -> OCaml<Option<DynBox<DataFrame>>> {
-        let Abstract(data_frame) = data_frame.to_rust(cr);
-        let length: Option<i64> = length.to_rust(cr);
+    fn rust_data_frame_head(
+        cr,
+        data_frame: OCamlRef<DynBox<DataFrame>>,
+        length: OCamlRef<Option<OCamlInt>>
+    ) -> OCaml<DynBox<DataFrame>> {
 
-        match length.map(|length| length.try_into().ok()) {
-            None => Some(Abstract(data_frame.tail(None))),
-            Some(None) => None,
-            Some(Some(length)) => Some(Abstract(data_frame.tail(Some(length)))),
-        }.to_ocaml(cr)
+        let Abstract(data_frame) = data_frame.to_rust(cr);
+        let length = length.to_rust::<Coerce<_, Option<i64>, Option<usize>>>(cr).get();
+
+        Abstract(data_frame.head(length)).to_ocaml(cr)
     }
 
-    fn rust_data_frame_sample_n(cr, data_frame: OCamlRef<DynBox<DataFrame>>, n: OCamlRef<OCamlInt>, with_replacement: OCamlRef<bool>, shuffle: OCamlRef<bool>, seed: OCamlRef<Option<OCamlInt>>) -> OCaml<Option<Result<DynBox<DataFrame>,String>>> {
-        let result: Option<_> = try {
-            let Abstract(data_frame) = data_frame.to_rust(cr);
-            let n: usize = n.to_rust::<i64>(cr).try_into().ok()?;
-            let with_replacement: bool = with_replacement.to_rust(cr);
-            let shuffle: bool = shuffle.to_rust(cr);
-            let seed: Option<Result<u64,_>> = seed.to_rust::<Option<i64>>(cr).map(|seed| seed.try_into());
-            let seed: Option<u64> = seed.map_or(Ok(None), |seed| seed.map(Some)).ok()?;
+    fn rust_data_frame_tail(
+        cr,
+        data_frame: OCamlRef<DynBox<DataFrame>>,
+        length: OCamlRef<Option<OCamlInt>>
+    ) -> OCaml<DynBox<DataFrame>> {
+        let Abstract(data_frame) = data_frame.to_rust(cr);
+        let length = length.to_rust::<Coerce<_, Option<i64>, Option<usize>>>(cr).get();
 
-            data_frame.sample_n(n, with_replacement, shuffle, seed)
-            .map(Abstract).map_err(|err| err.to_string())
-        };
-        result.to_ocaml(cr)
+        Abstract(data_frame.tail(length)).to_ocaml(cr)
+    }
+
+    fn rust_data_frame_sample_n(
+        cr,
+        data_frame: OCamlRef<DynBox<DataFrame>>,
+        n: OCamlRef<OCamlInt>,
+        with_replacement: OCamlRef<bool>,
+        shuffle: OCamlRef<bool>,
+        seed: OCamlRef<Option<OCamlInt>>
+    ) -> OCaml<Result<DynBox<DataFrame>,String>> {
+        let Abstract(data_frame) = data_frame.to_rust(cr);
+        let n = n.to_rust::<Coerce<_, i64, usize>>(cr).get();
+        let with_replacement: bool = with_replacement.to_rust(cr);
+        let shuffle: bool = shuffle.to_rust(cr);
+        let seed: Option<u64> = seed.to_rust::<Coerce<_, Option<i64>, Option<u64>>>(cr).get();
+
+        data_frame.sample_n(n, with_replacement, shuffle, seed)
+        .map(Abstract).map_err(|err| err.to_string())
+        .to_ocaml(cr)
     }
 
     fn rust_data_frame_sum(cr, data_frame: OCamlRef<DynBox<DataFrame>>) -> OCaml<DynBox<DataFrame>> {
@@ -206,6 +221,62 @@ ocaml_export! {
     fn rust_data_frame_null_count(cr, data_frame: OCamlRef<DynBox<DataFrame>>) -> OCaml<DynBox<DataFrame>> {
         let Abstract(data_frame) = data_frame.to_rust(cr);
         Abstract(data_frame.null_count()).to_ocaml(cr)
+    }
+
+    fn rust_data_frame_fill_null_with_strategy(
+        cr,
+        data_frame: OCamlRef<DynBox<DataFrame>>,
+        strategy: OCamlRef<FillNullStrategy>
+    ) -> OCaml<Result<DynBox<DataFrame>,String>> {
+        let Abstract(data_frame) = data_frame.to_rust(cr);
+        let PolarsFillNullStrategy(strategy) = strategy.to_rust(cr);
+
+        data_frame.fill_null(strategy)
+        .map(Abstract).map_err(|err| err.to_string())
+        .to_ocaml(cr)
+    }
+
+    fn rust_data_frame_interpolate(
+        cr,
+        data_frame: OCamlRef<DynBox<DataFrame>>,
+        method: OCamlRef<InterpolationMethod>,
+    ) -> OCaml<Result<DynBox<DataFrame>,String>> {
+        let Abstract(data_frame) = data_frame.to_rust(cr);
+        let PolarsInterpolationMethod(method) = method.to_rust(cr);
+
+        let series =
+            data_frame.get_columns()
+            .into_iter()
+            .map(|series| interpolate(series, method))
+            .collect::<Vec<_>>();
+
+        DataFrame::new(series)
+        .map(Abstract)
+        .map_err(|err| err.to_string())
+        .to_ocaml(cr)
+    }
+
+    fn rust_data_frame_upsample|rust_data_frame_upsample_bytecode(
+        cr,
+        data_frame: OCamlRef<DynBox<DataFrame>>,
+        by: OCamlRef<OCamlList<String>>,
+        time_column: OCamlRef<String>,
+        every: OCamlRef<String>,
+        offset: OCamlRef<String>,
+        stable: OCamlRef<bool>,
+    ) -> OCaml<Result<DynBox<DataFrame>,String>> {
+        let Abstract(data_frame) = data_frame.to_rust(cr);
+        let by: Vec<String> = by.to_rust(cr);
+        let time_column: String = time_column.to_rust(cr);
+        let every: String = every.to_rust(cr);
+        let offset: String = offset.to_rust(cr);
+        let stable: bool = stable.to_rust(cr);
+
+        if stable {
+            data_frame.upsample_stable(&by, &time_column, Duration::parse(&every), Duration::parse(&offset))
+        } else {
+            data_frame.upsample(&by, &time_column, Duration::parse(&every), Duration::parse(&offset))
+        }.map(Abstract).map_err(|err| err.to_string()).to_ocaml(cr)
     }
 
     fn rust_data_frame_explode(cr, data_frame: OCamlRef<DynBox<DataFrame>>, columns: OCamlRef<OCamlList<String>>) -> OCaml<Result<DynBox<DataFrame>, String>> {

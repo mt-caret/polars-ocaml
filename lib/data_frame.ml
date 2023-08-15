@@ -37,23 +37,78 @@ let describe_exn ?percentiles t =
 
 external lazy_ : t -> Lazy_frame.t = "rust_data_frame_lazy"
 
-let select t ~exprs = lazy_ t |> Lazy_frame.select ~exprs |> Lazy_frame.collect
-let select_exn t ~exprs = lazy_ t |> Lazy_frame.select ~exprs |> Lazy_frame.collect_exn
-
-let with_columns t ~exprs =
-  lazy_ t |> Lazy_frame.with_columns ~exprs |> Lazy_frame.collect
-;;
-
-let with_columns_exn t ~exprs =
-  lazy_ t |> Lazy_frame.with_columns ~exprs |> Lazy_frame.collect_exn
-;;
-
-let groupby ?is_stable t ~by ~agg =
-  lazy_ t |> Lazy_frame.groupby ?is_stable ~by ~agg |> Lazy_frame.collect
-;;
+let in_lazy t ~f = lazy_ t |> f |> Lazy_frame.collect
+let in_lazy_exn t ~f = lazy_ t |> f |> Lazy_frame.collect_exn
+let select t ~exprs = in_lazy t ~f:(Lazy_frame.select ~exprs)
+let select_exn t ~exprs = in_lazy_exn t ~f:(Lazy_frame.select ~exprs)
+let with_columns t ~exprs = in_lazy t ~f:(Lazy_frame.with_columns ~exprs)
+let with_columns_exn t ~exprs = in_lazy_exn t ~f:(Lazy_frame.with_columns ~exprs)
+let groupby ?is_stable t ~by ~agg = in_lazy t ~f:(Lazy_frame.groupby ?is_stable ~by ~agg)
 
 let groupby_exn ?is_stable t ~by ~agg =
-  lazy_ t |> Lazy_frame.groupby ?is_stable ~by ~agg |> Lazy_frame.collect_exn
+  in_lazy_exn t ~f:(Lazy_frame.groupby ?is_stable ~by ~agg)
+;;
+
+let groupby_dynamic
+  ?every
+  ?period
+  ?offset
+  ?truncate
+  ?include_boundaries
+  ?closed_window
+  ?start_by
+  ?check_sorted
+  t
+  ~index_column
+  ~by
+  ~agg
+  =
+  in_lazy
+    t
+    ~f:
+      (Lazy_frame.groupby_dynamic
+         ?every
+         ?period
+         ?offset
+         ?truncate
+         ?include_boundaries
+         ?closed_window
+         ?start_by
+         ?check_sorted
+         ~index_column
+         ~by
+         ~agg)
+;;
+
+let groupby_dynamic_exn
+  ?every
+  ?period
+  ?offset
+  ?truncate
+  ?include_boundaries
+  ?closed_window
+  ?start_by
+  ?check_sorted
+  t
+  ~index_column
+  ~by
+  ~agg
+  =
+  in_lazy_exn
+    t
+    ~f:
+      (Lazy_frame.groupby_dynamic
+         ?every
+         ?period
+         ?offset
+         ?truncate
+         ?include_boundaries
+         ?closed_window
+         ?start_by
+         ?check_sorted
+         ~index_column
+         ~by
+         ~agg)
 ;;
 
 external column : t -> name:string -> (Series.t, string) result = "rust_data_frame_column"
@@ -66,7 +121,7 @@ external columns
   :  t
   -> names:string list
   -> (Series.t list, string) result
-  = "rust_data_frame_column"
+  = "rust_data_frame_columns"
 
 let columns_exn t ~names =
   columns t ~names |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
@@ -167,13 +222,34 @@ let melt_exn ?variable_name ?value_name ?streamable t ~id_vars ~value_vars =
   |> Or_error.ok_exn
 ;;
 
-external head : t -> length:int option -> t option = "rust_data_frame_head"
+external sort
+  :  t
+  -> by_column:string list
+  -> descending:bool list
+  -> maintain_order:bool
+  -> (t, string) result
+  = "rust_data_frame_sort"
 
-let head ?length t = head t ~length |> Option.value_exn ~here:[%here]
+let sort ?descending ?(maintain_order = true) t ~by_column =
+  let descending =
+    Option.value descending ~default:(List.map by_column ~f:(Fn.const false))
+  in
+  sort t ~by_column ~descending ~maintain_order
+;;
 
-external tail : t -> length:int option -> t option = "rust_data_frame_tail"
+let sort_exn ?descending ?maintain_order t ~by_column =
+  sort ?descending ?maintain_order t ~by_column
+  |> Result.map_error ~f:Error.of_string
+  |> Or_error.ok_exn
+;;
 
-let tail ?length t = tail t ~length |> Option.value_exn ~here:[%here]
+external head : t -> length:int option -> t = "rust_data_frame_head"
+
+let head ?length t = head t ~length
+
+external tail : t -> length:int option -> t = "rust_data_frame_tail"
+
+let tail ?length t = tail t ~length
 
 external sample_n
   :  t
@@ -181,11 +257,11 @@ external sample_n
   -> with_replacement:bool
   -> shuffle:bool
   -> seed:int option
-  -> (t, string) result option
+  -> (t, string) result
   = "rust_data_frame_sample_n"
 
 let sample_n ?seed t ~n ~with_replacement ~shuffle =
-  sample_n t ~n ~with_replacement ~shuffle ~seed |> Option.value_exn ~here:[%here]
+  sample_n t ~n ~with_replacement ~shuffle ~seed
 ;;
 
 let sample_n_exn ?seed t ~n ~with_replacement ~shuffle =
@@ -198,6 +274,46 @@ external sum : t -> t = "rust_data_frame_sum"
 external mean : t -> t = "rust_data_frame_mean"
 external median : t -> t = "rust_data_frame_median"
 external null_count : t -> t = "rust_data_frame_null_count"
+
+external fill_null
+  :  t
+  -> strategy:Fill_null_strategy.t
+  -> (t, string) result
+  = "rust_data_frame_fill_null_with_strategy"
+
+let fill_null_exn t ~strategy =
+  fill_null t ~strategy |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
+;;
+
+external interpolate
+  :  t
+  -> method_:[ `Linear | `Nearest ]
+  -> (t, string) result
+  = "rust_data_frame_interpolate"
+
+let interpolate_exn t ~method_ =
+  interpolate t ~method_ |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
+;;
+
+external upsample
+  :  t
+  -> by:string list
+  -> time_column:string
+  -> every:string
+  -> offset:string
+  -> stable:bool
+  -> (t, string) result
+  = "rust_data_frame_upsample_bytecode" "rust_data_frame_upsample"
+
+let upsample ?(stable = true) t ~by ~time_column ~every ~offset =
+  upsample t ~by ~time_column ~every ~offset ~stable
+;;
+
+let upsample_exn ?stable t ~by ~time_column ~every ~offset =
+  upsample ?stable t ~by ~time_column ~every ~offset
+  |> Result.map_error ~f:Error.of_string
+  |> Or_error.ok_exn
+;;
 
 external explode
   :  t
@@ -213,3 +329,4 @@ external schema : t -> Schema.t = "rust_data_frame_schema"
 external to_string_hum : t -> string = "rust_data_frame_to_string_hum"
 
 let print t = print_endline (to_string_hum t)
+let pp formatter t = Stdlib.Format.pp_print_string formatter (to_string_hum t)

@@ -4,6 +4,7 @@ use ocaml_interop::{
 };
 use polars::lazy::dsl::GetOutput;
 use polars::prelude::*;
+use polars::series::IsSorted;
 
 use crate::utils::PolarsDataType;
 use crate::utils::*;
@@ -116,6 +117,11 @@ ocaml_export! {
         OCaml::box_value(cr, lit(value))
     }
 
+    fn rust_expr_series(cr, series: OCamlRef<DynBox<Series>>) -> OCaml<DynBox<Expr>> {
+        let Abstract(series) = series.to_rust(cr);
+        OCaml::box_value(cr, lit(series))
+    }
+
     fn rust_expr_cast(cr, expr: OCamlRef<DynBox<Expr>>, data_type: OCamlRef<DataType>, is_strict: OCamlRef<bool>) -> OCaml<DynBox<Expr>> {
         let PolarsDataType(data_type): PolarsDataType = data_type.to_rust(cr);
         let is_strict: bool = is_strict.to_rust(cr);
@@ -139,6 +145,11 @@ ocaml_export! {
         expr_unary_op(cr, expr, |expr| expr.sort_by(by, descending))
     }
 
+    fn rust_expr_set_sorted_flag(cr, expr: OCamlRef<DynBox<Expr>>, is_sorted: OCamlRef<IsSorted>) -> OCaml<DynBox<Expr>> {
+        let PolarsIsSorted(is_sorted) = is_sorted.to_rust(cr);
+        expr_unary_op(cr, expr, |expr| expr.set_sorted_flag(is_sorted))
+    }
+
     fn rust_expr_first(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
         expr_unary_op(cr, expr, |expr| expr.first())
     }
@@ -158,45 +169,78 @@ ocaml_export! {
     // - tail
     // - sample_n
 
-    fn rust_expr_head(cr, expr: OCamlRef<DynBox<Expr>>, length: OCamlRef<Option<OCamlInt>>) -> OCaml<Option<DynBox<Expr>>> {
+    fn rust_expr_head(
+        cr,
+        expr: OCamlRef<DynBox<Expr>>,
+        length: OCamlRef<Option<OCamlInt>>
+    ) -> OCaml<DynBox<Expr>> {
         let Abstract(expr) = expr.to_rust(cr);
-        let length: Option<i64> = length.to_rust(cr);
+        let length = length.to_rust::<Coerce<_, Option<i64>, Option<usize>>>(cr).get();
 
-        match length.map(|length| length.try_into().ok()) {
-            None => Some(Abstract(expr.head(None))),
-            Some(None) => None,
-            Some(Some(length)) => Some(Abstract(expr.head(Some(length)))),
-        }.to_ocaml(cr)
+        Abstract(expr.head(length)).to_ocaml(cr)
     }
 
-    fn rust_expr_tail(cr, expr: OCamlRef<DynBox<Expr>>, length: OCamlRef<Option<OCamlInt>>) -> OCaml<Option<DynBox<Expr>>> {
+    fn rust_expr_tail(
+        cr,
+        expr: OCamlRef<DynBox<Expr>>,
+        length: OCamlRef<Option<OCamlInt>>
+    ) -> OCaml<DynBox<Expr>> {
         let Abstract(expr) = expr.to_rust(cr);
-        let length: Option<i64> = length.to_rust(cr);
+        let length = length.to_rust::<Coerce<_, Option<i64>, Option<usize>>>(cr).get();
 
-        match length.map(|length| length.try_into().ok()) {
-            None => Some(Abstract(expr.tail(None))),
-            Some(None) => None,
-            Some(Some(length)) => Some(Abstract(expr.tail(Some(length)))),
-        }.to_ocaml(cr)
+        Abstract(expr.tail(length)).to_ocaml(cr)
     }
 
-    fn rust_expr_sample_n|rust_expr_sample_n_bytecode(cr, expr: OCamlRef<DynBox<Expr>>, n: OCamlRef<OCamlInt>, with_replacement: OCamlRef<bool>, shuffle: OCamlRef<bool>, seed: OCamlRef<Option<OCamlInt>>, fixed_seed: OCamlRef<bool>) -> OCaml<Option<DynBox<Expr>>> {
-        let result: Option<_> = try {
-            let Abstract(expr) = expr.to_rust(cr);
-            let n: usize = n.to_rust::<i64>(cr).try_into().ok()?;
-            let with_replacement: bool = with_replacement.to_rust(cr);
-            let shuffle: bool = shuffle.to_rust(cr);
-            let seed: Option<Result<u64,_>> = seed.to_rust::<Option<i64>>(cr).map(|seed| seed.try_into());
-            let seed: Option<u64> = seed.map_or(Ok(None), |seed| seed.map(Some)).ok()?;
-            let fixed_seed = fixed_seed.to_rust(cr);
+    fn rust_expr_take(cr, expr: OCamlRef<DynBox<Expr>>, idx: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
+        expr_binary_op(cr, expr, idx, |a, b| a.take(b))
+    }
 
-            Abstract(expr.sample_n(n, with_replacement, shuffle, seed, fixed_seed))
-        };
-        result.to_ocaml(cr)
+    fn rust_expr_sample_n|rust_expr_sample_n_bytecode(
+        cr,
+        expr: OCamlRef<DynBox<Expr>>,
+        n: OCamlRef<OCamlInt>,
+        with_replacement: OCamlRef<bool>,
+        shuffle: OCamlRef<bool>,
+        seed: OCamlRef<Option<OCamlInt>>,
+        fixed_seed: OCamlRef<bool>
+    ) -> OCaml<DynBox<Expr>> {
+        let Abstract(expr) = expr.to_rust(cr);
+        let n = n.to_rust::<Coerce<_, i64, usize>>(cr).get();
+        let with_replacement: bool = with_replacement.to_rust(cr);
+        let shuffle: bool = shuffle.to_rust(cr);
+        let seed = seed.to_rust::<Coerce<_, Option<i64>, Option<u64>>>(cr).get();
+        let fixed_seed = fixed_seed.to_rust(cr);
+
+        Abstract(expr.sample_n(n, with_replacement, shuffle, seed, fixed_seed)).to_ocaml(cr)
     }
 
     fn rust_expr_filter(cr, expr: OCamlRef<DynBox<Expr>>, predicate: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
         expr_binary_op(cr, expr, predicate, |expr, predicate| expr.filter(predicate))
+    }
+
+    fn rust_expr_ceil(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
+        expr_unary_op(cr, expr, |expr| expr.ceil())
+    }
+
+    fn rust_expr_floor(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
+        expr_unary_op(cr, expr, |expr| expr.floor())
+    }
+
+    fn rust_expr_clip_min_float(cr, expr: OCamlRef<DynBox<Expr>>, min: OCamlRef<OCamlFloat>) -> OCaml<DynBox<Expr>> {
+        let min: f64 = min.to_rust(cr);
+        expr_unary_op(cr, expr, |expr| expr.clip_min(AnyValue::Float64(min)))
+    }
+    fn rust_expr_clip_max_float(cr, expr: OCamlRef<DynBox<Expr>>, max: OCamlRef<OCamlFloat>) -> OCaml<DynBox<Expr>> {
+        let max: f64 = max.to_rust(cr);
+        expr_unary_op(cr, expr, |expr| expr.clip_max(AnyValue::Float64(max)))
+    }
+    fn rust_expr_clip_min_int(cr, expr: OCamlRef<DynBox<Expr>>, min: OCamlRef<OCamlInt>) -> OCaml<DynBox<Expr>> {
+        let min: i64 = min.to_rust(cr);
+        expr_unary_op(cr, expr, |expr| expr.clip_min(AnyValue::Int64(min)))
+    }
+    fn rust_expr_clip_max_int(cr, expr: OCamlRef<DynBox<Expr>>, max: OCamlRef<OCamlInt>) -> OCaml<DynBox<Expr>> {
+        let max: i64 = max.to_rust(cr);
+        expr_unary_op(cr, expr, |expr| expr.clip_max(AnyValue::Int64(max)))
     }
 
     fn rust_expr_sum(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
@@ -217,6 +261,14 @@ ocaml_export! {
 
     fn rust_expr_min(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
         expr_unary_op(cr, expr, |expr| expr.min())
+    }
+
+    fn rust_expr_arg_max(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
+        expr_unary_op(cr, expr, |expr| expr.arg_max())
+    }
+
+    fn rust_expr_arg_min(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
+        expr_unary_op(cr, expr, |expr| expr.arg_min())
     }
 
     fn rust_expr_count(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
@@ -263,6 +315,14 @@ ocaml_export! {
         expr_unary_op(cr, expr, |expr| expr.is_not_null())
     }
 
+    fn rust_expr_is_nan(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
+        expr_unary_op(cr, expr, |expr| expr.is_nan())
+    }
+
+    fn rust_expr_is_not_nan(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
+        expr_unary_op(cr, expr, |expr| expr.is_not_nan())
+    }
+
     fn rust_expr_fill_null(cr, expr: OCamlRef<DynBox<Expr>>, with: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
         expr_binary_op(cr, expr, with, |expr, with| expr.fill_null(with))
     }
@@ -281,18 +341,18 @@ ocaml_export! {
         expr_binary_op(cr, expr, with, |expr, with| expr.fill_nan(with))
     }
 
-    fn rust_expr_rank(cr, expr: OCamlRef<DynBox<Expr>>, method: OCamlRef<RankMethod>, descending: OCamlRef<bool>, seed: OCamlRef<Option<OCamlInt>>) -> OCaml<Option<DynBox<Expr>>> {
-        let result: Option<_> = try {
-            let Abstract(expr) = expr.to_rust(cr);
-            let PolarsRankMethod(method) = method.to_rust(cr);
-            let descending: bool = descending.to_rust(cr);
-            let seed: Option<Result<u64,_>> = seed.to_rust::<Option<i64>>(cr).map(|seed| seed.try_into());
-            let seed: Option<u64> = seed.map_or(Ok(None), |seed| seed.map(Some)).ok()?;
-
-            Abstract(expr.rank(RankOptions { method, descending }, seed))
-        };
-
-        result.to_ocaml(cr)
+    fn rust_expr_rank(
+        cr,
+        expr: OCamlRef<DynBox<Expr>>,
+        method: OCamlRef<RankMethod>,
+        descending: OCamlRef<bool>,
+        seed: OCamlRef<Option<OCamlInt>>
+    ) -> OCaml<DynBox<Expr>> {
+        let Abstract(expr) = expr.to_rust(cr);
+        let PolarsRankMethod(method) = method.to_rust(cr);
+        let descending: bool = descending.to_rust(cr);
+        let seed = seed.to_rust::<Coerce<_, Option<i64>, Option<u64>>>(cr).get();
+        Abstract(expr.rank(RankOptions { method, descending }, seed)).to_ocaml(cr)
     }
 
     fn rust_expr_when_then(cr, when_then_clauses: OCamlRef<OCamlList<(DynBox<Expr>, DynBox<Expr>)>>, otherwise: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
@@ -371,14 +431,15 @@ ocaml_export! {
         expr_unary_op(cr, expr, |expr| expr.suffix(&suffix))
     }
 
-    fn rust_expr_round(cr, expr: OCamlRef<DynBox<Expr>>, decimals: OCamlRef<OCamlInt>) -> OCaml<Option<DynBox<Expr>>> {
-        let result: Option<_> = try {
-            let decimals: u32 = decimals.to_rust::<i64>(cr).try_into().ok()?;
+    fn rust_expr_round(
+        cr,
+        expr: OCamlRef<DynBox<Expr>>,
+        decimals: OCamlRef<OCamlInt>
+    ) -> OCaml<DynBox<Expr>> {
+        let decimals = decimals.to_rust::<Coerce<_, i64, u32>>(cr).get();
 
-            let Abstract(expr) = expr.to_rust(cr);
-            Abstract(expr.round(decimals))
-        };
-        result.to_ocaml(cr)
+        let Abstract(expr) = expr.to_rust(cr);
+        Abstract(expr.round(decimals)).to_ocaml(cr)
     }
 
     fn rust_expr_eq(cr, expr: OCamlRef<DynBox<Expr>>, other: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
@@ -451,6 +512,17 @@ ocaml_export! {
         expr_unary_op(cr, expr, |expr| expr.dt().convert_time_zone(timezone))
     }
 
+    fn rust_expr_dt_replace_time_zone(
+        cr,
+        expr: OCamlRef<DynBox<Expr>>,
+        timezone: OCamlRef<Option<String>>,
+        use_earliest: OCamlRef<Option<bool>>,
+    ) -> OCaml<DynBox<Expr>> {
+        let timezone: Option<String> = timezone.to_rust(cr);
+        let use_earliest: Option<bool> = use_earliest.to_rust(cr);
+        expr_unary_op(cr, expr, |expr| expr.dt().replace_time_zone(timezone, use_earliest))
+    }
+
     fn rust_expr_dt_year(cr, expr: OCamlRef<DynBox<Expr>>)-> OCaml<DynBox<Expr>> {
         expr_unary_op(cr, expr, |expr| expr.dt().year())
     }
@@ -461,6 +533,48 @@ ocaml_export! {
 
     fn rust_expr_dt_day(cr, expr: OCamlRef<DynBox<Expr>>)-> OCaml<DynBox<Expr>> {
         expr_unary_op(cr, expr, |expr| expr.dt().day())
+    }
+
+    fn rust_expr_dt_days(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
+        expr_series_map(cr, expr, |series| {
+            Ok(Some(series.duration()?.days().into_series()))
+        }, GetOutput::from_type(DataType::Int64))
+    }
+
+    fn rust_expr_dt_hours(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
+        expr_series_map(cr, expr, |series| {
+            Ok(Some(series.duration()?.hours().into_series()))
+        }, GetOutput::from_type(DataType::Int64))
+    }
+
+    fn rust_expr_dt_minutes(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
+        expr_series_map(cr, expr, |series| {
+            Ok(Some(series.duration()?.minutes().into_series()))
+        }, GetOutput::from_type(DataType::Int64))
+    }
+
+    fn rust_expr_dt_seconds(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
+        expr_series_map(cr, expr, |series| {
+            Ok(Some(series.duration()?.seconds().into_series()))
+        }, GetOutput::from_type(DataType::Int64))
+    }
+
+    fn rust_expr_dt_milliseconds(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
+        expr_series_map(cr, expr, |series| {
+            Ok(Some(series.duration()?.milliseconds().into_series()))
+        }, GetOutput::from_type(DataType::Int64))
+    }
+
+    fn rust_expr_dt_microseconds(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
+        expr_series_map(cr, expr, |series| {
+            Ok(Some(series.duration()?.microseconds().into_series()))
+        }, GetOutput::from_type(DataType::Int64))
+    }
+
+    fn rust_expr_dt_nanoseconds(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
+        expr_series_map(cr, expr, |series| {
+            Ok(Some(series.duration()?.nanoseconds().into_series()))
+        }, GetOutput::from_type(DataType::Int64))
     }
 
     fn rust_expr_str_split(cr, expr: OCamlRef<DynBox<Expr>>, by: OCamlRef<String>, inclusive: OCamlRef<bool>) -> OCaml<DynBox<Expr>> {
@@ -518,18 +632,20 @@ ocaml_export! {
         }, GetOutput::from_type(DataType::Boolean))
     }
 
-    fn rust_expr_str_extract(cr, expr: OCamlRef<DynBox<Expr>>, pat: OCamlRef<String>, group_index: OCamlRef<OCamlInt>) -> OCaml<Option<DynBox<Expr>>> {
-        let result: Option<_> = try {
-            let pat: String = pat.to_rust(cr);
-            let group_index: usize = group_index.to_rust::<i64>(cr).try_into().ok()?;
+    fn rust_expr_str_extract(
+        cr,
+        expr: OCamlRef<DynBox<Expr>>,
+        pat: OCamlRef<String>,
+        group_index: OCamlRef<OCamlInt>
+    ) -> OCaml<DynBox<Expr>> {
+        let pat: String = pat.to_rust(cr);
+        let group_index = group_index.to_rust::<Coerce<_, i64, usize>>(cr).get();
 
-            let Abstract(expr) = expr.to_rust(cr);
-            let f = move |series: Series| {
-                Ok(Some(series.utf8()?.extract(&pat, group_index)?.into_series()))
-            };
-            Abstract(expr.map(f, GetOutput::from_type(DataType::Utf8)))
+        let Abstract(expr) = expr.to_rust(cr);
+        let f = move |series: Series| {
+            Ok(Some(series.utf8()?.extract(&pat, group_index)?.into_series()))
         };
-        result.to_ocaml(cr)
+        Abstract(expr.map(f, GetOutput::from_type(DataType::Utf8))).to_ocaml(cr)
     }
 
     fn rust_expr_str_extract_all(cr, expr: OCamlRef<DynBox<Expr>>, pat: OCamlRef<String>) -> OCaml<DynBox<Expr>> {
@@ -561,6 +677,58 @@ ocaml_export! {
                 if literal { chunked.replace_literal_all(&pat, &with) } else { chunked.replace_all(&pat, &with) };
             Ok(Some(replaced?.into_series()))
         }, GetOutput::from_type(DataType::List(Box::new(DataType::Utf8))))
+    }
+
+    fn rust_expr_str_strip(
+        cr,
+        expr: OCamlRef<DynBox<Expr>>,
+        matches: OCamlRef<Option<String>>,
+    ) -> OCaml<DynBox<Expr>> {
+        let matches: Option<String> = matches.to_rust(cr);
+        expr_unary_op(cr, expr, |expr| expr.str().strip(matches))
+    }
+
+    fn rust_expr_str_lstrip(
+        cr,
+        expr: OCamlRef<DynBox<Expr>>,
+        matches: OCamlRef<Option<String>>,
+    ) -> OCaml<DynBox<Expr>> {
+        let matches: Option<String> = matches.to_rust(cr);
+        expr_unary_op(cr, expr, |expr| expr.str().lstrip(matches))
+    }
+
+    fn rust_expr_str_rstrip(
+        cr,
+        expr: OCamlRef<DynBox<Expr>>,
+        matches: OCamlRef<Option<String>>,
+    ) -> OCaml<DynBox<Expr>> {
+        let matches: Option<String> = matches.to_rust(cr);
+        expr_unary_op(cr, expr, |expr| expr.str().rstrip(matches))
+    }
+
+    fn rust_expr_str_to_lowercase(
+        cr,
+        expr: OCamlRef<DynBox<Expr>>,
+    ) -> OCaml<DynBox<Expr>> {
+        expr_unary_op(cr, expr, |expr| expr.str().to_lowercase())
+    }
+
+    fn rust_expr_str_to_uppercase(
+        cr,
+        expr: OCamlRef<DynBox<Expr>>,
+    ) -> OCaml<DynBox<Expr>> {
+        expr_unary_op(cr, expr, |expr| expr.str().to_uppercase())
+    }
+
+    fn rust_expr_str_slice(
+        cr,
+        expr: OCamlRef<DynBox<Expr>>,
+        start: OCamlRef<OCamlInt>,
+        length: OCamlRef<Option<OCamlInt>>,
+    ) -> OCaml<DynBox<Expr>> {
+        let start: i64 = start.to_rust(cr);
+        let length = length.to_rust::<Coerce<_, Option<i64>, Option<u64>>>(cr).get();
+        expr_unary_op(cr, expr, |expr| expr.str().str_slice(start, length))
     }
 
     fn rust_expr_list_lengths(cr, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {

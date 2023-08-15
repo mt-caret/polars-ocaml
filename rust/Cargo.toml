@@ -16,6 +16,11 @@ ocaml-interop = "0.9.1"
 ocaml-sys = "0.23.0"
 smartstring = "1.0.1"
 
+# arrow2 0.17.4 introduces arrow2::array::Array::is_null_unchecked, which clashes
+# with another function used in polars-arrow, causing compile issues; pinning this
+# version prevents this from happening.
+arrow2 = "=0.17.3"
+
 [dependencies.polars]
 version = "0.31.0"
 features = [
@@ -30,6 +35,7 @@ features = [
     "dtype-i8",
     "dtype-u16",
     "dtype-u8",
+    "dynamic_groupby",
     "horizontal_concat",
     "interpolate",
     "lazy",

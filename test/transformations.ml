@@ -614,6 +614,7 @@ let%expect_test "Time Series Parsing" =
     └───────────────────────────────┘ |}]
 ;;
 
+(* Examples from https://pola-rs.github.io/polars-book/user-guide/transformations/time-series/filter/ *)
 let%expect_test "Filtering" =
   let df = Data_frame.read_csv_exn ~try_parse_dates:true "./data/appleStock.csv" in
   Data_frame.print df;
@@ -676,3 +677,332 @@ let%expect_test "Filtering" =
     │ 1995-10-16 ┆ 36.13 │
     └────────────┴───────┘ |}]
 ;;
+
+(* Examples from https://pola-rs.github.io/polars-book/user-guide/transformations/time-series/rolling/ *)
+let%expect_test "Grouping" =
+  let df =
+    Data_frame.read_csv_exn ~try_parse_dates:true "./data/appleStock.csv"
+    |> Data_frame.sort_exn ~by_column:[ "Date" ]
+  in
+  Data_frame.print df;
+  [%expect
+    {|
+    shape: (100, 2)
+    ┌────────────┬────────┐
+    │ Date       ┆ Close  │
+    │ ---        ┆ ---    │
+    │ date       ┆ f64    │
+    ╞════════════╪════════╡
+    │ 1981-02-23 ┆ 24.62  │
+    │ 1981-05-06 ┆ 27.38  │
+    │ 1981-05-18 ┆ 28.0   │
+    │ 1981-09-25 ┆ 14.25  │
+    │ …          ┆ …      │
+    │ 2012-12-04 ┆ 575.85 │
+    │ 2013-07-05 ┆ 417.42 │
+    │ 2013-11-07 ┆ 512.49 │
+    │ 2014-02-25 ┆ 522.06 │
+    └────────────┴────────┘ |}];
+  let annual_average_df =
+    Data_frame.groupby_dynamic_exn
+      df
+      ~index_column:(Expr.col "Date")
+      ~every:"1y"
+      ~by:[]
+      ~agg:Expr.[ col "Close" |> mean ]
+  in
+  let df_with_year =
+    Data_frame.with_columns_exn
+      annual_average_df
+      ~exprs:Expr.[ col "Date" |> Dt.year |> alias ~name:"year" ]
+  in
+  Data_frame.print df_with_year;
+  [%expect
+    {|
+    shape: (34, 3)
+    ┌────────────┬───────────┬──────┐
+    │ Date       ┆ Close     ┆ year │
+    │ ---        ┆ ---       ┆ ---  │
+    │ date       ┆ f64       ┆ i32  │
+    ╞════════════╪═══════════╪══════╡
+    │ 1981-01-01 ┆ 23.5625   ┆ 1981 │
+    │ 1982-01-01 ┆ 11.0      ┆ 1982 │
+    │ 1983-01-01 ┆ 30.543333 ┆ 1983 │
+    │ 1984-01-01 ┆ 27.583333 ┆ 1984 │
+    │ …          ┆ …         ┆ …    │
+    │ 2011-01-01 ┆ 368.225   ┆ 2011 │
+    │ 2012-01-01 ┆ 560.965   ┆ 2012 │
+    │ 2013-01-01 ┆ 464.955   ┆ 2013 │
+    │ 2014-01-01 ┆ 522.06    ┆ 2014 │
+    └────────────┴───────────┴──────┘ |}];
+  let df =
+    Series.date_range_exn
+      ~every:"1d"
+      ~start:(Date.of_string "2021-01-01")
+      ~stop:(Date.of_string "2021-12-31")
+      "time"
+    |> Series.to_data_frame
+  in
+  let out =
+    Data_frame.groupby_dynamic_exn
+      df
+      ~index_column:(Expr.col "time")
+      ~every:"1mo"
+      ~period:"1mo"
+      ~by:[]
+      ~agg:
+        Expr.
+          [ col "time" |> cum_count |> reverse |> head ~length:3 |> alias ~name:"day/eom"
+          ; col "time" - first (col "time")
+            |> last
+            |> Dt.days
+            |> add (int 1)
+            |> alias ~name:"days_in_month"
+          ]
+    |> Data_frame.explode_exn ~columns:[ "day/eom" ]
+  in
+  Data_frame.print out;
+  [%expect
+    {|
+    shape: (36, 3)
+    ┌────────────┬─────────┬───────────────┐
+    │ time       ┆ day/eom ┆ days_in_month │
+    │ ---        ┆ ---     ┆ ---           │
+    │ date       ┆ u32     ┆ i64           │
+    ╞════════════╪═════════╪═══════════════╡
+    │ 2021-01-01 ┆ 30      ┆ 31            │
+    │ 2021-01-01 ┆ 29      ┆ 31            │
+    │ 2021-01-01 ┆ 28      ┆ 31            │
+    │ 2021-02-01 ┆ 27      ┆ 28            │
+    │ …          ┆ …       ┆ …             │
+    │ 2021-11-01 ┆ 27      ┆ 30            │
+    │ 2021-12-01 ┆ 30      ┆ 31            │
+    │ 2021-12-01 ┆ 29      ┆ 31            │
+    │ 2021-12-01 ┆ 28      ┆ 31            │
+    └────────────┴─────────┴───────────────┘ |}];
+  let df =
+    Data_frame.create_exn
+      Series.
+        [ datetime_range_exn
+            ~every:"30m"
+            ~start:(Common.Naive_datetime.of_string "2021-12-16")
+            ~stop:(Common.Naive_datetime.of_string "2021-12-16 3")
+            "time"
+        ; string "groups" [ "a"; "a"; "a"; "b"; "b"; "a"; "a" ]
+        ]
+  in
+  Data_frame.print df;
+  [%expect
+    {|
+    shape: (7, 2)
+    ┌─────────────────────┬────────┐
+    │ time                ┆ groups │
+    │ ---                 ┆ ---    │
+    │ datetime[ms]        ┆ str    │
+    ╞═════════════════════╪════════╡
+    │ 2021-12-16 00:00:00 ┆ a      │
+    │ 2021-12-16 00:30:00 ┆ a      │
+    │ 2021-12-16 01:00:00 ┆ a      │
+    │ 2021-12-16 01:30:00 ┆ b      │
+    │ 2021-12-16 02:00:00 ┆ b      │
+    │ 2021-12-16 02:30:00 ┆ a      │
+    │ 2021-12-16 03:00:00 ┆ a      │
+    └─────────────────────┴────────┘ |}];
+  let out =
+    Data_frame.groupby_dynamic_exn
+      df
+      ~every:"1h"
+      ~closed_window:`Both
+      ~include_boundaries:true
+      ~index_column:(Expr.col "time")
+      ~by:[ Expr.col "groups" ]
+      ~agg:[ Expr.count_ () ]
+  in
+  Data_frame.print out;
+  [%expect
+    {|
+    shape: (7, 5)
+    ┌────────┬─────────────────────┬─────────────────────┬─────────────────────┬───────┐
+    │ groups ┆ _lower_boundary     ┆ _upper_boundary     ┆ time                ┆ count │
+    │ ---    ┆ ---                 ┆ ---                 ┆ ---                 ┆ ---   │
+    │ str    ┆ datetime[ms]        ┆ datetime[ms]        ┆ datetime[ms]        ┆ u32   │
+    ╞════════╪═════════════════════╪═════════════════════╪═════════════════════╪═══════╡
+    │ a      ┆ 2021-12-15 23:00:00 ┆ 2021-12-16 00:00:00 ┆ 2021-12-15 23:00:00 ┆ 1     │
+    │ a      ┆ 2021-12-16 00:00:00 ┆ 2021-12-16 01:00:00 ┆ 2021-12-16 00:00:00 ┆ 3     │
+    │ a      ┆ 2021-12-16 01:00:00 ┆ 2021-12-16 02:00:00 ┆ 2021-12-16 01:00:00 ┆ 1     │
+    │ a      ┆ 2021-12-16 02:00:00 ┆ 2021-12-16 03:00:00 ┆ 2021-12-16 02:00:00 ┆ 2     │
+    │ a      ┆ 2021-12-16 03:00:00 ┆ 2021-12-16 04:00:00 ┆ 2021-12-16 03:00:00 ┆ 1     │
+    │ b      ┆ 2021-12-16 01:00:00 ┆ 2021-12-16 02:00:00 ┆ 2021-12-16 01:00:00 ┆ 2     │
+    │ b      ┆ 2021-12-16 02:00:00 ┆ 2021-12-16 03:00:00 ┆ 2021-12-16 02:00:00 ┆ 1     │
+    └────────┴─────────────────────┴─────────────────────┴─────────────────────┴───────┘ |}]
+;;
+
+(* Examples from https://pola-rs.github.io/polars-book/user-guide/transformations/time-series/resampling/#upsampling-strategies *)
+let%expect_test "Resampling" =
+  let df =
+    Data_frame.create_exn
+      Series.
+        [ datetime_range_exn
+            ~every:"30m"
+            ~start:(Common.Naive_datetime.of_string "2021-12-16")
+            ~stop:(Common.Naive_datetime.of_string "2021-12-16 3")
+            "time"
+        ; string "groups" [ "a"; "a"; "a"; "b"; "b"; "a"; "a" ]
+        ; float "values" [ 1.0; 2.0; 3.0; 4.0; 5.0; 6.0; 7.0 ]
+        ]
+  in
+  Data_frame.print df;
+  [%expect
+    {|
+    shape: (7, 3)
+    ┌─────────────────────┬────────┬────────┐
+    │ time                ┆ groups ┆ values │
+    │ ---                 ┆ ---    ┆ ---    │
+    │ datetime[ms]        ┆ str    ┆ f64    │
+    ╞═════════════════════╪════════╪════════╡
+    │ 2021-12-16 00:00:00 ┆ a      ┆ 1.0    │
+    │ 2021-12-16 00:30:00 ┆ a      ┆ 2.0    │
+    │ 2021-12-16 01:00:00 ┆ a      ┆ 3.0    │
+    │ 2021-12-16 01:30:00 ┆ b      ┆ 4.0    │
+    │ 2021-12-16 02:00:00 ┆ b      ┆ 5.0    │
+    │ 2021-12-16 02:30:00 ┆ a      ┆ 6.0    │
+    │ 2021-12-16 03:00:00 ┆ a      ┆ 7.0    │
+    └─────────────────────┴────────┴────────┘ |}];
+  Data_frame.upsample_exn df ~by:[] ~time_column:"time" ~every:"15m" ~offset:"0m"
+  |> Data_frame.fill_null_exn ~strategy:(Forward None)
+  |> Data_frame.print;
+  [%expect
+    {|
+    shape: (13, 3)
+    ┌─────────────────────┬────────┬────────┐
+    │ time                ┆ groups ┆ values │
+    │ ---                 ┆ ---    ┆ ---    │
+    │ datetime[ms]        ┆ str    ┆ f64    │
+    ╞═════════════════════╪════════╪════════╡
+    │ 2021-12-16 00:00:00 ┆ a      ┆ 1.0    │
+    │ 2021-12-16 00:15:00 ┆ a      ┆ 1.0    │
+    │ 2021-12-16 00:30:00 ┆ a      ┆ 2.0    │
+    │ 2021-12-16 00:45:00 ┆ a      ┆ 2.0    │
+    │ …                   ┆ …      ┆ …      │
+    │ 2021-12-16 02:15:00 ┆ b      ┆ 5.0    │
+    │ 2021-12-16 02:30:00 ┆ a      ┆ 6.0    │
+    │ 2021-12-16 02:45:00 ┆ a      ┆ 6.0    │
+    │ 2021-12-16 03:00:00 ┆ a      ┆ 7.0    │
+    └─────────────────────┴────────┴────────┘ |}];
+  Data_frame.upsample_exn df ~by:[] ~time_column:"time" ~every:"15m" ~offset:"0m"
+  |> Data_frame.interpolate_exn ~method_:`Linear
+  |> Data_frame.fill_null_exn ~strategy:(Forward None)
+  |> Data_frame.print;
+  [%expect
+    {|
+    shape: (13, 3)
+    ┌─────────────────────┬────────┬────────┐
+    │ time                ┆ groups ┆ values │
+    │ ---                 ┆ ---    ┆ ---    │
+    │ datetime[ms]        ┆ str    ┆ f64    │
+    ╞═════════════════════╪════════╪════════╡
+    │ 2021-12-16 00:00:00 ┆ a      ┆ 1.0    │
+    │ 2021-12-16 00:15:00 ┆ a      ┆ 1.5    │
+    │ 2021-12-16 00:30:00 ┆ a      ┆ 2.0    │
+    │ 2021-12-16 00:45:00 ┆ a      ┆ 2.5    │
+    │ …                   ┆ …      ┆ …      │
+    │ 2021-12-16 02:15:00 ┆ b      ┆ 5.5    │
+    │ 2021-12-16 02:30:00 ┆ a      ┆ 6.0    │
+    │ 2021-12-16 02:45:00 ┆ a      ┆ 6.5    │
+    │ 2021-12-16 03:00:00 ┆ a      ┆ 7.0    │
+    └─────────────────────┴────────┴────────┘ |}]
+;;
+
+(* Examples from https://pola-rs.github.io/polars-book/user-guide/transformations/time-series/timezones/ *)
+let%expect_test "Time zones" =
+  (* TODO: The Polars Python library does roughly the below automatically when
+     applying Expr-expecting operations to Series. I'm not sure doing that
+     automatically is possible (or the best idea) for OCaml.
+
+     Perhaps this function belongs in the Series module, but this causes a fair
+     bit of pain associated with circular dependencies. *)
+  let map_expr series ~f =
+    let df =
+      Series.to_data_frame series
+      |> Data_frame.select_exn ~exprs:[ f (Expr.col (Series.name series)) ]
+    in
+    Data_frame.column_exn df ~name:(Data_frame.get_column_names df |> List.hd_exn)
+  in
+  let tz_naive =
+    Series.string "tz_naive" [ "2021-03-27 03:00"; "2021-03-28 03:00" ]
+    |> map_expr
+         ~f:
+           (Expr.Str.strptime
+              ~type_:(Datetime (Milliseconds, None))
+              ~format:"%Y-%m-%d %H:%M")
+  in
+  let tz_aware =
+    map_expr tz_naive ~f:(Expr.Dt.replace_time_zone ~to_:(Some "UTC"))
+    |> Series.rename ~name:"tz_aware"
+  in
+  let time_zones_df = Data_frame.create_exn [ tz_naive; tz_aware ] in
+  Data_frame.print time_zones_df;
+  [%expect
+    {|
+    shape: (2, 2)
+    ┌─────────────────────┬─────────────────────────┐
+    │ tz_naive            ┆ tz_aware                │
+    │ ---                 ┆ ---                     │
+    │ datetime[ms]        ┆ datetime[ms, UTC]       │
+    ╞═════════════════════╪═════════════════════════╡
+    │ 2021-03-27 03:00:00 ┆ 2021-03-27 03:00:00 UTC │
+    │ 2021-03-28 03:00:00 ┆ 2021-03-28 03:00:00 UTC │
+    └─────────────────────┴─────────────────────────┘ |}];
+  let time_zones_operations =
+    Data_frame.select_exn
+      time_zones_df
+      ~exprs:
+        Expr.
+          [ col "tz_aware"
+            |> Dt.replace_time_zone ~to_:(Some "Europe/Brussels")
+            |> alias ~name:"replace time zone"
+          ; col "tz_aware"
+            |> Dt.convert_time_zone ~to_:"Asia/Kathmandu"
+            |> alias ~name:"convert time zone"
+          ; col "tz_aware"
+            |> Dt.replace_time_zone ~to_:None
+            |> alias ~name:"unset time zone"
+          ]
+  in
+  Data_frame.print time_zones_operations;
+  [%expect
+    {|
+    shape: (2, 3)
+    ┌───────────────────────────────┬──────────────────────────────┬─────────────────────┐
+    │ replace time zone             ┆ convert time zone            ┆ unset time zone     │
+    │ ---                           ┆ ---                          ┆ ---                 │
+    │ datetime[ms, Europe/Brussels] ┆ datetime[ms, Asia/Kathmandu] ┆ datetime[ms]        │
+    ╞═══════════════════════════════╪══════════════════════════════╪═════════════════════╡
+    │ 2021-03-27 03:00:00 CET       ┆ 2021-03-27 08:45:00 +0545    ┆ 2021-03-27 03:00:00 │
+    │ 2021-03-28 03:00:00 CEST      ┆ 2021-03-28 08:45:00 +0545    ┆ 2021-03-28 03:00:00 │
+    └───────────────────────────────┴──────────────────────────────┴─────────────────────┘ |}]
+;;
+
+let%expect_test "profile lazy_frame operations" =
+  let df =
+    Data_frame.create_exn
+      Series.[ int "a" [ 3; 1; 5; 4; 2 ] ]
+  in
+  let sorted_ldf =
+    Data_frame.lazy_ df |> Lazy_frame.sort ~by_column:"a" in
+  (* Profile is non-determinstic so we don't print it *)
+  let materialized, _profile = Lazy_frame.profile_exn sorted_ldf in
+  Data_frame.print materialized;
+  [%expect {|
+    shape: (5, 1)
+    ┌─────┐
+    │ a   │
+    │ --- │
+    │ i64 │
+    ╞═════╡
+    │ 1   │
+    │ 2   │
+    │ 3   │
+    │ 4   │
+    │ 5   │
+    └─────┘ |}];

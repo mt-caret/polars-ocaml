@@ -5,29 +5,27 @@ use ocaml_interop::{ocaml_export, DynBox, OCaml, OCamlInt, OCamlList, OCamlRef, 
 use polars::prelude::*;
 
 ocaml_export! {
-    fn rust_naive_date(cr, year: OCamlRef<OCamlInt>, month: OCamlRef<OCamlInt>, day: OCamlRef<OCamlInt>) -> OCaml<Option<DynBox<NaiveDate>>> {
+    fn rust_naive_date(
+        cr,
+        year: OCamlRef<OCamlInt>,
+        month: OCamlRef<OCamlInt>,
+        day: OCamlRef<OCamlInt>
+    ) -> OCaml<Option<DynBox<NaiveDate>>> {
         let year: i32 = year.to_rust(cr);
-        let month: i32 = month.to_rust(cr);
-        let day: i32 = day.to_rust(cr);
+        let month = month.to_rust::<Coerce<_, i32, u32>>(cr).get();
+        let day = day.to_rust::<Coerce<_, i32, u32>>(cr).get();
 
-        let result: Option<_> = try {
-            Abstract(NaiveDate::from_ymd_opt(year, month.try_into().ok()?, day.try_into().ok()?)?)
-        };
-        result.to_ocaml(cr)
+        NaiveDate::from_ymd_opt(year, month, day).map(Abstract).to_ocaml(cr)
     }
 
     fn rust_naive_date_to_naive_datetime(cr, date: OCamlRef<DynBox<NaiveDate>>, hour: OCamlRef<Option<OCamlInt>>, min: OCamlRef<Option<OCamlInt>>, sec: OCamlRef<Option<OCamlInt>>) -> OCaml<Option<DynBox<NaiveDateTime>>> {
         let Abstract(date) = date.to_rust(cr);
 
-        let result: Option<_> = try {
-            let hour: u32 = hour.to_rust::<Option<i64>>(cr).unwrap_or(0).try_into().ok()?;
-            let min: u32 = min.to_rust::<Option<i64>>(cr).unwrap_or(0).try_into().ok()?;
-            let sec: u32 = sec.to_rust::<Option<i64>>(cr).unwrap_or(0).try_into().ok()?;
+        let hour: u32 = hour.to_rust::<Coerce<_, Option<i64>, Option<u32>>>(cr).get().unwrap_or(0);
+        let min: u32 = min.to_rust::<Coerce<_, Option<i64>, Option<u32>>>(cr).get().unwrap_or(0);
+        let sec: u32 = sec.to_rust::<Coerce<_, Option<i64>, Option<u32>>>(cr).get().unwrap_or(0);
 
-            Abstract(date.and_hms_opt(hour, min, sec)?)
-        };
-
-        result.to_ocaml(cr)
+        date.and_hms_opt(hour, min, sec).map(Abstract).to_ocaml(cr)
     }
 
     fn rust_naive_datetime_to_string(cr, datetime: OCamlRef<DynBox<NaiveDateTime>>) -> OCaml<String> {

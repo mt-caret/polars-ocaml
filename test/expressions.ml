@@ -356,7 +356,7 @@ let%expect_test "Casting" =
             "date"
             ~start:(Date.of_string "2022-01-01")
             ~stop:(Date.of_string "2022-01-05")
-        ; datetime_range_exn
+        ; datetime_range_exn'
             "datetime"
             ~start:(Date.of_string "2022-01-01")
             ~stop:(Date.of_string "2022-01-05")
@@ -1342,7 +1342,7 @@ let%expect_test "Lists and Arrays" =
       (element ()
        |> rank ~descending:true
        |> (* Division by default doesn't convert into floats so an explicit
-          cast is required. *)
+             cast is required. *)
        cast ~to_:Float64)
       / (col "*" |> count)
       |> round ~decimals:2)
