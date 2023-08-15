@@ -99,10 +99,9 @@ module T = struct
   let concat_list ts =
     Nonempty_list.to_list ts
     |> concat_list
-    |> Result.map_error ~f:Error.of_string
     (* Currently the only way time that rust_expr_concat_list will return an
        Error is when the argument is an empty list, so this should never raise *)
-    |> Or_error.ok_exn
+    |> Util.string_result_ok_exn
   ;;
 
   external null_count : t -> t = "rust_expr_null_count"

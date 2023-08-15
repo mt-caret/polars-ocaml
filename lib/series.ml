@@ -60,9 +60,7 @@ module T = struct
   ;;
 
   let date_range_exn ?every name ~start ~stop =
-    date_range ?every name ~start ~stop
-    |> Result.map_error ~f:Error.of_string
-    |> Or_error.ok_exn
+    date_range ?every name ~start ~stop |> Util.string_result_ok_exn
   ;;
 
   let datetime_range ?every name ~start ~stop =
@@ -70,9 +68,7 @@ module T = struct
   ;;
 
   let datetime_range_exn ?every name ~start ~stop =
-    datetime_range ?every name ~start ~stop
-    |> Result.map_error ~f:Error.of_string
-    |> Or_error.ok_exn
+    datetime_range ?every name ~start ~stop |> Util.string_result_ok_exn
   ;;
 
   let datetime_range' ?every name ~start ~stop =
@@ -85,9 +81,7 @@ module T = struct
   ;;
 
   let datetime_range_exn' ?every name ~start ~stop =
-    datetime_range' ?every name ~start ~stop
-    |> Result.map_error ~f:Error.of_string
-    |> Or_error.ok_exn
+    datetime_range' ?every name ~start ~stop |> Util.string_result_ok_exn
   ;;
 
   external name : t -> string = "rust_series_name"
@@ -119,9 +113,7 @@ module T = struct
   ;;
 
   let sample_n_exn ?seed t ~n ~with_replacement ~shuffle =
-    sample_n ?seed t ~n ~with_replacement ~shuffle
-    |> Result.map_error ~f:Error.of_string
-    |> Or_error.ok_exn
+    sample_n ?seed t ~n ~with_replacement ~shuffle |> Util.string_result_ok_exn
   ;;
 
   external fill_null
@@ -130,9 +122,7 @@ module T = struct
     -> (t, string) result
     = "rust_series_fill_null_with_strategy"
 
-  let fill_null_exn t ~strategy =
-    fill_null t ~strategy |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
-  ;;
+  let fill_null_exn t ~strategy = fill_null t ~strategy |> Util.string_result_ok_exn
 
   external interpolate
     :  t
@@ -140,13 +130,8 @@ module T = struct
     -> (t, string) result
     = "rust_series_interpolate"
 
-  let interpolate_exn t ~method_ =
-    interpolate t ~method_ |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
-  ;;
-
-  let binary_op op t1 t2 =
-    op t1 t2 |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
-  ;;
+  let interpolate_exn t ~method_ = interpolate t ~method_ |> Util.string_result_ok_exn
+  let binary_op op t1 t2 = op t1 t2 |> Util.string_result_ok_exn
 
   external equal : t -> t -> (t, string) result = "rust_series_eq"
 
@@ -187,9 +172,7 @@ module T = struct
 
   external to_typed_list : t -> (typed_list, string) result = "rust_series_to_typed_list"
 
-  let to_typed_list_exn t =
-    t |> to_typed_list |> Result.map_error ~f:Error.of_string |> ok_exn
-  ;;
+  let to_typed_list_exn t = t |> to_typed_list |> Util.string_result_ok_exn
 
   external to_string_hum : t -> string = "rust_series_to_string_hum"
 

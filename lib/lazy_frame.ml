@@ -4,21 +4,15 @@ type t
 
 external scan_parquet : string -> (t, string) result = "rust_lazy_frame_scan_parquet"
 
-let scan_parquet_exn path =
-  scan_parquet path |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
-;;
+let scan_parquet_exn path = scan_parquet path |> Util.string_result_ok_exn
 
 external scan_csv : string -> (t, string) result = "rust_lazy_frame_scan_csv"
 
-let scan_csv_exn path =
-  scan_csv path |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
-;;
+let scan_csv_exn path = scan_csv path |> Util.string_result_ok_exn
 
 external scan_jsonl : string -> (t, string) result = "rust_lazy_frame_scan_jsonl"
 
-let scan_jsonl_exn path =
-  scan_jsonl path |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
-;;
+let scan_jsonl_exn path = scan_jsonl path |> Util.string_result_ok_exn
 
 external explain
   :  t
@@ -27,10 +21,7 @@ external explain
   = "rust_lazy_frame_explain"
 
 let explain ?(optimized = true) t = explain t ~optimized
-
-let explain_exn ?optimized t =
-  explain ?optimized t |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
-;;
+let explain_exn ?optimized t = explain ?optimized t |> Util.string_result_ok_exn
 
 external to_dot
   :  t
@@ -39,10 +30,7 @@ external to_dot
   = "rust_lazy_frame_to_dot"
 
 let to_dot ?(optimized = true) t = to_dot t ~optimized
-
-let to_dot_exn ?optimized t =
-  to_dot ?optimized t |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
-;;
+let to_dot_exn ?optimized t = to_dot ?optimized t |> Util.string_result_ok_exn
 
 external cache : t -> t = "rust_lazy_frame_cache"
 
@@ -53,19 +41,14 @@ external collect
   = "rust_lazy_frame_collect"
 
 let collect ?(streaming = false) t = collect t ~streaming
-
-let collect_exn ?streaming t =
-  collect ?streaming t |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
-;;
+let collect_exn ?streaming t = collect ?streaming t |> Util.string_result_ok_exn
 
 external collect_all
   :  t list
   -> (Data_frame0.t list, string) result
   = "rust_lazy_frame_collect_all"
 
-let collect_all_exn ts =
-  collect_all ts |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
-;;
+let collect_all_exn ts = collect_all ts |> Util.string_result_ok_exn
 
 external fetch
   :  t
@@ -73,9 +56,7 @@ external fetch
   -> (Data_frame0.t, string) result
   = "rust_lazy_frame_fetch"
 
-let fetch_exn t ~n_rows =
-  fetch t ~n_rows |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
-;;
+let fetch_exn t ~n_rows = fetch t ~n_rows |> Util.string_result_ok_exn
 
 external filter : t -> predicate:Expr.t -> t = "rust_lazy_frame_filter"
 external select : t -> exprs:Expr.t list -> t = "rust_lazy_frame_select"
@@ -232,4 +213,4 @@ external explode : t -> columns:Expr.t list -> t = "rust_lazy_frame_explode"
 external with_streaming : t -> toggle:bool -> t = "rust_lazy_frame_with_streaming"
 external schema : t -> (Schema.t, string) result = "rust_lazy_frame_schema"
 
-let schema_exn t = schema t |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
+let schema_exn t = schema t |> Util.string_result_ok_exn
