@@ -42,7 +42,7 @@ ocaml_export! {
         let Abstract(mut data_frame) = data_frame.to_rust(cr);
         let path: String = path.to_rust(cr);
 
-        File::create(path).map_err(|err| err.to_string())
+        File::create(&path).map_err(|err| err.to_string())
         .and_then(|file|
             CsvWriter::new(&file)
             .finish(&mut data_frame)
@@ -57,7 +57,7 @@ ocaml_export! {
     ) -> OCaml<Result<DynBox<DataFrame>,String>> {
         let path: String = path.to_rust(cr);
 
-        File::open(path).map_err(|err| err.to_string())
+        File::open(&path).map_err(|err| err.to_string())
         .and_then(|file|
             ParquetReader::new(file).finish().map_err(|err| err.to_string()))
         .map(Abstract).to_ocaml(cr)
@@ -71,7 +71,7 @@ ocaml_export! {
         let Abstract(mut data_frame) = data_frame.to_rust(cr);
         let path: String = path.to_rust(cr);
 
-        File::create(path).map_err(|err| err.to_string())
+        File::create(&path).map_err(|err| err.to_string())
         .and_then(|file|
             ParquetWriter::new(file).finish(&mut data_frame)
             .map(|_file_size_in_bytes| ()).map_err(|err| err.to_string()))
@@ -84,7 +84,7 @@ ocaml_export! {
     ) -> OCaml<Result<DynBox<DataFrame>,String>> {
         let path: String = path.to_rust(cr);
 
-        File::open(path).map_err(|err| err.to_string())
+        File::open(&path).map_err(|err| err.to_string())
         .and_then(|file|
             JsonReader::new(file).finish().map_err(|err| err.to_string()))
         .map(Abstract).to_ocaml(cr)
@@ -98,7 +98,7 @@ ocaml_export! {
         let Abstract(mut data_frame) = data_frame.to_rust(cr);
         let path: String = path.to_rust(cr);
 
-        File::create(path).map_err(|err| err.to_string())
+        File::create(&path).map_err(|err| err.to_string())
         .and_then(|file|
             JsonWriter::new(file).with_json_format(JsonFormat::Json).finish(&mut data_frame)
             .map_err(|err| err.to_string()))
@@ -111,7 +111,7 @@ ocaml_export! {
     ) -> OCaml<Result<DynBox<DataFrame>,String>> {
         let path: String = path.to_rust(cr);
 
-        File::open(path).map_err(|err| err.to_string())
+        File::open(&path).map_err(|err| err.to_string())
         .and_then(|file|
             JsonLineReader::new(file).finish().map_err(|err| err.to_string()))
         .map(Abstract).to_ocaml(cr)
@@ -125,7 +125,7 @@ ocaml_export! {
         let Abstract(mut data_frame) = data_frame.to_rust(cr);
         let path: String = path.to_rust(cr);
 
-        File::create(path).map_err(|err| err.to_string())
+        File::create(&path).map_err(|err| err.to_string())
         .and_then(|file|
             JsonWriter::new(file).with_json_format(JsonFormat::JsonLines).finish(&mut data_frame)
             .map_err(|err| err.to_string()))
