@@ -16,8 +16,7 @@
   ; required in bytecode compilation mode)
   ;
   ; (modes native byte)
-  (deps
-   (glob_files ./data/*.csv)))
+  )
  (library_flags -ccopt -fuse-ld=mold)
  (preprocess
   (pps ppx_jane)))
