@@ -20,4 +20,4 @@ external execute
   -> (Lazy_frame.t, string) result
   = "rust_sql_context_execute"
 
-let execute_exn t ~query = execute t ~query |> Util.string_result_ok_exn
+let execute_exn t ~query = execute t ~query |> Utils.string_result_ok_exn

@@ -101,7 +101,7 @@ module T = struct
     |> concat_list
     (* Currently the only way time that rust_expr_concat_list will return an
        Error is when the argument is an empty list, so this should never raise *)
-    |> Util.string_result_ok_exn
+    |> Utils.string_result_ok_exn
   ;;
 
   external null_count : t -> t = "rust_expr_null_count"
