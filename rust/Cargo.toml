@@ -38,6 +38,7 @@ features = [
     "dynamic_groupby",
     "horizontal_concat",
     "interpolate",
+    "json",
     "lazy",
     "list_eval",
     "parquet",

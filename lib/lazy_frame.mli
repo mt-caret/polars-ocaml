@@ -6,6 +6,8 @@ val scan_parquet : string -> (t, string) result
 val scan_parquet_exn : string -> t
 val scan_csv : string -> (t, string) result
 val scan_csv_exn : string -> t
+val scan_jsonl : string -> (t, string) result
+val scan_jsonl_exn : string -> t
 val explain : ?optimized:bool -> t -> (string, string) result
 val explain_exn : ?optimized:bool -> t -> string
 val to_dot : ?optimized:bool -> t -> (string, string) result

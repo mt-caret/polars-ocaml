@@ -23,6 +23,18 @@ ocaml_export! {
         .to_ocaml(cr)
     }
 
+    // TODO: Polars only has a lazy version of JSON Lines reader (and no lazy version of JSON reader),
+    // which I think is mainly because in the case of JSON it loads a single array. If we have a
+    // SAX-like parser for JSON, I don't see why we can't have a lazy JSON reader too.
+    fn rust_lazy_frame_scan_jsonl(cr, path: OCamlRef<String>) -> OCaml<Result<DynBox<LazyFrame>, String>>{
+        let path: String = path.to_rust(cr);
+        let path: &Path = Path::new(&path);
+
+        LazyJsonLineReader::new(path).finish()
+        .map(Abstract).map_err(|err| err.to_string())
+        .to_ocaml(cr)
+    }
+
     fn rust_lazy_frame_explain(
         cr,
         lazy_frame: OCamlRef<DynBox<LazyFrame>>,

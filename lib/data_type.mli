@@ -28,5 +28,8 @@ type t =
   | Time
   | List of t
   | Null
+  | Struct of (string * t) list
   | Unknown
 [@@deriving sexp]
+
+include Stringable.S with type t := t
