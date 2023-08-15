@@ -1,9 +1,9 @@
-#![feature(try_blocks)]
 mod data_frame;
 mod expr;
 mod lazy_frame;
 mod misc;
 mod series;
+mod sql_context;
 mod utils;
 
 #[cfg(test)]

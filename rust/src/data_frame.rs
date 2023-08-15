@@ -4,6 +4,7 @@ use ocaml_interop::{
 };
 use polars::prelude::*;
 use smartstring::{LazyCompact, SmartString};
+use std::fs::File;
 
 ocaml_export! {
     fn rust_data_frame_new(cr, series: OCamlRef<OCamlList<DynBox<Series>>>) -> OCaml<Result<DynBox<DataFrame>,String>> {
@@ -12,12 +13,17 @@ ocaml_export! {
         DataFrame::new(series).map(Abstract).map_err(|err| err.to_string()).to_ocaml(cr)
     }
 
-    fn rust_data_frame_read_csv(cr, path: OCamlRef<String>, schema: OCamlRef<Option<DynBox<Schema>>>, try_parse_dates: OCamlRef<Option<bool>>) -> OCaml<Result<DynBox<DataFrame>,String>> {
+    fn rust_data_frame_read_csv(
+        cr,
+        path: OCamlRef<String>,
+        schema: OCamlRef<Option<DynBox<Schema>>>,
+        try_parse_dates: OCamlRef<Option<bool>>
+    ) -> OCaml<Result<DynBox<DataFrame>,String>> {
         let path: String = path.to_rust(cr);
         let schema = schema.to_rust::<Option<Abstract<Schema>>>(cr).map(|Abstract(schema)| Arc::new(schema));
         let try_parse_dates: Option<bool> = try_parse_dates.to_rust(cr);
 
-        CsvReader::from_path(&path)
+        CsvReader::from_path(path)
         .and_then(|csv_reader| {
             let csv_reader = csv_reader.with_dtypes(schema);
             match try_parse_dates {
@@ -28,7 +34,105 @@ ocaml_export! {
         .map(Abstract).map_err(|err| err.to_string()).to_ocaml(cr)
     }
 
-   fn rust_data_frame_describe(cr, data_frame: OCamlRef<DynBox<DataFrame>>, percentiles: OCamlRef<Option<OCamlList<OCamlFloat>>>) -> OCaml<Result<DynBox<DataFrame>,String>> {
+    fn rust_data_frame_write_csv(
+        cr,
+        data_frame: OCamlRef<DynBox<DataFrame>>,
+        path: OCamlRef<String>,
+    ) -> OCaml<Result<(),String>> {
+        let Abstract(mut data_frame) = data_frame.to_rust(cr);
+        let path: String = path.to_rust(cr);
+
+        File::create(&path).map_err(|err| err.to_string())
+        .and_then(|file|
+            CsvWriter::new(&file)
+            .finish(&mut data_frame)
+            .map_err(|err| err.to_string())
+        )
+        .to_ocaml(cr)
+    }
+
+    fn rust_data_frame_read_parquet(
+        cr,
+        path: OCamlRef<String>,
+    ) -> OCaml<Result<DynBox<DataFrame>,String>> {
+        let path: String = path.to_rust(cr);
+
+        File::open(&path).map_err(|err| err.to_string())
+        .and_then(|file|
+            ParquetReader::new(file).finish().map_err(|err| err.to_string()))
+        .map(Abstract).to_ocaml(cr)
+    }
+
+    fn rust_data_frame_write_parquet(
+        cr,
+        data_frame: OCamlRef<DynBox<DataFrame>>,
+        path: OCamlRef<String>,
+    ) -> OCaml<Result<(),String>> {
+        let Abstract(mut data_frame) = data_frame.to_rust(cr);
+        let path: String = path.to_rust(cr);
+
+        File::create(&path).map_err(|err| err.to_string())
+        .and_then(|file|
+            ParquetWriter::new(file).finish(&mut data_frame)
+            .map(|_file_size_in_bytes| ()).map_err(|err| err.to_string()))
+        .to_ocaml(cr)
+    }
+
+    fn rust_data_frame_read_json(
+        cr,
+        path: OCamlRef<String>,
+    ) -> OCaml<Result<DynBox<DataFrame>,String>> {
+        let path: String = path.to_rust(cr);
+
+        File::open(&path).map_err(|err| err.to_string())
+        .and_then(|file|
+            JsonReader::new(file).finish().map_err(|err| err.to_string()))
+        .map(Abstract).to_ocaml(cr)
+    }
+
+    fn rust_data_frame_write_json(
+        cr,
+        data_frame: OCamlRef<DynBox<DataFrame>>,
+        path: OCamlRef<String>,
+    ) -> OCaml<Result<(),String>> {
+        let Abstract(mut data_frame) = data_frame.to_rust(cr);
+        let path: String = path.to_rust(cr);
+
+        File::create(&path).map_err(|err| err.to_string())
+        .and_then(|file|
+            JsonWriter::new(file).with_json_format(JsonFormat::Json).finish(&mut data_frame)
+            .map_err(|err| err.to_string()))
+        .to_ocaml(cr)
+    }
+
+    fn rust_data_frame_read_jsonl(
+        cr,
+        path: OCamlRef<String>,
+    ) -> OCaml<Result<DynBox<DataFrame>,String>> {
+        let path: String = path.to_rust(cr);
+
+        File::open(&path).map_err(|err| err.to_string())
+        .and_then(|file|
+            JsonLineReader::new(file).finish().map_err(|err| err.to_string()))
+        .map(Abstract).to_ocaml(cr)
+    }
+
+    fn rust_data_frame_write_jsonl(
+        cr,
+        data_frame: OCamlRef<DynBox<DataFrame>>,
+        path: OCamlRef<String>,
+    ) -> OCaml<Result<(),String>> {
+        let Abstract(mut data_frame) = data_frame.to_rust(cr);
+        let path: String = path.to_rust(cr);
+
+        File::create(&path).map_err(|err| err.to_string())
+        .and_then(|file|
+            JsonWriter::new(file).with_json_format(JsonFormat::JsonLines).finish(&mut data_frame)
+            .map_err(|err| err.to_string()))
+        .to_ocaml(cr)
+    }
+
+    fn rust_data_frame_describe(cr, data_frame: OCamlRef<DynBox<DataFrame>>, percentiles: OCamlRef<Option<OCamlList<OCamlFloat>>>) -> OCaml<Result<DynBox<DataFrame>,String>> {
         let Abstract(data_frame) = data_frame.to_rust(cr);
         let percentiles: Option<Vec<f64>> = percentiles.to_rust(cr);
 
@@ -76,16 +180,16 @@ ocaml_export! {
     fn rust_data_frame_vertical_concat(cr, data_frames: OCamlRef<OCamlList<DynBox<DataFrame>>>) -> OCaml<Result<DynBox<DataFrame>,String>> {
         let data_frames = unwrap_abstract_vec(data_frames.to_rust(cr));
 
-        let result: PolarsResult<_> = try {
+        let stack = || {
             let mut data_frames = data_frames.into_iter();
-            let first = data_frames.next().ok_or(PolarsError::NoData("No dataframes provided for vertical concatenation".into()))?;
-            let mut result = first.clone();
+            let mut result = data_frames.next().ok_or(PolarsError::NoData("No dataframes provided for vertical concatenation".into()))?;
             for data_frame in data_frames {
                 result = result.vstack(&data_frame)?;
             }
-            result
+            Ok(result)
         };
-        result.map(Abstract).map_err(|err| err.to_string()).to_ocaml(cr)
+
+        stack().map(Abstract).map_err(|err: PolarsError| err.to_string()).to_ocaml(cr)
     }
 
     fn rust_data_frame_horizontal_concat(cr, data_frames: OCamlRef<OCamlList<DynBox<DataFrame>>>) -> OCaml<Result<DynBox<DataFrame>,String>> {
@@ -157,7 +261,7 @@ ocaml_export! {
         let descending: Vec<bool> = descending.to_rust(cr);
         let maintain_order: bool = maintain_order.to_rust(cr);
 
-        data_frame.sort(&by_column, descending, maintain_order)
+        data_frame.sort(by_column, descending, maintain_order)
         .map(Abstract).map_err(|err| err.to_string()).to_ocaml(cr)
     }
 

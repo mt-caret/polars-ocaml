@@ -14,6 +14,12 @@ let scan_csv_exn path =
   scan_csv path |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
 ;;
 
+external scan_jsonl : string -> (t, string) result = "rust_lazy_frame_scan_jsonl"
+
+let scan_jsonl_exn path =
+  scan_jsonl path |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
+;;
+
 external explain
   :  t
   -> optimized:bool

@@ -6,3 +6,4 @@ module Fill_null_strategy = Fill_null_strategy
 module Lazy_frame = Lazy_frame
 module Schema = Schema
 module Series = Series
+module Sql_context = Sql_context

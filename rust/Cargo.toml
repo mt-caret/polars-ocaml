@@ -14,6 +14,7 @@ expect-test = "1.4.1"
 ocaml = "0.22.4"
 ocaml-interop = "0.9.1"
 ocaml-sys = "0.23.0"
+polars-sql = "0.31.1"
 smartstring = "1.0.1"
 
 # arrow2 0.17.4 introduces arrow2::array::Array::is_null_unchecked, which clashes
@@ -38,6 +39,7 @@ features = [
     "dynamic_groupby",
     "horizontal_concat",
     "interpolate",
+    "json",
     "lazy",
     "list_eval",
     "parquet",
