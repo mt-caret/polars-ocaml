@@ -104,7 +104,7 @@ module Deferred = struct
     profile t >>| Result.map_error ~f:Error.of_string >>| Or_error.ok_exn
   ;;
 
-  let fetch t ~n_rows = In_thread.run (fun () -> fetch t ~n_rows ~release_runtime:true )
+  let fetch t ~n_rows = In_thread.run (fun () -> fetch t ~n_rows ~release_runtime:true)
 
   let fetch_exn t ~n_rows =
     fetch t ~n_rows >>| Result.map_error ~f:Error.of_string >>| Or_error.ok_exn
