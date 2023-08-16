@@ -30,7 +30,7 @@
  (name polars)
  (public_name polars)
  (foreign_archives polars_ocaml)
- (libraries core core_kernel.nonempty_list)
+ (libraries async core core_kernel.nonempty_list)
  (inline_tests)
  (preprocess
   (pps ppx_jane)))

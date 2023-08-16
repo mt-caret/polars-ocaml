@@ -66,33 +66,48 @@ ocaml_export! {
         cr,
         lazy_frame: OCamlRef<DynBox<LazyFrame>>,
         streaming: OCamlRef<bool>,
-     )-> OCaml<Result<DynBox<DataFrame>, String>> {
+        release_runtime: OCamlRef<bool>,
+     ) -> OCaml<Result<DynBox<DataFrame>, String>> {
         let Abstract(lazy_frame) = lazy_frame.to_rust(cr);
         let streaming = streaming.to_rust(cr);
+        let release_runtime = release_runtime.to_rust(cr);
 
-        lazy_frame
-        .with_streaming(streaming)
-        .collect()
-        .map(Abstract).map_err(|err| err.to_string())
+        maybe_release_runtime(cr, release_runtime, ||
+            lazy_frame
+            .with_streaming(streaming)
+            .collect()
+            .map(Abstract).map_err(|err| err.to_string()))
         .to_ocaml(cr)
     }
 
-    fn rust_lazy_frame_collect_all(cr, lazy_frames: OCamlRef<OCamlList<DynBox<LazyFrame>>>)-> OCaml<Result<OCamlList<DynBox<DataFrame>>, String>> {
+    fn rust_lazy_frame_collect_all(
+        cr,
+        lazy_frames: OCamlRef<OCamlList<DynBox<LazyFrame>>>,
+        release_runtime: OCamlRef<bool>,
+    )-> OCaml<Result<OCamlList<DynBox<DataFrame>>, String>> {
         let lazy_frames = unwrap_abstract_vec(lazy_frames.to_rust(cr));
+        let release_runtime = release_runtime.to_rust(cr);
 
-        collect_all(lazy_frames)
-        .map(|data_frames| data_frames.into_iter().map(Abstract).collect::<Vec<_>>())
-        .map_err(|err| err.to_string())
+        maybe_release_runtime(cr, release_runtime, ||
+            collect_all(lazy_frames)
+            .map(|data_frames| data_frames.into_iter().map(Abstract).collect::<Vec<_>>())
+            .map_err(|err| err.to_string()))
         .to_ocaml(cr)
     }
 
-    fn rust_lazy_frame_profile(cr, lazy_frame: OCamlRef<DynBox<LazyFrame>>)-> OCaml<Result<(DynBox<DataFrame>, DynBox<DataFrame>), String>> {
+    fn rust_lazy_frame_profile(
+        cr,
+        lazy_frame: OCamlRef<DynBox<LazyFrame>>,
+        release_runtime: OCamlRef<bool>,
+    )-> OCaml<Result<(DynBox<DataFrame>, DynBox<DataFrame>), String>> {
         let Abstract(lazy_frame) = lazy_frame.to_rust(cr);
+        let release_runtime = release_runtime.to_rust(cr);
 
-        lazy_frame
-        .profile()
-        .map(|(materialized, profile)| (Abstract(materialized), Abstract(profile)))
-        .map_err(|err| err.to_string())
+        maybe_release_runtime(cr, release_runtime, ||
+            lazy_frame
+            .profile()
+            .map(|(materialized, profile)| (Abstract(materialized), Abstract(profile)))
+            .map_err(|err| err.to_string()))
         .to_ocaml(cr)
     }
 
@@ -100,12 +115,15 @@ ocaml_export! {
         cr,
         lazy_frame: OCamlRef<DynBox<LazyFrame>>,
         n_rows: OCamlRef<OCamlInt>,
+        release_runtime: OCamlRef<bool>,
     ) -> OCaml<Result<DynBox<DataFrame>, String>> {
         let Abstract(lazy_frame) = lazy_frame.to_rust(cr);
         let n_rows = n_rows.to_rust::<Coerce<_, i64, usize>>(cr).get();
+        let release_runtime = release_runtime.to_rust(cr);
 
-        lazy_frame.fetch(n_rows)
-        .map(Abstract).map_err(|err| err.to_string())
+        maybe_release_runtime(cr, release_runtime, ||
+            lazy_frame.fetch(n_rows)
+            .map(Abstract).map_err(|err| err.to_string()))
         .to_ocaml(cr)
     }
 
