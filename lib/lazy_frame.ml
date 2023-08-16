@@ -67,8 +67,8 @@ external profile
 
 external fetch
   :  t
-  -> release_runtime:bool
   -> n_rows:int
+  -> release_runtime:bool
   -> (Data_frame0.t, string) result
   = "rust_lazy_frame_fetch"
 
@@ -104,7 +104,7 @@ module Deferred = struct
     profile t >>| Result.map_error ~f:Error.of_string >>| Or_error.ok_exn
   ;;
 
-  let fetch t ~n_rows = In_thread.run (fun () -> fetch t ~release_runtime:true ~n_rows)
+  let fetch t ~n_rows = In_thread.run (fun () -> fetch t ~n_rows ~release_runtime:true )
 
   let fetch_exn t ~n_rows =
     fetch t ~n_rows >>| Result.map_error ~f:Error.of_string >>| Or_error.ok_exn
@@ -129,7 +129,7 @@ let profile t =
 ;;
 
 let profile_exn t = profile t |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
-let fetch t ~n_rows = fetch t ~release_runtime:false ~n_rows
+let fetch t ~n_rows = fetch t ~n_rows ~release_runtime:false
 
 let fetch_exn t ~n_rows =
   fetch t ~n_rows |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
