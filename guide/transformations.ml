@@ -984,16 +984,13 @@ let%expect_test "Time zones" =
 ;;
 
 let%expect_test "profile lazy_frame operations" =
-  let df =
-    Data_frame.create_exn
-      Series.[ int "a" [ 3; 1; 5; 4; 2 ] ]
-  in
-  let sorted_ldf =
-    Data_frame.lazy_ df |> Lazy_frame.sort ~by_column:"a" in
+  let df = Data_frame.create_exn Series.[ int "a" [ 3; 1; 5; 4; 2 ] ] in
+  let sorted_ldf = Data_frame.lazy_ df |> Lazy_frame.sort ~by_column:"a" in
   (* Profile is non-determinstic so we don't print it *)
   let materialized, _profile = Lazy_frame.profile_exn sorted_ldf in
   Data_frame.print materialized;
-  [%expect {|
+  [%expect
+    {|
     shape: (5, 1)
     ┌─────┐
     │ a   │
@@ -1005,4 +1002,5 @@ let%expect_test "profile lazy_frame operations" =
     │ 3   │
     │ 4   │
     │ 5   │
-    └─────┘ |}];
+    └─────┘ |}]
+;;
