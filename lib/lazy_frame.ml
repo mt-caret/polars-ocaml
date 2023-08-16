@@ -49,36 +49,87 @@ external cache : t -> t = "rust_lazy_frame_cache"
 external collect
   :  t
   -> streaming:bool
+  -> release_runtime:bool
   -> (Data_frame0.t, string) result
   = "rust_lazy_frame_collect"
 
-let collect ?(streaming = false) t = collect t ~streaming
+external collect_all
+  :  t list
+  -> release_runtime:bool
+  -> (Data_frame0.t list, string) result
+  = "rust_lazy_frame_collect_all"
+
+external profile
+  :  t
+  -> release_runtime:bool
+  -> (Data_frame0.t * Data_frame0.t, string) result
+  = "rust_lazy_frame_profile"
+
+external fetch
+  :  t
+  -> release_runtime:bool
+  -> n_rows:int
+  -> (Data_frame0.t, string) result
+  = "rust_lazy_frame_fetch"
+
+type profile_result =
+  { collected : Data_frame0.t
+  ; profile : Data_frame0.t
+  }
+
+module Deferred = struct
+  open Async
+
+  let collect ?(streaming = false) t =
+    In_thread.run (fun () -> collect t ~streaming ~release_runtime:true)
+  ;;
+
+  let collect_exn ?streaming t =
+    collect ?streaming t >>| Result.map_error ~f:Error.of_string >>| Or_error.ok_exn
+  ;;
+
+  let collect_all t = In_thread.run (fun () -> collect_all t ~release_runtime:true)
+
+  let collect_all_exn ts =
+    collect_all ts >>| Result.map_error ~f:Error.of_string >>| Or_error.ok_exn
+  ;;
+
+  let profile t =
+    let%map result = In_thread.run (fun () -> profile t ~release_runtime:true) in
+    let%map.Result collected, profile = result in
+    { collected; profile }
+  ;;
+
+  let profile_exn t =
+    profile t >>| Result.map_error ~f:Error.of_string >>| Or_error.ok_exn
+  ;;
+
+  let fetch t ~n_rows = In_thread.run (fun () -> fetch t ~release_runtime:true ~n_rows)
+
+  let fetch_exn t ~n_rows =
+    fetch t ~n_rows >>| Result.map_error ~f:Error.of_string >>| Or_error.ok_exn
+  ;;
+end
+
+let collect ?(streaming = false) t = collect t ~streaming ~release_runtime:false
 
 let collect_exn ?streaming t =
   collect ?streaming t |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
 ;;
 
-external collect_all
-  :  t list
-  -> (Data_frame0.t list, string) result
-  = "rust_lazy_frame_collect_all"
+let collect_all t = collect_all t ~release_runtime:false
 
 let collect_all_exn ts =
   collect_all ts |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
 ;;
 
-external profile
-  :  t
-  -> (Data_frame0.t * Data_frame0.t, string) result
-  = "rust_lazy_frame_profile"
+let profile t =
+  let%map.Result collected, profile = profile t ~release_runtime:false in
+  { collected; profile }
+;;
 
 let profile_exn t = profile t |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
-
-external fetch
-  :  t
-  -> n_rows:int
-  -> (Data_frame0.t, string) result
-  = "rust_lazy_frame_fetch"
+let fetch t ~n_rows = fetch t ~release_runtime:false ~n_rows
 
 let fetch_exn t ~n_rows =
   fetch t ~n_rows |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
