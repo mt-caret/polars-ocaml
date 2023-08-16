@@ -80,10 +80,19 @@ ocaml_export! {
     fn rust_lazy_frame_collect_all(cr, lazy_frames: OCamlRef<OCamlList<DynBox<LazyFrame>>>)-> OCaml<Result<OCamlList<DynBox<DataFrame>>, String>> {
         let lazy_frames = unwrap_abstract_vec(lazy_frames.to_rust(cr));
 
-        collect_all(lazy_frames)
-        .map(|data_frames| data_frames.into_iter().map(Abstract).collect::<Vec<_>>())
-        .map_err(|err| err.to_string())
-        .to_ocaml(cr)
+
+
+
+
+
+
+
+
+
+
+
+
+        collect_all(lazy_frames).map(|data_frames| data_frames.into_iter().map(Abstract).collect::<Vec<_>>()).map_err(|err| err.to_string()).to_ocaml(cr)
     }
 
     fn rust_lazy_frame_profile(cr, lazy_frame: OCamlRef<DynBox<LazyFrame>>)-> OCaml<Result<(DynBox<DataFrame>, DynBox<DataFrame>), String>> {
