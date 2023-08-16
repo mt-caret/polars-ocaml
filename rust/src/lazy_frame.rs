@@ -86,6 +86,16 @@ ocaml_export! {
         .to_ocaml(cr)
     }
 
+    fn rust_lazy_frame_profile(cr, lazy_frame: OCamlRef<DynBox<LazyFrame>>)-> OCaml<Result<(DynBox<DataFrame>, DynBox<DataFrame>), String>> {
+        let Abstract(lazy_frame) = lazy_frame.to_rust(cr);
+
+        lazy_frame
+        .profile()
+        .map(|(materialized, profile)| (Abstract(materialized), Abstract(profile)))
+        .map_err(|err| err.to_string())
+        .to_ocaml(cr)
+    }
+
     fn rust_lazy_frame_fetch(
         cr,
         lazy_frame: OCamlRef<DynBox<LazyFrame>>,
