@@ -27,6 +27,7 @@
   (ocamlformat :dev)
   (odoc :with-doc)
   (shell :with-test)
+	async
   core
   core_kernel
   dune
