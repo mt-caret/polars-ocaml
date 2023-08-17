@@ -67,6 +67,13 @@ let collect_all_exn ts =
   collect_all ts |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
 ;;
 
+external profile
+  :  t
+  -> (Data_frame0.t * Data_frame0.t, string) result
+  = "rust_lazy_frame_profile"
+
+let profile_exn t = profile t |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
+
 external fetch
   :  t
   -> n_rows:int

@@ -982,3 +982,25 @@ let%expect_test "Time zones" =
     │ 2021-03-28 03:00:00 CEST      ┆ 2021-03-28 08:45:00 +0545    ┆ 2021-03-28 03:00:00 │
     └───────────────────────────────┴──────────────────────────────┴─────────────────────┘ |}]
 ;;
+
+let%expect_test "profile lazy_frame operations" =
+  let df = Data_frame.create_exn Series.[ int "a" [ 3; 1; 5; 4; 2 ] ] in
+  let sorted_ldf = Data_frame.lazy_ df |> Lazy_frame.sort ~by_column:"a" in
+  (* Profile is non-determinstic so we don't print it *)
+  let materialized, _profile = Lazy_frame.profile_exn sorted_ldf in
+  Data_frame.print materialized;
+  [%expect
+    {|
+    shape: (5, 1)
+    ┌─────┐
+    │ a   │
+    │ --- │
+    │ i64 │
+    ╞═════╡
+    │ 1   │
+    │ 2   │
+    │ 3   │
+    │ 4   │
+    │ 5   │
+    └─────┘ |}]
+;;
