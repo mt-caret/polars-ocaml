@@ -71,9 +71,15 @@ module type Common = sig
     val of_string : string -> t
   end
 
+  val record_panic_backtraces : unit -> unit
+
   module For_testing : sig
     val panic : string -> unit
-    val raise_exception : string -> unit
-    val install_panic_hook : suppress_backtrace:bool -> unit
+
+    (** [clear_panic_hook] sets the panic handler to a no-op. We've found that
+        the output of the default panic hook does not seem to be stable across
+        Rust versions, so this should be used in expect tests where we expect
+        panic-driven exceptions. *)
+    val clear_panic_hook : unit -> unit
   end
 end

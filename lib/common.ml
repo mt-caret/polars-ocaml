@@ -91,12 +91,9 @@ module Naive_datetime = struct
   ;;
 end
 
+external record_panic_backtraces : unit -> unit = "rust_record_panic_backtraces"
+
 module For_testing = struct
   external panic : string -> unit = "rust_test_panic"
-  external raise_exception : string -> unit = "rust_test_exception"
-
-  external install_panic_hook
-    :  suppress_backtrace:bool
-    -> unit
-    = "rust_install_panic_hook"
+  external clear_panic_hook : unit -> unit = "rust_clear_panic_hook"
 end
