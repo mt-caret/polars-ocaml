@@ -52,32 +52,16 @@ external collect
   -> (Data_frame0.t, string) result
   = "rust_lazy_frame_collect"
 
-external collect_all
-  :  t list
-  -> (Data_frame0.t list, string) result
-  = "rust_lazy_frame_collect_all"
-
-external profile
-  :  t
-  -> (Data_frame0.t * Data_frame0.t, string) result
-  = "rust_lazy_frame_profile"
-
-external fetch
-  :  t
-  -> n_rows:int
-  -> (Data_frame0.t, string) result
-  = "rust_lazy_frame_fetch"
-
-type profile_result =
-  { collected : Data_frame0.t
-  ; profile : Data_frame0.t
-  }
-
 let collect ?(streaming = false) t = collect t ~streaming
 
 let collect_exn ?streaming t =
   collect ?streaming t |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
 ;;
+
+external collect_all
+  :  t list
+  -> (Data_frame0.t list, string) result
+  = "rust_lazy_frame_collect_all"
 
 let collect_all t = collect_all t
 
@@ -86,6 +70,16 @@ let collect_all t = collect_all t
 let collect_all_exn ts =
   collect_all ts |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
 ;;
+
+external profile
+  :  t
+  -> (Data_frame0.t * Data_frame0.t, string) result
+  = "rust_lazy_frame_profile"
+
+type profile_result =
+  { collected : Data_frame0.t
+  ; profile : Data_frame0.t
+  }
 
 let profile t =
   let%map.Result collected, profile = profile t in
@@ -103,6 +97,13 @@ let profile t =
 ;;
 
 let profile_exn t = profile t |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
+
+external fetch
+  :  t
+  -> n_rows:int
+  -> (Data_frame0.t, string) result
+  = "rust_lazy_frame_fetch"
+
 let fetch t ~n_rows = fetch t ~n_rows
 
 let fetch t ~n_rows = fetch t ~n_rows
