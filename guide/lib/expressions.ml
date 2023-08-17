@@ -574,7 +574,7 @@ let%expect_test "Aggregation" =
     Data_frame.read_csv_exn
       ~schema
       ~try_parse_dates:true
-      "./data/legislators-historical.csv"
+      "../data/legislators-historical.csv"
   in
   Data_frame.print dataset;
   [%expect
@@ -993,7 +993,7 @@ let%expect_test "Missing data" =
 
 (* Examples from https://pola-rs.github.io/polars-book/user-guide/expressions/window/ *)
 let%expect_test "Window functions" =
-  let df = Data_frame.read_csv_exn "./data/pokemon.csv" in
+  let df = Data_frame.read_csv_exn "../data/pokemon.csv" in
   Data_frame.print (Data_frame.head df);
   [%expect
     {|

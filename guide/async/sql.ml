@@ -1,5 +1,7 @@
 open! Core
+open Async
 open! Polars
+open Polars_async
 
 (* Examples from https://pola-rs.github.io/polars-book/user-guide/sql/intro/ *)
 let%expect_test "Introduction" =
@@ -10,11 +12,13 @@ let%expect_test "Introduction" =
   Sql_context.get_tables ctx |> [%sexp_of: string list] |> print_s;
   [%expect {|
     (a b) |}];
-  let pokemon = Lazy_frame.scan_csv_exn "./data/pokemon.csv" in
+  let pokemon = Lazy_frame.scan_csv_exn "../data/pokemon.csv" in
   let ctx = Sql_context.create [ "pokemon", pokemon ] in
-  Sql_context.execute_exn ctx ~query:"SELECT * from pokemon LIMIT 5"
-  |> Lazy_frame.collect_exn
-  |> Data_frame.print;
+  let%bind () =
+    Sql_context.execute_exn ctx ~query:"SELECT * from pokemon LIMIT 5"
+    |> Lazy_frame.collect_exn
+    >>| Data_frame.print
+  in
   [%expect
     {|
     shape: (5, 13)
@@ -55,21 +59,23 @@ let%expect_test "Introduction" =
               ] )
       ]
   in
-  Sql_context.execute_exn
-    ctx
-    ~query:
-      {|
-  SELECT 
+  let%bind () =
+    Sql_context.execute_exn
+      ctx
+      ~query:
+        {|
+  SELECT
     product_id,
     product_name,
     category,
     sales
-  FROM 
+  FROM
       products_masterdata
   LEFT JOIN products_categories USING (product_id)
   LEFT JOIN sales_data USING (product_id)|}
-  |> Lazy_frame.collect_exn
-  |> Data_frame.print;
+    |> Lazy_frame.collect_exn
+    >>| Data_frame.print
+  in
   [%expect
     {|
     shape: (5, 4)
@@ -84,6 +90,7 @@ let%expect_test "Introduction" =
     │ 4          ┆ Product D    ┆ Category 2 ┆ 250   │
     │ 5          ┆ Product E    ┆ Category 3 ┆ 300   │
     └────────────┴──────────────┴────────────┴───────┘ |}]
+  |> return
 ;;
 
 (* Examples from https://pola-rs.github.io/polars-book/user-guide/sql/show/ *)
@@ -104,9 +111,11 @@ let%expect_test "SHOW TABLES" =
         ]
   in
   let ctx = Sql_context.create [ "mytable1", df1; "mytable2", df2 ] in
-  Sql_context.execute_exn ctx ~query:"SHOW TABLES"
-  |> Lazy_frame.collect_exn
-  |> Data_frame.print;
+  let%bind () =
+    Sql_context.execute_exn ctx ~query:"SHOW TABLES"
+    |> Lazy_frame.collect_exn
+    >>| Data_frame.print
+  in
   [%expect
     {|
     shape: (2, 1)
@@ -119,6 +128,7 @@ let%expect_test "SHOW TABLES" =
     │ mytable2 │
     └──────────┘
     |}]
+  |> return
 ;;
 
 (* Examples from https://pola-rs.github.io/polars-book/user-guide/sql/select/ *)
@@ -135,9 +145,11 @@ let%expect_test "SELECT" =
         ]
   in
   let ctx = Sql_context.create [ "population", df ] in
-  Sql_context.execute_exn ctx ~query:"SELECT * FROM population"
-  |> Lazy_frame.collect_exn
-  |> Data_frame.print;
+  let%bind () =
+    Sql_context.execute_exn ctx ~query:"SELECT * FROM population"
+    |> Lazy_frame.collect_exn
+    >>| Data_frame.print
+  in
   [%expect
     {|
     shape: (6, 3)
@@ -191,14 +203,16 @@ let%expect_test "SELECT" =
          └─────────────┴────────────────┘ |}]
        done
      ]} *)
-  Sql_context.execute_exn
-    ctx
-    ~query:{|
+  let%bind () =
+    Sql_context.execute_exn
+      ctx
+      ~query:{|
   SELECT city, population
   FROM population
   ORDER BY population |}
-  |> Lazy_frame.collect_exn
-  |> Data_frame.print;
+    |> Lazy_frame.collect_exn
+    >>| Data_frame.print
+  in
   [%expect
     {|
     shape: (6, 2)
@@ -234,15 +248,17 @@ let%expect_test "SELECT" =
         ]
   in
   let ctx = Sql_context.create [ "population", df; "income", income ] in
-  Sql_context.execute_exn
-    ctx
-    ~query:
-      {|
+  let%bind () =
+    Sql_context.execute_exn
+      ctx
+      ~query:
+        {|
   SELECT country, city, income, population
   FROM population
   LEFT JOIN income on population.city = income.city|}
-  |> Lazy_frame.collect_exn
-  |> Data_frame.print;
+    |> Lazy_frame.collect_exn
+    >>| Data_frame.print
+  in
   [%expect
     {|
     shape: (6, 4)
@@ -258,15 +274,17 @@ let%expect_test "SELECT" =
     │ USA         ┆ Phoenix     ┆ null   ┆ 1680000    │
     │ Netherlands ┆ Amsterdam   ┆ 42000  ┆ 900000     │
     └─────────────┴─────────────┴────────┴────────────┘ |}];
-  Sql_context.execute_exn
-    ctx
-    ~query:
-      {|
+  let%bind () =
+    Sql_context.execute_exn
+      ctx
+      ~query:
+        {|
   SELECT city, population
   FROM population
   WHERE STARTS_WITH(country,'U')|}
-  |> Lazy_frame.collect_exn
-  |> Data_frame.print;
+    |> Lazy_frame.collect_exn
+    >>| Data_frame.print
+  in
   [%expect
     {|
     shape: (5, 2)
@@ -281,11 +299,13 @@ let%expect_test "SELECT" =
     │ Houston     ┆ 2320000    │
     │ Phoenix     ┆ 1680000    │
     └─────────────┴────────────┘ |}];
-  Sql_context.execute_exn ctx ~query:{|
+  let%bind () =
+    Sql_context.execute_exn ctx ~query:{|
   SELECT *
-  FROM read_csv('./data/iris.csv')|}
-  |> Lazy_frame.collect_exn
-  |> Data_frame.print;
+  FROM read_csv('../data/iris.csv')|}
+    |> Lazy_frame.collect_exn
+    >>| Data_frame.print
+  in
   [%expect
     {|
     shape: (150, 5)
@@ -304,6 +324,7 @@ let%expect_test "SELECT" =
     │ 6.2          ┆ 3.4         ┆ 5.4          ┆ 2.3         ┆ Iris-virginica │
     │ 5.9          ┆ 3.0         ┆ 5.1          ┆ 1.8         ┆ Iris-virginica │
     └──────────────┴─────────────┴──────────────┴─────────────┴────────────────┘ |}]
+  |> return
 ;;
 
 (* Examples from https://pola-rs.github.io/polars-book/user-guide/sql/create/ *)
@@ -317,14 +338,16 @@ let%expect_test "CREATE" =
         ]
   in
   let ctx = Sql_context.create [ "my_table", df ] in
-  Sql_context.execute_exn
-    ctx
-    ~query:{|
+  let%bind () =
+    Sql_context.execute_exn
+      ctx
+      ~query:{|
   CREATE TABLE older_people
   AS
   SELECT * FROM my_table WHERE age > 30|}
-  |> Lazy_frame.collect_exn
-  |> Data_frame.print;
+    |> Lazy_frame.collect_exn
+    >>| Data_frame.print
+  in
   [%expect
     {|
     shape: (1, 1)
@@ -335,9 +358,11 @@ let%expect_test "CREATE" =
     ╞══════════════╡
     │ Create Table │
     └──────────────┘ |}];
-  Sql_context.execute_exn ctx ~query:"SELECT * FROM older_people"
-  |> Lazy_frame.collect_exn
-  |> Data_frame.print;
+  let%bind () =
+    Sql_context.execute_exn ctx ~query:"SELECT * FROM older_people"
+    |> Lazy_frame.collect_exn
+    >>| Data_frame.print
+  in
   [%expect
     {|
     shape: (2, 2)
@@ -349,6 +374,7 @@ let%expect_test "CREATE" =
     │ Charlie ┆ 35  │
     │ David   ┆ 40  │
     └─────────┴─────┘ |}]
+  |> return
 ;;
 
 (* Examples from https://pola-rs.github.io/polars-book/user-guide/sql/cte/ *)
@@ -362,16 +388,18 @@ let%expect_test "Common Table Expressions" =
         ]
   in
   let ctx = Sql_context.create [ "my_table", df ] in
-  Sql_context.execute_exn
-    ctx
-    ~query:
-      {|
+  let%bind () =
+    Sql_context.execute_exn
+      ctx
+      ~query:
+        {|
   WITH older_people AS (
       SELECT * FROM my_table WHERE age > 30
   )
   SELECT * FROM older_people WHERE STARTS_WITH(name,'C')|}
-  |> Lazy_frame.collect_exn
-  |> Data_frame.print;
+    |> Lazy_frame.collect_exn
+    >>| Data_frame.print
+  in
   [%expect
     {|
     shape: (1, 2)
@@ -382,4 +410,5 @@ let%expect_test "Common Table Expressions" =
     ╞═════════╪═════╡
     │ Charlie ┆ 35  │
     └─────────┴─────┘ |}]
+  |> return
 ;;

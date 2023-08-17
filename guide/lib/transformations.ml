@@ -507,7 +507,7 @@ let%expect_test "Melt" =
 ;;
 
 let%expect_test "Time Series Parsing" =
-  let df = Data_frame.read_csv_exn ~try_parse_dates:true "./data/appleStock.csv" in
+  let df = Data_frame.read_csv_exn ~try_parse_dates:true "../data/appleStock.csv" in
   Data_frame.print df;
   [%expect
     {|
@@ -528,7 +528,7 @@ let%expect_test "Time Series Parsing" =
     │ 2014-02-25 ┆ 522.06 │
     └────────────┴────────┘ |}];
   let df =
-    Data_frame.read_csv_exn ~try_parse_dates:false "./data/appleStock.csv"
+    Data_frame.read_csv_exn ~try_parse_dates:false "../data/appleStock.csv"
     |> Data_frame.with_columns_exn
          ~exprs:Expr.[ col "Date" |> Str.strptime ~type_:Date ~format:"%Y-%m-%d" ]
   in
@@ -614,7 +614,7 @@ let%expect_test "Time Series Parsing" =
 
 (* Examples from https://pola-rs.github.io/polars-book/user-guide/transformations/time-series/filter/ *)
 let%expect_test "Filtering" =
-  let df = Data_frame.read_csv_exn ~try_parse_dates:true "./data/appleStock.csv" in
+  let df = Data_frame.read_csv_exn ~try_parse_dates:true "../data/appleStock.csv" in
   Data_frame.print df;
   [%expect
     {|
@@ -679,7 +679,7 @@ let%expect_test "Filtering" =
 (* Examples from https://pola-rs.github.io/polars-book/user-guide/transformations/time-series/rolling/ *)
 let%expect_test "Grouping" =
   let df =
-    Data_frame.read_csv_exn ~try_parse_dates:true "./data/appleStock.csv"
+    Data_frame.read_csv_exn ~try_parse_dates:true "../data/appleStock.csv"
     |> Data_frame.sort_exn ~by_column:[ "Date" ]
   in
   Data_frame.print df;

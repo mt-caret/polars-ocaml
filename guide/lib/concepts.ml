@@ -1,7 +1,5 @@
 open! Core
-open Async
 open! Polars
-open! Polars_async
 
 (* Examples from https://pola-rs.github.io/polars-book/user-guide/concepts/data-structures/ *)
 let%expect_test "Data Structures" =
@@ -102,7 +100,6 @@ let%expect_test "Data Structures" =
     │ 75%        ┆ 4.0      ┆ null       ┆ 7.0      │
     │ max        ┆ 5.0      ┆ 2022-01-05 ┆ 8.0      │
     └────────────┴──────────┴────────────┴──────────┘ |}]
-  |> return
 ;;
 
 (* Examples from https://pola-rs.github.io/polars-book/user-guide/concepts/contexts/ *)
@@ -182,7 +179,7 @@ let%expect_test "Contexts" =
     │ null ┆ egg   ┆ 0.156988 ┆ C      ┆ 11      ┆ 5     │
     │ 5    ┆ null  ┆ 0.831802 ┆ B      ┆ 11      ┆ 5     │
     └──────┴───────┴──────────┴────────┴─────────┴───────┘ |}];
-  let%bind out =
+  let out =
     Data_frame.lazy_ df
     |> Lazy_frame.filter ~predicate:Expr.(col "nrs" > int 2)
     |> Lazy_frame.collect_exn
@@ -232,29 +229,25 @@ let%expect_test "Contexts" =
     │ B      ┆ 8   ┆ 2     ┆ 3.147566   ┆ [null, "spam"] │
     │ C      ┆ 0   ┆ 1     ┆ 0.156988   ┆ ["egg"]        │
     └────────┴─────┴───────┴────────────┴────────────────┘ |}]
-  |> return
 ;;
 
 (* Examples from https://pola-rs.github.io/polars-book/user-guide/concepts/expressions/ *)
 let%expect_test "Contexts" =
   ignore (fun df ->
     Data_frame.column_exn df ~name:"foo" |> Series.sort |> Series.head ~length:2)
-  |> return
 ;;
 
 (* Examples from https://pola-rs.github.io/polars-book/user-guide/concepts/lazy-vs-eager/ *)
 let%expect_test "Lazy / Eager API" =
   (* eager API not included, since underlying Rust functions have been deprecated. *)
-  let%bind () =
-    Lazy_frame.scan_csv_exn "./data/iris.csv"
-    |> Lazy_frame.filter ~predicate:Expr.(col "sepal_length" > int 5)
-    |> Lazy_frame.groupby
-         ~is_stable:true
-         ~by:Expr.[ col "species" ]
-         ~agg:Expr.[ col "sepal_width" |> Expr.mean ]
-    |> Lazy_frame.collect_exn
-    >>| Data_frame.print
-  in
+  Lazy_frame.scan_csv_exn "../data/iris.csv"
+  |> Lazy_frame.filter ~predicate:Expr.(col "sepal_length" > int 5)
+  |> Lazy_frame.groupby
+       ~is_stable:true
+       ~by:Expr.[ col "species" ]
+       ~agg:Expr.[ col "sepal_width" |> Expr.mean ]
+  |> Lazy_frame.collect_exn
+  |> Data_frame.print;
   [%expect
     {|
     shape: (3, 2)
@@ -267,22 +260,19 @@ let%expect_test "Lazy / Eager API" =
     │ Iris-versicolor ┆ 2.804255    │
     │ Iris-virginica  ┆ 2.983673    │
     └─────────────────┴─────────────┘ |}]
-  |> return
 ;;
 
 (* Examples from https://pola-rs.github.io/polars-book/user-guide/concepts/streaming/ *)
 let%expect_test "Streaming" =
-  let%bind () =
-    Lazy_frame.scan_csv_exn "./data/iris.csv"
-    |> Lazy_frame.filter ~predicate:Expr.(col "sepal_length" > int 5)
-    |> Lazy_frame.groupby
-         ~is_stable:true
-         ~by:Expr.[ col "species" ]
-         ~agg:Expr.[ col "sepal_width" |> Expr.mean ]
-    |> Lazy_frame.with_streaming ~toggle:true
-    |> Lazy_frame.collect_exn
-    >>| Data_frame.print
-  in
+  Lazy_frame.scan_csv_exn "../data/iris.csv"
+  |> Lazy_frame.filter ~predicate:Expr.(col "sepal_length" > int 5)
+  |> Lazy_frame.groupby
+       ~is_stable:true
+       ~by:Expr.[ col "species" ]
+       ~agg:Expr.[ col "sepal_width" |> Expr.mean ]
+  |> Lazy_frame.with_streaming ~toggle:true
+  |> Lazy_frame.collect_exn
+  |> Data_frame.print;
   [%expect
     {|
     shape: (3, 2)
@@ -295,5 +285,4 @@ let%expect_test "Streaming" =
     │ Iris-versicolor ┆ 2.804255    │
     │ Iris-virginica  ┆ 2.983673    │
     └─────────────────┴─────────────┘ |}]
-  |> return
 ;;
