@@ -64,7 +64,6 @@ external collect_all
   = "rust_lazy_frame_collect_all"
 
 let collect_all t = collect_all t
-let collect_all t = collect_all t
 
 let collect_all_exn ts =
   collect_all ts |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
@@ -92,9 +91,6 @@ external fetch
   -> n_rows:int
   -> (Data_frame0.t, string) result
   = "rust_lazy_frame_fetch"
-
-let fetch t ~n_rows = fetch t ~n_rows
-let fetch t ~n_rows = fetch t ~n_rows
 
 let fetch_exn t ~n_rows =
   fetch t ~n_rows |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
