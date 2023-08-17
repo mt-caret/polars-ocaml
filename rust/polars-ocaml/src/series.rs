@@ -224,8 +224,6 @@ fn series_new(
                     })
                     .collect::<Result<Vec<Series>, _>>()?;
 
-                println!("debug: {}, {:?}, {:?}", name, data_type, values);
-
                 Ok(Series::new(&name, values))
             }
         }
