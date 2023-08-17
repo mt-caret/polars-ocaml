@@ -179,4 +179,13 @@ mod tests {
     //         prev = Some(df);
     //     }
     // }
+
+    // bug in polars:
+    #[test]
+    #[should_panic]
+    fn empty_series_creation() {
+        let values: Vec<Series> = Vec::new();
+
+        expect![[r#""#]].assert_eq(&format!("{}", Series::new("column", values)))
+    }
 }

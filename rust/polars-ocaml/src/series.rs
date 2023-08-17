@@ -65,6 +65,12 @@ unsafe impl FromOCaml<DummyBoxRoot> for DummyBoxRoot {
     }
 }
 
+unsafe impl ToOCaml<DummyBoxRoot> for DummyBoxRoot {
+    fn to_ocaml<'a>(&self, cr: &'a mut OCamlRuntime) -> OCaml<'a, DummyBoxRoot> {
+        self.0.get(cr)
+    }
+}
+
 impl DummyBoxRoot {
     fn interpret<'a, T>(&self, cr: &'a OCamlRuntime) -> OCaml<'a, T> {
         let ocaml_value: OCaml<DummyBoxRoot> = self.0.get(cr);
@@ -72,6 +78,32 @@ impl DummyBoxRoot {
         unsafe { OCaml::new(cr, ocaml_value.raw()) }
     }
 }
+
+// fn vec_to_ocaml_list<'a, T>(
+//     cr: &'a mut &'a mut OCamlRuntime,
+//     vec: Vec<T>,
+// ) -> OCaml<'a, OCamlList<T>>
+// where
+//     T: ToOCaml<T>,
+// {
+//     let vec: Result<Vec<T>, _> = vec.into_iter().map(|v| v.to_ocaml(cr)).collect();
+//     vec.to_ocaml(cr)
+// }
+
+// fn rust_series_to_ocaml_list(
+//     cr: &mut &mut OCamlRuntime,
+//     data_type: &GADTDataType,
+//     series: Series,
+// ) -> OCaml<OCamlList<Option<DummyBoxRoot>>> {
+//     match data_type {
+//         GADTDataType::UInt8 => {
+//
+//             // let vec: Result<Vec<Option<OCamlInt>> = series.u8().unwrap().into_iter().map(|n| OCaml::of_i64(n)).collect();
+//             // vec.to_ocaml(cr)
+//         }
+//         _ => todo!("TODO"),
+//     }
+// }
 
 fn series_new(
     cr: &mut &mut OCamlRuntime,
@@ -191,6 +223,9 @@ fn series_new(
                         )
                     })
                     .collect::<Result<Vec<Series>, _>>()?;
+
+                println!("debug: {}, {:?}, {:?}", name, data_type, values);
+
                 Ok(Series::new(&name, values))
             }
         }

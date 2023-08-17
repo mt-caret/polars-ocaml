@@ -5,7 +5,7 @@ module Time_unit : sig
     | Nanoseconds
     | Microseconds
     | Milliseconds
-  [@@deriving sexp, enumerate]
+  [@@deriving sexp, enumerate, quickcheck]
 end
 
 type t =
@@ -30,7 +30,7 @@ type t =
   | Null
   | Struct of (string * t) list
   | Unknown
-[@@deriving sexp]
+[@@deriving sexp, quickcheck]
 
 include Stringable.S with type t := t
 
@@ -53,7 +53,7 @@ module Typed : sig
       | Binary : string t
       | List : 'a t -> 'a list t
 
-    type packed = T : 'a t -> packed
+    type packed = T : 'a t -> packed [@@deriving sexp_of, quickcheck]
 
     val to_untyped : 'a t -> untyped
     val of_untyped : untyped -> packed option

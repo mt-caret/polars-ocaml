@@ -158,6 +158,7 @@ unsafe impl ToOCaml<DataType> for PolarsDataType {
     }
 }
 
+#[derive(Debug)]
 pub enum GADTDataType {
     Boolean,
     UInt8,

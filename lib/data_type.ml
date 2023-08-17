@@ -6,7 +6,7 @@ module Time_unit = struct
       | Nanoseconds
       | Microseconds
       | Milliseconds
-    [@@deriving sexp, enumerate]
+    [@@deriving sexp, enumerate, quickcheck]
   end
 
   include T
@@ -36,14 +36,14 @@ module T = struct
     | Null
     | Struct of (string * t) list
     | Unknown
-  [@@deriving sexp]
+  [@@deriving sexp, quickcheck]
 end
 
 include T
 include Sexpable.To_stringable (T)
 
 module Typed = struct
-  type untyped = t
+  type untyped = t [@@deriving sexp_of]
 
   type _ t =
     | Boolean : bool t
@@ -96,5 +96,22 @@ module Typed = struct
     | Binary -> Some (T Binary)
     | List t -> of_untyped t |> Option.map ~f:(fun (T t) -> T (List t))
     | Date | Datetime _ | Duration _ | Time | Null | Struct _ | Unknown -> None
+  ;;
+
+  let sexp_of_packed (T t) = [%sexp_of: untyped] (to_untyped t)
+
+  let quickcheck_generator_packed =
+    Quickcheck.Generator.filter_map quickcheck_generator ~f:of_untyped
+  ;;
+
+  let quickcheck_shrinker_packed =
+    Quickcheck.Shrinker.filter_map
+      quickcheck_shrinker
+      ~f:of_untyped
+      ~f_inverse:(fun (T t) -> to_untyped t)
+  ;;
+
+  let quickcheck_observer_packed =
+    Quickcheck.Observer.unmap quickcheck_observer ~f:(fun (T t) -> to_untyped t)
   ;;
 end
