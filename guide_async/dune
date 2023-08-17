@@ -1,6 +1,10 @@
 (library
- (name polars_guide)
- (libraries core expect_test_helpers_core shell.filename_extended polars)
+ (name polars_guide_async)
+ (libraries
+  core
+  expect_test_helpers_core
+  shell.filename_extended
+  polars_async)
  (inline_tests
   ; see ../test/dune for why this is commented out
   ; (modes native byte)
