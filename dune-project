@@ -35,3 +35,15 @@
   ppx_jane)
  (tags
   (data-science polars rust)))
+
+
+(package
+ (name polars_async)
+ (synopsis "Async OCaml bindings to the Polars dataframe library")
+ (description "Async OCaml bindings to the Polars dataframe library")
+ (depends
+  polars
+  async
+  core)
+ (tags
+  (data-science polars rust)))

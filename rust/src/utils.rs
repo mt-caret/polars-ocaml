@@ -496,17 +496,3 @@ unsafe impl<T: 'static + Clone> ToOCaml<DynBox<T>> for Abstract<T> {
 pub fn unwrap_abstract_vec<T>(v: Vec<Abstract<T>>) -> Vec<T> {
     v.into_iter().map(|Abstract(v)| v).collect()
 }
-
-pub fn maybe_release_runtime<T, F>(cr: &mut OCamlRuntime, should_release_runtime: bool, f: F) -> T
-where
-    F: FnOnce() -> T,
-{
-    if should_release_runtime {
-        // This should be safe as long as we don't use any OCaml values
-        // while/after the runtime is released. If we did, the GC might modify
-        // the underlying memory while the runtime is released.
-        cr.releasing_runtime(f)
-    } else {
-        f()
-    }
-}
