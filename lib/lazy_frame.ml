@@ -63,8 +63,6 @@ external collect_all
   -> (Data_frame0.t list, string) result
   = "rust_lazy_frame_collect_all"
 
-let collect_all t = collect_all t
-
 let collect_all_exn ts =
   collect_all ts |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
 ;;
