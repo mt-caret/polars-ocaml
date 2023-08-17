@@ -1,53 +1,6 @@
-[package]
-name = "polars-ocaml"
-version = "0.1.0"
-edition = "2021"
+[workspace]
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[lib]
-crate-type = ["staticlib", "cdylib"]
-
-[dependencies]
-chrono = "0.4.26"
-expect-test = "1.4.1"
-ocaml = "0.22.4"
-ocaml-interop = "0.9.1"
-ocaml-sys = "0.23.0"
-polars-sql = "0.31.1"
-smartstring = "1.0.1"
-
-# arrow2 0.17.4 introduces arrow2::array::Array::is_null_unchecked, which clashes
-# with another function used in polars-arrow, causing compile issues; pinning this
-# version prevents this from happening.
-arrow2 = "=0.17.3"
-
-[dependencies.polars]
-version = "0.31.0"
-features = [
-    "approx_unique",
-    "asof_join",
-    "describe",
-    "diagonal_concat",
-    "dot_diagram",
-    "dtype-date",
-    "dtype-datetime",
-    "dtype-i16",
-    "dtype-i8",
-    "dtype-u16",
-    "dtype-u8",
-    "dynamic_groupby",
-    "horizontal_concat",
-    "interpolate",
-    "json",
-    "lazy",
-    "list_eval",
-    "parquet",
-    "pivot",
-    "random",
-    "rank",
-    "round_series",
-    "semi_anti_join",
-    "streaming",
-    "timezones",
+members = [
+    "polars-ocaml",
+    "polars-ocaml-macros"
 ]
