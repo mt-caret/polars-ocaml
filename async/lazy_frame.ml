@@ -6,7 +6,6 @@ let collect ?streaming t = In_thread.run (fun () -> collect ?streaming t)
 
 let collect_exn ?streaming t =
   In_thread.run (fun () -> collect_exn ?streaming t)
-;;
 
 let collect_all t = In_thread.run (fun () -> collect_all t)
 
@@ -19,4 +18,3 @@ let fetch t ~n_rows = In_thread.run (fun () -> fetch t ~n_rows)
 
 let fetch_exn t ~n_rows =
   In_thread.run (fun () -> fetch_exn t ~n_rows)
-;;

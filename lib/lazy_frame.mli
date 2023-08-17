@@ -27,20 +27,6 @@ val profile : t -> (profile_result, string) result
 val profile_exn : t -> profile_result
 val fetch : t -> n_rows:int -> (Data_frame0.t, string) result
 val fetch_exn : t -> n_rows:int -> Data_frame0.t
-
-module Deferred : sig
-  open Async
-
-  val collect : ?streaming:bool -> t -> (Data_frame0.t, string) result Deferred.t
-  val collect_exn : ?streaming:bool -> t -> Data_frame0.t Deferred.t
-  val collect_all : t list -> (Data_frame0.t list, string) result Deferred.t
-  val collect_all_exn : t list -> Data_frame0.t list Deferred.t
-  val profile : t -> (profile_result, string) result Deferred.t
-  val profile_exn : t -> profile_result Deferred.t
-  val fetch : t -> n_rows:int -> (Data_frame0.t, string) result Deferred.t
-  val fetch_exn : t -> n_rows:int -> Data_frame0.t Deferred.t
-end
-
 val filter : t -> predicate:Expr.t -> t
 val select : t -> exprs:Expr.t list -> t
 val with_columns : t -> exprs:Expr.t list -> t
