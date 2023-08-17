@@ -10,7 +10,7 @@ let%expect_test "Introduction" =
   Sql_context.get_tables ctx |> [%sexp_of: string list] |> print_s;
   [%expect {|
     (a b) |}];
-  let pokemon = Lazy_frame.scan_csv_exn "../data/pokemon.csv" in
+  let pokemon = Lazy_frame.scan_csv_exn "./data/pokemon.csv" in
   let ctx = Sql_context.create [ "pokemon", pokemon ] in
   Sql_context.execute_exn ctx ~query:"SELECT * from pokemon LIMIT 5"
   |> Lazy_frame.collect_exn
@@ -283,7 +283,7 @@ let%expect_test "SELECT" =
     └─────────────┴────────────┘ |}];
   Sql_context.execute_exn ctx ~query:{|
   SELECT *
-  FROM read_csv('../data/iris.csv')|}
+  FROM read_csv('./data/iris.csv')|}
   |> Lazy_frame.collect_exn
   |> Data_frame.print;
   [%expect

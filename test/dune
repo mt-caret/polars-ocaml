@@ -1,11 +1,13 @@
 (library
  (name polars_tests)
  (libraries
+  async
   base_quickcheck
   core
   expect_test_helpers_core
   shell.filename_extended
-  polars)
+  polars
+  polars_async)
  (inline_tests
   ; TODO: Ideally we can test the bytecode bindings in tests as well, but AFAICT
   ; ocaml-interop currently doesn't work with bytecode compilation
@@ -16,6 +18,7 @@
   ; required in bytecode compilation mode)
   ;
   ; (modes native byte)
-  )
+  (deps
+   (glob_files ../guide/data/*.csv)))
  (preprocess
   (pps ppx_jane)))

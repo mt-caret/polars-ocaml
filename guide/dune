@@ -5,6 +5,6 @@
   ; see ../test/dune for why this is commented out
   ; (modes native byte)
   (deps
-   (glob_files ../data/*.csv)))
+   (glob_files ./data/*.csv)))
  (preprocess
   (pps ppx_jane)))

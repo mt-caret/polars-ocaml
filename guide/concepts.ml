@@ -240,7 +240,7 @@ let%expect_test "Contexts" =
 (* Examples from https://pola-rs.github.io/polars-book/user-guide/concepts/lazy-vs-eager/ *)
 let%expect_test "Lazy / Eager API" =
   (* eager API not included, since underlying Rust functions have been deprecated. *)
-  Lazy_frame.scan_csv_exn "../data/iris.csv"
+  Lazy_frame.scan_csv_exn "./data/iris.csv"
   |> Lazy_frame.filter ~predicate:Expr.(col "sepal_length" > int 5)
   |> Lazy_frame.groupby
        ~is_stable:true
@@ -264,7 +264,7 @@ let%expect_test "Lazy / Eager API" =
 
 (* Examples from https://pola-rs.github.io/polars-book/user-guide/concepts/streaming/ *)
 let%expect_test "Streaming" =
-  Lazy_frame.scan_csv_exn "../data/iris.csv"
+  Lazy_frame.scan_csv_exn "./data/iris.csv"
   |> Lazy_frame.filter ~predicate:Expr.(col "sepal_length" > int 5)
   |> Lazy_frame.groupby
        ~is_stable:true

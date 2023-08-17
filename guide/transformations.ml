@@ -1,7 +1,5 @@
 open! Core
-open Async
 open! Polars
-open Polars_async
 
 (* Examples from https://pola-rs.github.io/polars-book/user-guide/transformations/joins/ *)
 let%expect_test "Joins" =
@@ -44,7 +42,7 @@ let%expect_test "Joins" =
     │ b        ┆ 2           ┆ 200    │
     │ c        ┆ 2           ┆ 300    │
     └──────────┴─────────────┴────────┘ |}];
-  let%bind df_inner_join =
+  let df_inner_join =
     Data_frame.lazy_ df_customers
     |> Lazy_frame.join
          ~other:(Data_frame.lazy_ df_orders)
@@ -65,7 +63,7 @@ let%expect_test "Joins" =
     │ 2           ┆ Bob   ┆ b        ┆ 200    │
     │ 2           ┆ Bob   ┆ c        ┆ 300    │
     └─────────────┴───────┴──────────┴────────┘ |}];
-  let%bind df_left_join =
+  let df_left_join =
     Data_frame.lazy_ df_customers
     |> Lazy_frame.join
          ~other:(Data_frame.lazy_ df_orders)
@@ -87,7 +85,7 @@ let%expect_test "Joins" =
     │ 2           ┆ Bob     ┆ c        ┆ 300    │
     │ 3           ┆ Charlie ┆ null     ┆ null   │
     └─────────────┴─────────┴──────────┴────────┘ |}];
-  let%bind df_outer_join =
+  let df_outer_join =
     Data_frame.lazy_ df_customers
     |> Lazy_frame.join
          ~other:(Data_frame.lazy_ df_orders)
@@ -139,7 +137,7 @@ let%expect_test "Joins" =
     │ M    │
     │ L    │
     └──────┘ |}];
-  let%bind df_cross_join =
+  let df_cross_join =
     Data_frame.lazy_ df_colors
     |> Lazy_frame.join ~other:(Data_frame.lazy_ df_sizes) ~on:[] ~how:Cross
     |> Lazy_frame.collect_exn
@@ -195,7 +193,7 @@ let%expect_test "Joins" =
     │ c   ┆ 100  │
     │ c   ┆ 200  │
     └─────┴──────┘ |}];
-  let%bind df_inner_join =
+  let df_inner_join =
     Data_frame.lazy_ df_cars
     |> Lazy_frame.join
          ~other:(Data_frame.lazy_ df_repairs)
@@ -215,7 +213,7 @@ let%expect_test "Joins" =
     │ c   ┆ bmw  ┆ 100  │
     │ c   ┆ bmw  ┆ 200  │
     └─────┴──────┴──────┘ |}];
-  let%bind df_semi_join =
+  let df_semi_join =
     Data_frame.lazy_ df_cars
     |> Lazy_frame.join
          ~other:(Data_frame.lazy_ df_repairs)
@@ -234,7 +232,7 @@ let%expect_test "Joins" =
     ╞═════╪══════╡
     │ c   ┆ bmw  │
     └─────┴──────┘ |}];
-  let%bind df_anti_join =
+  let df_anti_join =
     Data_frame.lazy_ df_cars
     |> Lazy_frame.join
          ~other:(Data_frame.lazy_ df_repairs)
@@ -314,7 +312,7 @@ let%expect_test "Joins" =
     │ 2020-01-01 09:04:00 ┆ C     ┆ 501   │
     │ 2020-01-01 09:06:00 ┆ A     ┆ 102   │
     └─────────────────────┴───────┴───────┘ |}];
-  let%bind df_asof_join =
+  let df_asof_join =
     Data_frame.lazy_ df_trades
     |> Lazy_frame.join
          ~other:(Data_frame.lazy_ df_quotes)
@@ -342,7 +340,6 @@ let%expect_test "Joins" =
     │ 2020-01-01 09:03:00 ┆ B     ┆ 301   ┆ 300         │
     │ 2020-01-01 09:06:00 ┆ C     ┆ 500   ┆ 501         │
     └─────────────────────┴───────┴───────┴─────────────┘ |}]
-  |> return
 ;;
 
 (* Examples from https://pola-rs.github.io/polars-book/user-guide/transformations/concatenation/ *)
@@ -395,7 +392,6 @@ let%expect_test "Concatenation" =
     │ 1   ┆ 3    ┆ null │
     │ 2   ┆ null ┆ 4    │
     └─────┴──────┴──────┘ |}]
-  |> return
 ;;
 
 (* Examples from https://pola-rs.github.io/polars-book/user-guide/transformations/pivots/ *)
@@ -444,10 +440,9 @@ let%expect_test "Pivots" =
     │ B   ┆ null ┆ null ┆ 2    ┆ 4    ┆ null │
     │ C   ┆ null ┆ null ┆ null ┆ null ┆ 2    │
     └─────┴──────┴──────┴──────┴──────┴──────┘ |}];
-  let%bind df = Data_frame.lazy_ df |> Lazy_frame.collect_exn in
   let out =
     Data_frame.pivot_exn
-      df
+      (Data_frame.lazy_ df |> Lazy_frame.collect_exn)
       ~agg_expr:`First
       ~index:[ "foo" ]
       ~columns:[ "bar" ]
@@ -466,7 +461,6 @@ let%expect_test "Pivots" =
     │ B   ┆ null ┆ null ┆ 2    ┆ 4    ┆ null │
     │ C   ┆ null ┆ null ┆ null ┆ null ┆ 2    │
     └─────┴──────┴──────┴──────┴──────┴──────┘ |}]
-  |> return
 ;;
 
 (* Examples from https://pola-rs.github.io/polars-book/user-guide/transformations/melt/ *)
@@ -510,11 +504,10 @@ let%expect_test "Melt" =
     │ b   ┆ 3   ┆ D        ┆ 4     │
     │ a   ┆ 5   ┆ D        ┆ 6     │
     └─────┴─────┴──────────┴───────┘ |}]
-  |> return
 ;;
 
 let%expect_test "Time Series Parsing" =
-  let df = Data_frame.read_csv_exn ~try_parse_dates:true "../data/appleStock.csv" in
+  let df = Data_frame.read_csv_exn ~try_parse_dates:true "./data/appleStock.csv" in
   Data_frame.print df;
   [%expect
     {|
@@ -535,7 +528,7 @@ let%expect_test "Time Series Parsing" =
     │ 2014-02-25 ┆ 522.06 │
     └────────────┴────────┘ |}];
   let df =
-    Data_frame.read_csv_exn ~try_parse_dates:false "../data/appleStock.csv"
+    Data_frame.read_csv_exn ~try_parse_dates:false "./data/appleStock.csv"
     |> Data_frame.with_columns_exn
          ~exprs:Expr.[ col "Date" |> Str.strptime ~type_:Date ~format:"%Y-%m-%d" ]
   in
@@ -617,12 +610,11 @@ let%expect_test "Time Series Parsing" =
     │ 2021-03-29 00:00:00 CEST      │
     │ 2021-03-30 00:00:00 CEST      │
     └───────────────────────────────┘ |}]
-  |> return
 ;;
 
 (* Examples from https://pola-rs.github.io/polars-book/user-guide/transformations/time-series/filter/ *)
 let%expect_test "Filtering" =
-  let df = Data_frame.read_csv_exn ~try_parse_dates:true "../data/appleStock.csv" in
+  let df = Data_frame.read_csv_exn ~try_parse_dates:true "./data/appleStock.csv" in
   Data_frame.print df;
   [%expect
     {|
@@ -642,7 +634,7 @@ let%expect_test "Filtering" =
     │ 2013-11-07 ┆ 512.49 │
     │ 2014-02-25 ┆ 522.06 │
     └────────────┴────────┘ |}];
-  let%bind filtered_df =
+  let filtered_df =
     Data_frame.lazy_ df
     |> Lazy_frame.filter
          ~predicate:
@@ -661,7 +653,7 @@ let%expect_test "Filtering" =
     ╞════════════╪═══════╡
     │ 1995-10-16 ┆ 36.13 │
     └────────────┴───────┘ |}];
-  let%bind filtered_range_df =
+  let filtered_range_df =
     Data_frame.lazy_ df
     |> Lazy_frame.filter
          ~predicate:
@@ -682,13 +674,12 @@ let%expect_test "Filtering" =
     │ 1995-07-06 ┆ 47.0  │
     │ 1995-10-16 ┆ 36.13 │
     └────────────┴───────┘ |}]
-  |> return
 ;;
 
 (* Examples from https://pola-rs.github.io/polars-book/user-guide/transformations/time-series/rolling/ *)
 let%expect_test "Grouping" =
   let df =
-    Data_frame.read_csv_exn ~try_parse_dates:true "../data/appleStock.csv"
+    Data_frame.read_csv_exn ~try_parse_dates:true "./data/appleStock.csv"
     |> Data_frame.sort_exn ~by_column:[ "Date" ]
   in
   Data_frame.print df;
@@ -842,7 +833,6 @@ let%expect_test "Grouping" =
     │ b      ┆ 2021-12-16 01:00:00 ┆ 2021-12-16 02:00:00 ┆ 2021-12-16 01:00:00 ┆ 2     │
     │ b      ┆ 2021-12-16 02:00:00 ┆ 2021-12-16 03:00:00 ┆ 2021-12-16 02:00:00 ┆ 1     │
     └────────┴─────────────────────┴─────────────────────┴─────────────────────┴───────┘ |}]
-  |> return
 ;;
 
 (* Examples from https://pola-rs.github.io/polars-book/user-guide/transformations/time-series/resampling/#upsampling-strategies *)
@@ -919,7 +909,6 @@ let%expect_test "Resampling" =
     │ 2021-12-16 02:45:00 ┆ a      ┆ 6.5    │
     │ 2021-12-16 03:00:00 ┆ a      ┆ 7.0    │
     └─────────────────────┴────────┴────────┘ |}]
-  |> return
 ;;
 
 (* Examples from https://pola-rs.github.io/polars-book/user-guide/transformations/time-series/timezones/ *)
@@ -990,14 +979,13 @@ let%expect_test "Time zones" =
     │ 2021-03-27 03:00:00 CET       ┆ 2021-03-27 08:45:00 +0545    ┆ 2021-03-27 03:00:00 │
     │ 2021-03-28 03:00:00 CEST      ┆ 2021-03-28 08:45:00 +0545    ┆ 2021-03-28 03:00:00 │
     └───────────────────────────────┴──────────────────────────────┴─────────────────────┘ |}]
-  |> return
 ;;
 
 let%expect_test "profile lazy_frame operations" =
   let df = Data_frame.create_exn Series.[ int "a" [ 3; 1; 5; 4; 2 ] ] in
   let sorted_ldf = Data_frame.lazy_ df |> Lazy_frame.sort ~by_column:"a" in
   (* Profile is non-determinstic so we don't print it *)
-  let%bind { Lazy_frame.profile = _; collected } = Lazy_frame.profile_exn sorted_ldf in
+  let { Lazy_frame.profile = _; collected } = Lazy_frame.profile_exn sorted_ldf in
   Data_frame.print collected;
   [%expect
     {|
@@ -1013,5 +1001,4 @@ let%expect_test "profile lazy_frame operations" =
     │ 4   │
     │ 5   │
     └─────┘ |}]
-  |> return
 ;;

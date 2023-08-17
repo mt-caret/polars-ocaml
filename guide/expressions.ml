@@ -1,7 +1,5 @@
 open! Core
-open Async
 open! Polars
-open Polars_async
 
 (* Examples from https://pola-rs.github.io/polars-book/user-guide/expressions/operators/ *)
 let%expect_test "Basic Operators" =
@@ -84,7 +82,6 @@ let%expect_test "Basic Operators" =
     │ null    ┆ true          ┆ null     ┆ null     ┆ null     ┆ true    │
     │ true    ┆ false         ┆ true     ┆ false    ┆ false    ┆ true    │
     └─────────┴───────────────┴──────────┴──────────┴──────────┴─────────┘ |}]
-  |> return
 ;;
 
 (* Examples from https://pola-rs.github.io/polars-book/user-guide/expressions/functions/ *)
@@ -179,7 +176,6 @@ let%expect_test "Functions" =
     │ null ┆ false   │
     │ 5    ┆ true    │
     └──────┴─────────┘ |}]
-  |> return
 ;;
 
 (* Examples from https://pola-rs.github.io/polars-book/user-guide/expressions/casting/ *)
@@ -434,7 +430,6 @@ let%expect_test "Casting" =
     │ 2022-01-04 ┆ 2022-01-04 00:00:00 │
     │ 2022-01-05 ┆ 2022-01-05 00:00:00 │
     └────────────┴─────────────────────┘ |}]
-  |> return
 ;;
 
 (* Examples from https://pola-rs.github.io/polars-book/user-guide/expressions/strings/ *)
@@ -561,7 +556,6 @@ let%expect_test "Casting" =
     │ 1   ┆ 123ABC ┆ 123-bc           │
     │ 2   ┆ abc456 ┆ -bc456           │
     └─────┴────────┴──────────────────┘ |}]
-  |> return
 ;;
 
 (* Examples from https://pola-rs.github.io/polars-book/user-guide/expressions/aggregation/ *)
@@ -580,7 +574,7 @@ let%expect_test "Aggregation" =
     Data_frame.read_csv_exn
       ~schema
       ~try_parse_dates:true
-      "../data/legislators-historical.csv"
+      "./data/legislators-historical.csv"
   in
   Data_frame.print dataset;
   [%expect
@@ -613,7 +607,7 @@ let%expect_test "Aggregation" =
     │            ┆            ┆            ┆        ┆   ┆ Inhofe    ┆           ┆          ┆ Inhofe    │
     │ Sasse      ┆ Benjamin   ┆ Eric       ┆ null   ┆ … ┆ Ben Sasse ┆ null      ┆ 41503    ┆ Ben Sasse │
     └────────────┴────────────┴────────────┴────────┴───┴───────────┴───────────┴──────────┴───────────┘ |}];
-  let%bind df =
+  let df =
     Data_frame.lazy_ dataset
     |> Lazy_frame.groupby
          ~is_stable:true
@@ -643,7 +637,7 @@ let%expect_test "Aggregation" =
     │ Thomas     ┆ 454   ┆ ["M", "M", … "M"] ┆ Tucker    │
     │ Charles    ┆ 439   ┆ ["M", "M", … "M"] ┆ Carroll   │
     └────────────┴───────┴───────────────────┴───────────┘ |}];
-  let%bind df =
+  let df =
     Data_frame.lazy_ dataset
     |> Lazy_frame.groupby
          ~is_stable:true
@@ -672,7 +666,7 @@ let%expect_test "Aggregation" =
     │ VA    ┆ 3    ┆ 1   │
     │ SC    ┆ 0    ┆ 1   │
     └───────┴──────┴─────┘ |}];
-  let%bind df =
+  let df =
     Data_frame.lazy_ dataset
     |> Lazy_frame.groupby
          ~is_stable:true
@@ -709,7 +703,7 @@ let%expect_test "Aggregation" =
       |> mean
       |> alias ~name:[%string {|avg %{gender} birthday|}])
   in
-  let%bind df =
+  let df =
     Data_frame.lazy_ dataset
     |> Lazy_frame.groupby
          ~is_stable:true
@@ -740,7 +734,7 @@ let%expect_test "Aggregation" =
     │ PA    ┆ 180.724846     ┆ 92.857143      ┆ 1050   ┆ 7        │
     └───────┴────────────────┴────────────────┴────────┴──────────┘ |}];
   let get_person = Expr.(col "first_name" + string " " + col "last_name") in
-  let%bind df =
+  let df =
     Data_frame.lazy_ dataset
     |> Lazy_frame.sort ~by_column:"birthday" ~descending:true ~nulls_last:true
     |> Lazy_frame.groupby
@@ -769,7 +763,7 @@ let%expect_test "Aggregation" =
     │ CA    ┆ Katie Hill       ┆ Edward Gilbert        │
     │ NY    ┆ Mondaire Jones   ┆ Cornelius Schoonmaker │
     └───────┴──────────────────┴───────────────────────┘ |}];
-  let%bind df =
+  let df =
     Data_frame.lazy_ dataset
     |> Lazy_frame.sort ~by_column:"birthday" ~descending:true ~nulls_last:true
     |> Lazy_frame.groupby
@@ -799,7 +793,7 @@ let%expect_test "Aggregation" =
     │ CA    ┆ Katie Hill       ┆ Edward Gilbert        ┆ Aaron Sargent      │
     │ NY    ┆ Mondaire Jones   ┆ Cornelius Schoonmaker ┆ A. Foster          │
     └───────┴──────────────────┴───────────────────────┴────────────────────┘ |}];
-  let%bind df =
+  let df =
     Data_frame.lazy_ dataset
     |> Lazy_frame.sort ~by_column:"birthday" ~descending:true ~nulls_last:true
     |> Lazy_frame.groupby
@@ -834,7 +828,6 @@ let%expect_test "Aggregation" =
     │ AS    ┆ Eni Faleomavaega ┆ Fofó Sunia     ┆ Eni Faleomavaega   ┆ M      │
     │ AZ    ┆ Ben Quayle       ┆ Coles Bashford ┆ Ann Kirkpatrick    ┆ F      │
     └───────┴──────────────────┴────────────────┴────────────────────┴────────┘ |}]
-  |> return
 ;;
 
 (* Examples from https://pola-rs.github.io/polars-book/user-guide/expressions/null/ *)
@@ -996,12 +989,11 @@ let%expect_test "Missing data" =
     ╞═══════╡
     │ 2.0   │
     └───────┘ |}]
-  |> return
 ;;
 
 (* Examples from https://pola-rs.github.io/polars-book/user-guide/expressions/window/ *)
 let%expect_test "Window functions" =
-  let df = Data_frame.read_csv_exn "../data/pokemon.csv" in
+  let df = Data_frame.read_csv_exn "./data/pokemon.csv" in
   Data_frame.print (Data_frame.head df);
   [%expect
     {|
@@ -1058,7 +1050,7 @@ let%expect_test "Window functions" =
     │ Dragon  ┆ Flying ┆ 94.0               ┆ 95.0                            ┆ 75.349693  │
     │ Psychic ┆ null   ┆ 53.875             ┆ 51.428571                       ┆ 75.349693  │
     └─────────┴────────┴────────────────────┴─────────────────────────────────┴────────────┘ |}];
-  let%bind filtered =
+  let filtered =
     Data_frame.lazy_ df
     |> Lazy_frame.filter ~predicate:Expr.(col "Type 2" = string "Psychic")
     |> Lazy_frame.select ~exprs:Expr.[ col "Name"; col "Type 1"; col "Speed" ]
@@ -1081,7 +1073,7 @@ let%expect_test "Window functions" =
     │ Starmie             ┆ Water  ┆ 115   │
     │ Jynx                ┆ Ice    ┆ 95    │
     └─────────────────────┴────────┴───────┘ |}];
-  let%bind out =
+  let out =
     filtered
     |> Data_frame.lazy_
     |> Lazy_frame.with_columns
@@ -1110,7 +1102,7 @@ let%expect_test "Window functions" =
     │ Slowpoke            ┆ Water  ┆ 15    │
     │ Jynx                ┆ Ice    ┆ 95    │
     └─────────────────────┴────────┴───────┘ |}];
-  let%bind out =
+  let out =
     Data_frame.lazy_ df
     |> Lazy_frame.sort ~by_column:"Type 1"
     |> Lazy_frame.select
@@ -1156,7 +1148,6 @@ let%expect_test "Window functions" =
     │ Water  ┆ Slowbro             ┆ Tentacool       ┆ BlastoiseMega Blastoise │
     │ Water  ┆ SlowbroMega Slowbro ┆ Horsea          ┆ Cloyster                │
     └────────┴─────────────────────┴─────────────────┴─────────────────────────┘ |}]
-  |> return
 ;;
 
 (* Examples from https://pola-rs.github.io/polars-book/user-guide/expressions/lists/ *)
@@ -1378,5 +1369,4 @@ let%expect_test "Lists and Arrays" =
     │ Station 9  ┆ 8     ┆ 15    ┆ 16    ┆ [1.0, 0.67, 0.33]  │
     │ Station 10 ┆ 17    ┆ 13    ┆ 10    ┆ [0.33, 0.67, 1.0]  │
     └────────────┴───────┴───────┴───────┴────────────────────┘ |}]
-  |> return
 ;;
