@@ -17,6 +17,5 @@
   ;
   ; (modes native byte)
   )
- (library_flags -ccopt -fuse-ld=mold)
  (preprocess
   (pps ppx_jane)))

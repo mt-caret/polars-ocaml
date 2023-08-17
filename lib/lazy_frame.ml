@@ -64,7 +64,6 @@ external collect_all
   = "rust_lazy_frame_collect_all"
 
 let collect_all t = collect_all t
-
 let collect_all t = collect_all t
 
 let collect_all_exn ts =
@@ -86,16 +85,6 @@ let profile t =
   { collected; profile }
 ;;
 
-type profile_result =
-  { collected : Data_frame0.t
-  ; profile : Data_frame0.t
-  }
-
-let profile t =
-  let%map.Result collected, profile = profile t in
-  { collected; profile }
-;;
-
 let profile_exn t = profile t |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
 
 external fetch
@@ -105,7 +94,6 @@ external fetch
   = "rust_lazy_frame_fetch"
 
 let fetch t ~n_rows = fetch t ~n_rows
-
 let fetch t ~n_rows = fetch t ~n_rows
 
 let fetch_exn t ~n_rows =
