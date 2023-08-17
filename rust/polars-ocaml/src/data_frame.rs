@@ -530,7 +530,7 @@ fn rust_data_frame_interpolate(
 
     let series = data_frame
         .get_columns()
-        .into_iter()
+        .iter()
         .map(|series| interpolate(series, method))
         .collect::<Vec<_>>();
 
