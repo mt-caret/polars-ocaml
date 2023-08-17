@@ -1,3 +1,8 @@
+// TODO: rust_lazy_frame_profile's return type is triggering this warning, but
+// due to how I've implemented the proc macro specifying the allow clippy
+// attribute alongside the proc macro invocation doesn't work, which probably
+// is fixable; disabling the warning file-wide in the interim.
+#![allow(clippy::type_complexity)]
 use crate::utils::*;
 use ocaml_interop::{DynBox, OCaml, OCamlInt, OCamlList, OCamlRef, ToOCaml};
 use polars::prelude::*;
@@ -117,6 +122,20 @@ fn rust_lazy_frame_collect_all(
 
     collect_all(lazy_frames)
         .map(|data_frames| data_frames.into_iter().map(Abstract).collect::<Vec<_>>())
+        .map_err(|err| err.to_string())
+        .to_ocaml(cr)
+}
+
+#[ocaml_interop_export]
+fn rust_lazy_frame_profile(
+    cr: &mut &mut OCamlRuntime,
+    lazy_frame: OCamlRef<DynBox<LazyFrame>>,
+) -> OCaml<Result<(DynBox<DataFrame>, DynBox<DataFrame>), String>> {
+    let Abstract(lazy_frame) = lazy_frame.to_rust(cr);
+
+    lazy_frame
+        .profile()
+        .map(|(materialized, profile)| (Abstract(materialized), Abstract(profile)))
         .map_err(|err| err.to_string())
         .to_ocaml(cr)
 }
