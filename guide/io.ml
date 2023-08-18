@@ -7,7 +7,7 @@ let%expect_test "CSV" =
     let path = temp_dir ^/ "path.csv" in
     let df =
       Data_frame.create_exn
-        Series.[ int "foo" [ 1; 2; 3 ]; string' "bar" [ None; Some "bak"; Some "baz" ] ]
+        Series.[ int "foo" [ 1; 2; 3 ]; stringo "bar" [ None; Some "bak"; Some "baz" ] ]
     in
     Data_frame.print df;
     [%expect
@@ -64,7 +64,7 @@ let%expect_test "Parquet" =
     let path = temp_dir ^/ "path.parquet" in
     let df =
       Data_frame.create_exn
-        Series.[ int "foo" [ 1; 2; 3 ]; string' "bar" [ None; Some "bak"; Some "baz" ] ]
+        Series.[ int "foo" [ 1; 2; 3 ]; stringo "bar" [ None; Some "bak"; Some "baz" ] ]
     in
     Data_frame.print df;
     [%expect
@@ -114,7 +114,7 @@ let%expect_test "JSON files" =
     let path = temp_dir ^/ "path.json" in
     let df =
       Data_frame.create_exn
-        Series.[ int "foo" [ 1; 2; 3 ]; string' "bar" [ None; Some "bak"; Some "baz" ] ]
+        Series.[ int "foo" [ 1; 2; 3 ]; stringo "bar" [ None; Some "bak"; Some "baz" ] ]
     in
     Data_frame.print df;
     [%expect
@@ -193,7 +193,7 @@ let%expect_test "Multiple" =
       let df =
         Data_frame.create_exn
           Series.
-            [ int "foo" [ 1; 2; 3 ]; string' "bar" [ None; Some "Ham"; Some "Spam" ] ]
+            [ int "foo" [ 1; 2; 3 ]; stringo "bar" [ None; Some "Ham"; Some "Spam" ] ]
       in
       for i = 0 to 4 do
         Data_frame.write_csv_exn df (temp_dir ^/ [%string "my_many_files_%{i#Int}.csv"])

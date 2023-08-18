@@ -2,7 +2,7 @@ open Core
 open Polars
 
 let%expect_test "unit tests" =
-  let series = Series.create' Int64 "series_name" [ Some 1; None; Some 2 ] in
+  let series = Series.createo Int64 "series_name" [ Some 1; None; Some 2 ] in
   Series.to_option_list Int64 series |> [%sexp_of: int option list] |> print_s;
   [%expect {| ((1) () (2)) |}];
   (* Trying to convert to non-null list when there are nulls should raise *)
@@ -184,7 +184,7 @@ let%expect_test "Series.create doesn't raise" =
 
 (* TODO: there's a *lot* of duplication with the Series_create module; perhaps
    functorizing this would clean things up... *)
-module Series_create' = struct
+module Series_createo = struct
   type t = Args : 'a Data_type.Typed.t * 'a option list -> t
 
   let compare (Args (data_type1, values1)) (Args (data_type2, values2)) =
@@ -229,14 +229,14 @@ module Series_create' = struct
   ;;
 end
 
-let%expect_test "Series.create' doesn't raise" =
+let%expect_test "Series.createo doesn't raise" =
   Base_quickcheck.Test.run_exn
-    (module Series_create')
-    ~f:(fun (Series_create'.Args (data_type, values) as args) ->
-      let series = Series.create' data_type "series_name" values in
+    (module Series_createo)
+    ~f:(fun (Series_createo.Args (data_type, values) as args) ->
+      let series = Series.createo data_type "series_name" values in
       let values' = Series.to_option_list data_type series in
-      let args' = Series_create'.Args (data_type, values') in
-      [%test_result: Series_create'.t] ~expect:args' args;
+      let args' = Series_createo.Args (data_type, values') in
+      [%test_result: Series_createo.t] ~expect:args' args;
       List.iteri values' ~f:(fun i value ->
         let value_equal = Option.equal (Comparable.equal (value_compare data_type)) in
         assert (value_equal value (Series.get data_type series i))));

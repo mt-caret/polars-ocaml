@@ -7,7 +7,7 @@ module T = struct
      OCaml heap and skip a copy. *)
   external create : 'a Data_type.Typed.t -> string -> 'a list -> t = "rust_series_new"
 
-  external create'
+  external createo
     :  'a Data_type.Typed.t
     -> string
     -> 'a option list
@@ -15,16 +15,16 @@ module T = struct
     = "rust_series_new_option"
 
   let int = create Int64
-  let int' = create' Int64
+  let into = createo Int64
   let float = create Float64
-  let float' = create' Float64
+  let floato = createo Float64
   let bool = create Boolean
-  let bool' = create' Boolean
+  let boolo = createo Boolean
 
   (* TODO: perhaps this should actually be Bytes? *)
 
   let string = create Utf8
-  let string' = create' Utf8
+  let stringo = createo Utf8
 
   external datetime
     :  string

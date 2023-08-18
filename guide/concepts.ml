@@ -108,8 +108,8 @@ let%expect_test "Contexts" =
   let df =
     Data_frame.create_exn
       Series.
-        [ int' "nrs" [ Some 1; Some 2; Some 3; None; Some 5 ]
-        ; string' "names" [ Some "foo"; Some "ham"; Some "spam"; Some "egg"; None ]
+        [ into "nrs" [ Some 1; Some 2; Some 3; None; Some 5 ]
+        ; stringo "names" [ Some "foo"; Some "ham"; Some "spam"; Some "egg"; None ]
         ; float "random" (List.init 5 ~f:(fun _ -> Random.State.float r 5.))
         ; string "groups" [ "A"; "A"; "B"; "C"; "B" ]
         ]
