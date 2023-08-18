@@ -1,0 +1,7 @@
+(library
+ (name polars_async)
+ (public_name polars_async)
+ (libraries async core polars)
+ (inline_tests)
+ (preprocess
+  (pps ppx_jane)))
