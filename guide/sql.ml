@@ -59,12 +59,12 @@ let%expect_test "Introduction" =
     ctx
     ~query:
       {|
-  SELECT 
+  SELECT
     product_id,
     product_name,
     category,
     sales
-  FROM 
+  FROM
       products_masterdata
   LEFT JOIN products_categories USING (product_id)
   LEFT JOIN sales_data USING (product_id)|}

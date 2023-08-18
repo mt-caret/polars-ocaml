@@ -105,12 +105,14 @@ fn rust_lazy_frame_collect(
     let Abstract(lazy_frame) = lazy_frame.to_rust(cr);
     let streaming = streaming.to_rust(cr);
 
-    lazy_frame
-        .with_streaming(streaming)
-        .collect()
-        .map(Abstract)
-        .map_err(|err| err.to_string())
-        .to_ocaml(cr)
+    cr.releasing_runtime(|| {
+        lazy_frame
+            .with_streaming(streaming)
+            .collect()
+            .map(Abstract)
+            .map_err(|err| err.to_string())
+    })
+    .to_ocaml(cr)
 }
 
 #[ocaml_interop_export]
@@ -120,10 +122,12 @@ fn rust_lazy_frame_collect_all(
 ) -> OCaml<Result<OCamlList<DynBox<DataFrame>>, String>> {
     let lazy_frames = unwrap_abstract_vec(lazy_frames.to_rust(cr));
 
-    collect_all(lazy_frames)
-        .map(|data_frames| data_frames.into_iter().map(Abstract).collect::<Vec<_>>())
-        .map_err(|err| err.to_string())
-        .to_ocaml(cr)
+    cr.releasing_runtime(|| {
+        collect_all(lazy_frames)
+            .map(|data_frames| data_frames.into_iter().map(Abstract).collect::<Vec<_>>())
+            .map_err(|err| err.to_string())
+    })
+    .to_ocaml(cr)
 }
 
 #[ocaml_interop_export]
@@ -133,11 +137,13 @@ fn rust_lazy_frame_profile(
 ) -> OCaml<Result<(DynBox<DataFrame>, DynBox<DataFrame>), String>> {
     let Abstract(lazy_frame) = lazy_frame.to_rust(cr);
 
-    lazy_frame
-        .profile()
-        .map(|(materialized, profile)| (Abstract(materialized), Abstract(profile)))
-        .map_err(|err| err.to_string())
-        .to_ocaml(cr)
+    cr.releasing_runtime(|| {
+        lazy_frame
+            .profile()
+            .map(|(materialized, profile)| (Abstract(materialized), Abstract(profile)))
+            .map_err(|err| err.to_string())
+    })
+    .to_ocaml(cr)
 }
 
 #[ocaml_interop_export(raise_on_err)]
@@ -149,11 +155,13 @@ fn rust_lazy_frame_fetch(
     let Abstract(lazy_frame) = lazy_frame.to_rust(cr);
     let n_rows = n_rows.to_rust::<Coerce<_, i64, usize>>(cr).get()?;
 
-    lazy_frame
-        .fetch(n_rows)
-        .map(Abstract)
-        .map_err(|err| err.to_string())
-        .to_ocaml(cr)
+    cr.releasing_runtime(|| {
+        lazy_frame
+            .fetch(n_rows)
+            .map(Abstract)
+            .map_err(|err| err.to_string())
+    })
+    .to_ocaml(cr)
 }
 
 #[ocaml_interop_export]

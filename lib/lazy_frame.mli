@@ -17,8 +17,14 @@ val collect : ?streaming:bool -> t -> (Data_frame0.t, string) result
 val collect_exn : ?streaming:bool -> t -> Data_frame0.t
 val collect_all : t list -> (Data_frame0.t list, string) result
 val collect_all_exn : t list -> Data_frame0.t list
-val profile : t -> (Data_frame0.t * Data_frame0.t, string) result
-val profile_exn : t -> Data_frame0.t * Data_frame0.t
+
+type profile_result =
+  { collected : Data_frame0.t
+  ; profile : Data_frame0.t
+  }
+
+val profile : t -> (profile_result, string) result
+val profile_exn : t -> profile_result
 val fetch : t -> n_rows:int -> (Data_frame0.t, string) result
 val fetch_exn : t -> n_rows:int -> Data_frame0.t
 val filter : t -> predicate:Expr.t -> t
