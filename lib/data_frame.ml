@@ -4,9 +4,7 @@ type t = Data_frame0.t
 
 external create : Series.t list -> (t, string) result = "rust_data_frame_new"
 
-let create_exn series =
-  create series |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
-;;
+let create_exn series = create series |> Utils.string_result_ok_exn
 
 external read_csv
   :  string
@@ -18,22 +16,16 @@ external read_csv
 let read_csv ?schema ?try_parse_dates path = read_csv path ~schema ~try_parse_dates
 
 let read_csv_exn ?schema ?try_parse_dates path =
-  read_csv ?schema ?try_parse_dates path
-  |> Result.map_error ~f:Error.of_string
-  |> Or_error.ok_exn
+  read_csv ?schema ?try_parse_dates path |> Utils.string_result_ok_exn
 ;;
 
 external write_csv : t -> string -> (unit, string) result = "rust_data_frame_write_csv"
 
-let write_csv_exn t path =
-  write_csv t path |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
-;;
+let write_csv_exn t path = write_csv t path |> Utils.string_result_ok_exn
 
 external read_parquet : string -> (t, string) result = "rust_data_frame_read_parquet"
 
-let read_parquet_exn path =
-  read_parquet path |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
-;;
+let read_parquet_exn path = read_parquet path |> Utils.string_result_ok_exn
 
 external write_parquet
   :  t
@@ -41,27 +33,19 @@ external write_parquet
   -> (unit, string) result
   = "rust_data_frame_write_parquet"
 
-let write_parquet_exn t path =
-  write_parquet t path |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
-;;
+let write_parquet_exn t path = write_parquet t path |> Utils.string_result_ok_exn
 
 external read_json : string -> (t, string) result = "rust_data_frame_read_json"
 
-let read_json_exn path =
-  read_json path |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
-;;
+let read_json_exn path = read_json path |> Utils.string_result_ok_exn
 
 external write_json : t -> string -> (unit, string) result = "rust_data_frame_write_json"
 
-let write_json_exn t path =
-  write_json t path |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
-;;
+let write_json_exn t path = write_json t path |> Utils.string_result_ok_exn
 
 external read_jsonl : string -> (t, string) result = "rust_data_frame_read_jsonl"
 
-let read_jsonl_exn path =
-  read_jsonl path |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
-;;
+let read_jsonl_exn path = read_jsonl path |> Utils.string_result_ok_exn
 
 external write_jsonl
   :  t
@@ -69,9 +53,7 @@ external write_jsonl
   -> (unit, string) result
   = "rust_data_frame_write_jsonl"
 
-let write_jsonl_exn t path =
-  write_jsonl t path |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
-;;
+let write_jsonl_exn t path = write_jsonl t path |> Utils.string_result_ok_exn
 
 external describe
   :  t
@@ -80,10 +62,7 @@ external describe
   = "rust_data_frame_describe"
 
 let describe ?percentiles t = describe t ~percentiles
-
-let describe_exn ?percentiles t =
-  describe ?percentiles t |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
-;;
+let describe_exn ?percentiles t = describe ?percentiles t |> Utils.string_result_ok_exn
 
 external lazy_ : t -> Lazy_frame.t = "rust_data_frame_lazy"
 
@@ -163,9 +142,7 @@ let groupby_dynamic_exn
 
 external column : t -> name:string -> (Series.t, string) result = "rust_data_frame_column"
 
-let column_exn t ~name =
-  column t ~name |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
-;;
+let column_exn t ~name = column t ~name |> Utils.string_result_ok_exn
 
 external columns
   :  t
@@ -173,9 +150,7 @@ external columns
   -> (Series.t list, string) result
   = "rust_data_frame_columns"
 
-let columns_exn t ~names =
-  columns t ~names |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
-;;
+let columns_exn t ~names = columns t ~names |> Utils.string_result_ok_exn
 
 external get_column_names : t -> string list = "rust_data_frame_get_column_names"
 
@@ -201,9 +176,7 @@ let concat ?(how = `Vertical) ts =
   | `Diagonal -> diagonal_concat ts
 ;;
 
-let concat_exn ?how ts =
-  concat ?how ts |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
-;;
+let concat_exn ?how ts = concat ?how ts |> Utils.string_result_ok_exn
 
 external pivot
   :  t
@@ -248,8 +221,7 @@ let pivot
 
 let pivot_exn ?agg_expr ?sort_columns ?separator ?stable t ~values ~index ~columns =
   pivot ?agg_expr ?sort_columns ?separator ?stable t ~values ~index ~columns
-  |> Result.map_error ~f:Error.of_string
-  |> Or_error.ok_exn
+  |> Utils.string_result_ok_exn
 ;;
 
 external melt
@@ -268,8 +240,7 @@ let melt ?variable_name ?value_name ?(streamable = false) t ~id_vars ~value_vars
 
 let melt_exn ?variable_name ?value_name ?streamable t ~id_vars ~value_vars =
   melt ?variable_name ?value_name ?streamable t ~id_vars ~value_vars
-  |> Result.map_error ~f:Error.of_string
-  |> Or_error.ok_exn
+  |> Utils.string_result_ok_exn
 ;;
 
 external sort
@@ -288,9 +259,7 @@ let sort ?descending ?(maintain_order = true) t ~by_column =
 ;;
 
 let sort_exn ?descending ?maintain_order t ~by_column =
-  sort ?descending ?maintain_order t ~by_column
-  |> Result.map_error ~f:Error.of_string
-  |> Or_error.ok_exn
+  sort ?descending ?maintain_order t ~by_column |> Utils.string_result_ok_exn
 ;;
 
 external head : t -> length:int option -> t = "rust_data_frame_head"
@@ -315,9 +284,7 @@ let sample_n ?seed t ~n ~with_replacement ~shuffle =
 ;;
 
 let sample_n_exn ?seed t ~n ~with_replacement ~shuffle =
-  sample_n ?seed t ~n ~with_replacement ~shuffle
-  |> Result.map_error ~f:Error.of_string
-  |> Or_error.ok_exn
+  sample_n ?seed t ~n ~with_replacement ~shuffle |> Utils.string_result_ok_exn
 ;;
 
 external sum : t -> t = "rust_data_frame_sum"
@@ -331,9 +298,7 @@ external fill_null
   -> (t, string) result
   = "rust_data_frame_fill_null_with_strategy"
 
-let fill_null_exn t ~strategy =
-  fill_null t ~strategy |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
-;;
+let fill_null_exn t ~strategy = fill_null t ~strategy |> Utils.string_result_ok_exn
 
 external interpolate
   :  t
@@ -341,9 +306,7 @@ external interpolate
   -> (t, string) result
   = "rust_data_frame_interpolate"
 
-let interpolate_exn t ~method_ =
-  interpolate t ~method_ |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
-;;
+let interpolate_exn t ~method_ = interpolate t ~method_ |> Utils.string_result_ok_exn
 
 external upsample
   :  t
@@ -360,9 +323,7 @@ let upsample ?(stable = true) t ~by ~time_column ~every ~offset =
 ;;
 
 let upsample_exn ?stable t ~by ~time_column ~every ~offset =
-  upsample ?stable t ~by ~time_column ~every ~offset
-  |> Result.map_error ~f:Error.of_string
-  |> Or_error.ok_exn
+  upsample ?stable t ~by ~time_column ~every ~offset |> Utils.string_result_ok_exn
 ;;
 
 external explode
@@ -371,9 +332,7 @@ external explode
   -> (t, string) result
   = "rust_data_frame_explode"
 
-let explode_exn t ~columns =
-  explode t ~columns |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
-;;
+let explode_exn t ~columns = explode t ~columns |> Utils.string_result_ok_exn
 
 external schema : t -> Schema.t = "rust_data_frame_schema"
 external to_string_hum : t -> string = "rust_data_frame_to_string_hum"
