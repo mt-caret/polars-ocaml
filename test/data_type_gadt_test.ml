@@ -81,6 +81,25 @@ let rec value_to_sexp : type a. a Data_type.Typed.t -> a -> Sexp.t =
     [%sexp_of: value list] a
 ;;
 
+let rec value_compare : type a. a Data_type.Typed.t -> a -> a -> int =
+  fun (type a) (t : a Data_type.Typed.t) (a : a) (b : a) ->
+  match t with
+  | Boolean -> [%compare: bool] a b
+  | UInt8 -> [%compare: int] a b
+  | UInt16 -> [%compare: int] a b
+  | UInt32 -> [%compare: int] a b
+  | UInt64 -> [%compare: int] a b
+  | Int8 -> [%compare: int] a b
+  | Int16 -> [%compare: int] a b
+  | Int32 -> [%compare: int] a b
+  | Int64 -> [%compare: int] a b
+  | Float32 -> [%compare: float] a b
+  | Float64 -> [%compare: float] a b
+  | Utf8 -> [%compare: string] a b
+  | Binary -> [%compare: string] a b
+  | List t -> List.compare (value_compare t) a b
+;;
+
 module Series_create = struct
   type t = Args : 'a Data_type.Typed.t * 'a list -> t
 
@@ -116,9 +135,10 @@ let%expect_test "Series.create doesn't raise" =
     ~f:(fun (Series_create.Args (data_type, values)) ->
       let series = Series.create data_type "series_name" values in
       match data_type with
-      | List _ | Float32 | Float64 -> ()
+      | List _ | Float32 -> ()
       | _ ->
         let values' = Series.to_list data_type series |> List.filter_opt in
-        assert (List.equal Poly.equal values values'));
+        let value_compare = value_compare data_type in
+        assert (List.equal (Comparable.equal value_compare) values values'));
   [%expect {||}]
 ;;
