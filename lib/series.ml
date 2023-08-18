@@ -14,14 +14,6 @@ module T = struct
     -> t
     = "rust_series_new_option"
 
-  external to_list : 'a Data_type.Typed.t -> t -> 'a list = "rust_series_to_list"
-
-  external to_option_list
-    :  'a Data_type.Typed.t
-    -> t
-    -> 'a option list
-    = "rust_series_to_option_list"
-
   let int = create Int64
   let int' = create' Int64
   let float = create Float64
@@ -100,6 +92,18 @@ module T = struct
     |> Result.map_error ~f:Error.of_string
     |> Or_error.ok_exn
   ;;
+
+  external to_list : 'a Data_type.Typed.t -> t -> 'a list = "rust_series_to_list"
+
+  external to_option_list
+    :  'a Data_type.Typed.t
+    -> t
+    -> 'a option list
+    = "rust_series_to_option_list"
+
+  external get : 'a Data_type.Typed.t -> t -> int -> 'a option = "rust_series_get"
+
+  let get_exn data_type t i = get data_type t i |> Option.value_exn ~here:[%here]
 
   external name : t -> string = "rust_series_name"
   external rename : t -> name:string -> t = "rust_series_rename"

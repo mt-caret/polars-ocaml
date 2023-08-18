@@ -171,13 +171,17 @@ let%expect_test "Series.create doesn't raise" =
       match data_type with
       | List _ -> ()
       | _ ->
-        let args' = Series_create.Args (data_type, Series.to_list data_type series) in
+        let values' = Series.to_list data_type series in
+        let args' = Series_create.Args (data_type, values') in
         [%test_result: Series_create.t] ~expect:args' args;
         let args' =
           Series_create.Args
             (data_type, Series.to_option_list data_type series |> List.filter_opt)
         in
-        [%test_result: Series_create.t] ~expect:args' args);
+        [%test_result: Series_create.t] ~expect:args' args;
+        List.iteri values' ~f:(fun i value ->
+          let value_equal = Comparable.equal (value_compare data_type) in
+          assert (value_equal value (Series.get_exn data_type series i))));
   [%expect {||}]
 ;;
 
@@ -236,9 +240,11 @@ let%expect_test "Series.create' doesn't raise" =
       match data_type with
       | List _ -> ()
       | _ ->
-        let args' =
-          Series_create'.Args (data_type, Series.to_option_list data_type series)
-        in
-        [%test_result: Series_create'.t] ~expect:args' args);
+        let values' = Series.to_option_list data_type series in
+        let args' = Series_create'.Args (data_type, values') in
+        [%test_result: Series_create'.t] ~expect:args' args;
+        List.iteri values' ~f:(fun i value ->
+          let value_equal = Option.equal (Comparable.equal (value_compare data_type)) in
+          assert (value_equal value (Series.get data_type series i))));
   [%expect {||}]
 ;;

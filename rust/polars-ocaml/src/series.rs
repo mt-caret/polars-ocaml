@@ -1,8 +1,8 @@
 use crate::utils::*;
 use chrono::naive::{NaiveDate, NaiveDateTime};
 use ocaml_interop::{
-    impl_to_ocaml_variant, BoxRoot, DynBox, FromOCaml, OCaml, OCamlBytes, OCamlFloat, OCamlInt,
-    OCamlInt32, OCamlList, OCamlRef, OCamlRuntime, ToOCaml,
+    BoxRoot, DynBox, FromOCaml, OCaml, OCamlBytes, OCamlFloat, OCamlInt, OCamlList, OCamlRef,
+    OCamlRuntime, ToOCaml,
 };
 use polars::prelude::prelude::*;
 use polars::prelude::*;
@@ -409,20 +409,13 @@ fn series_to_boxrooted_ocaml_list<'a>(
         }
         GADTDataType::Utf8 => {
             let ca = series.utf8().map_err(|err| err.to_string())?;
-            create_boxrooted_ocaml_list_handle_nulls!(
-                String,
-                String,
-                ca.into_iter()
-                    .map(|utf8o| utf8o.map(|utf8| utf8.to_string()))
-                    .collect(),
-                {
-                    let mut buf = Vec::with_capacity(ca.len());
-                    for arr in ca.downcast_iter() {
-                        buf.extend(arr.values_iter().map(|str| str.to_string()))
-                    }
-                    buf
+            create_boxrooted_ocaml_list_handle_nulls!(&str, String, ca.into_iter().collect(), {
+                let mut buf = Vec::with_capacity(ca.len());
+                for arr in ca.downcast_iter() {
+                    buf.extend(arr.values_iter())
                 }
-            )
+                buf
+            })
         }
         GADTDataType::Binary => {
             let ca = series.binary().map_err(|err| err.to_string())?;
@@ -502,6 +495,100 @@ fn rust_series_to_option_list(
     let Abstract(series) = series.to_rust(cr);
 
     series_to_boxrooted_ocaml_list(cr, &data_type, series, true)?.to_ocaml(cr)
+}
+
+fn series_get<'a>(
+    cr: &mut &'a mut OCamlRuntime,
+    data_type: &GADTDataType,
+    series: Series,
+    index: usize,
+) -> Result<DummyBoxRoot, String> {
+    macro_rules! extract_value {
+        ($rust_type:ty, $ocaml_type:ty, $body:expr) => {{
+            let value: Option<$rust_type> = $body;
+
+            let return_value: BoxRoot<Option<$ocaml_type>> = value.to_ocaml(cr).root();
+
+            Ok(unsafe { DummyBoxRoot::new(return_value) })
+        }};
+    }
+
+    macro_rules! extract_int_value {
+        ($rust_type:ty, $body:expr) => {{
+            extract_value!(
+                OCamlIntable<$rust_type>,
+                OCamlInt,
+                $body
+                    .map_err(|err| err.to_string())?
+                    .get(index)
+                    .map(OCamlIntable)
+            )
+        }};
+    }
+
+    match data_type {
+        GADTDataType::Boolean => extract_value!(
+            bool,
+            bool,
+            series.bool().map_err(|err| err.to_string())?.get(index)
+        ),
+        GADTDataType::Int8 => extract_int_value!(i8, series.i8()),
+        GADTDataType::Int16 => extract_int_value!(i16, series.i16()),
+        GADTDataType::Int32 => extract_int_value!(i32, series.i32()),
+        GADTDataType::Int64 => extract_int_value!(i64, series.i64()),
+        GADTDataType::UInt8 => extract_int_value!(u8, series.u8()),
+        GADTDataType::UInt16 => extract_int_value!(u16, series.u16()),
+        GADTDataType::UInt32 => extract_int_value!(u32, series.u32()),
+        GADTDataType::UInt64 => extract_int_value!(u64, series.u64()),
+        GADTDataType::Float32 => extract_value!(
+            f64,
+            OCamlFloat,
+            series
+                .f32()
+                .map_err(|err| err.to_string())?
+                .get(index)
+                .map(|f32| f32 as f64)
+        ),
+        GADTDataType::Float64 => extract_value!(
+            f64,
+            OCamlFloat,
+            series.f64().map_err(|err| err.to_string())?.get(index)
+        ),
+        GADTDataType::Utf8 => extract_value!(
+            &str,
+            String,
+            series.utf8().map_err(|err| err.to_string())?.get(index)
+        ),
+        GADTDataType::Binary => extract_value!(
+            &[u8],
+            String,
+            series.binary().map_err(|err| err.to_string())?.get(index)
+        ),
+        GADTDataType::List(data_type) => extract_value!(
+            DummyBoxRoot,
+            DummyBoxRoot,
+            match series.list().map_err(|err| err.to_string())?.get(index) {
+                None => Ok(None),
+                Some(series) => {
+                    series_to_boxrooted_ocaml_list(cr, data_type, series, false).map(Some)
+                }
+            }?
+        ),
+    }
+}
+
+#[ocaml_interop_export(raise_on_err)]
+fn rust_series_get(
+    cr: &mut &mut OCamlRuntime,
+    data_type: OCamlRef<GADTDataType>,
+    series: OCamlRef<DynBox<Series>>,
+    index: OCamlRef<OCamlInt>,
+) -> OCaml<DummyBoxRoot> {
+    let data_type: GADTDataType = data_type.to_rust(cr);
+    let Abstract(series) = series.to_rust(cr);
+    let index = index.to_rust::<Coerce<_, i64, usize>>(cr).get()?;
+
+    series_get(cr, &data_type, series, index)?.to_ocaml(cr)
 }
 
 #[ocaml_interop_export]
