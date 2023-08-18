@@ -27,7 +27,10 @@ let rec value_generator : type a. a Data_type.Typed.t -> a Quickcheck.Generator.
   | Int64 -> Generator.int
   | Float32 -> Generator.float
   | Float64 -> Generator.float
-  | Utf8 -> Generator.string
+  | Utf8 ->
+    Generator.string
+    |> (* Core.String doesn't have a [is_valid_utf_8] function :( *)
+    Generator.filter ~f:Stdlib.String.is_valid_utf_8
   | Binary -> Generator.string
   | List t ->
     value_generator t
@@ -115,6 +118,11 @@ let%expect_test "Series.create doesn't raise" =
   Base_quickcheck.Test.run_exn
     (module Series_create)
     ~f:(fun (Series_create.Args (data_type, values)) ->
-      ignore (Series.create data_type "series_name" values));
-  [%expect {| |}]
+      let series = Series.create data_type "series_name" values in
+      match data_type with
+      | List _ | Float32 | Float64 -> ()
+      | _ ->
+        let values' = Series.to_list data_type series |> List.filter_opt in
+        assert (List.equal Poly.equal values values'));
+  [%expect {||}]
 ;;
