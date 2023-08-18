@@ -4,6 +4,10 @@ use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use syn::{parse::Parser, parse_macro_input, punctuated::Punctuated};
 
+struct MacroArgs {
+    raise_on_err: bool,
+}
+
 // TODO: currently, the macro panicks all over the place which is not very nice.
 // We should instead emit compile_error! with the appropriate error messages.
 
@@ -15,7 +19,7 @@ use syn::{parse::Parser, parse_macro_input, punctuated::Punctuated};
 // When `raise_on_err` is true, the macro will expect the function to return
 // `Result<OCaml<_>, String>` and will raise an OCaml exception if the function
 // returns an error.
-fn ocaml_interop_export_implementation(item_fn: syn::ItemFn, raise_on_err: bool) -> TokenStream2 {
+fn ocaml_interop_export_implementation(item_fn: syn::ItemFn, args: MacroArgs) -> TokenStream2 {
     let mut inputs_iter = item_fn.sig.inputs.iter().map(|fn_arg| match fn_arg {
         syn::FnArg::Receiver(_) => panic!("receiver not supported"),
         syn::FnArg::Typed(pat_type) => pat_type.clone(),
@@ -73,12 +77,14 @@ fn ocaml_interop_export_implementation(item_fn: syn::ItemFn, raise_on_err: bool)
     };
     let block = item_fn.block.clone();
 
-    let native_function = if !raise_on_err {
+    let native_function = if !args.raise_on_err {
         quote! {
             #[no_mangle]
             pub extern "C" #signature {
                 match ::std::panic::catch_unwind(|| {
-                    let #runtime_name = unsafe { &mut ::ocaml_interop::OCamlRuntime::recover_handle() };
+                    let #runtime_name = unsafe {
+                        &mut ::ocaml_interop::OCamlRuntime::recover_handle()
+                    };
 
                     #( #locals )*
 
@@ -114,7 +120,9 @@ fn ocaml_interop_export_implementation(item_fn: syn::ItemFn, raise_on_err: bool)
             #[no_mangle]
             pub extern "C" #signature {
                 match ::std::panic::catch_unwind(|| {
-                    let #runtime_name = unsafe { &mut ::ocaml_interop::OCamlRuntime::recover_handle() };
+                    let #runtime_name = unsafe {
+                        &mut ::ocaml_interop::OCamlRuntime::recover_handle()
+                    };
 
                     #( #locals )*
 
@@ -185,11 +193,20 @@ pub fn ocaml_interop_export(args: TokenStream, annotated_item: TokenStream) -> T
         .collect::<Vec<_>>();
     let item_fn = parse_macro_input!(annotated_item as syn::ItemFn);
 
-    let expanded = match &args[..] {
-        [] => ocaml_interop_export_implementation(item_fn, false),
-        [arg] if arg == "raise_on_err" => ocaml_interop_export_implementation(item_fn, true),
-        _ => panic!("unexpected arguments to ocaml_interop_export: {:?}", args),
+    let mut macro_args = MacroArgs {
+        raise_on_err: false,
     };
+    for arg in &args {
+        match arg.as_str() {
+            "raise_on_err" => macro_args.raise_on_err = true,
+            _ => panic!(
+                "unexpected argument in ocaml_interop_export: {} in {:?}",
+                arg, args
+            ),
+        }
+    }
+
+    let expanded = ocaml_interop_export_implementation(item_fn, macro_args);
 
     TokenStream::from(expanded)
 }
@@ -314,9 +331,9 @@ mod tests {
         prettyplease::unparse(&file)
     }
 
-    fn apply_macro_and_pretty_print(input: TokenStream2, raise_on_err: bool) -> String {
+    fn apply_macro_and_pretty_print(input: TokenStream2, args: MacroArgs) -> String {
         let item_fn = syn::parse2(input).unwrap();
-        let expanded = ocaml_interop_export_implementation(item_fn, raise_on_err);
+        let expanded = ocaml_interop_export_implementation(item_fn, args);
         pretty_print_item(&expanded)
     }
 
@@ -332,7 +349,9 @@ mod tests {
                     OCaml::box_value(cr, col(&name))
                 }
             },
-            false,
+            MacroArgs {
+                raise_on_err: false,
+            },
         );
 
         expect![[r##"
@@ -373,7 +392,7 @@ mod tests {
                     OCaml::box_value(cr, col(&name))
                 }
             },
-            true,
+            MacroArgs { raise_on_err: true },
         );
 
         expect![[r##"
@@ -432,7 +451,9 @@ mod tests {
                 Abstract(expr.sample_n(n, with_replacement, shuffle, seed, fixed_seed)).to_ocaml(cr)
             }
             },
-            false,
+            MacroArgs {
+                raise_on_err: false,
+            },
         );
 
         expect![[r##"
