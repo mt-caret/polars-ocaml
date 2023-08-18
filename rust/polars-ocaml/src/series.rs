@@ -1,13 +1,12 @@
 use crate::utils::*;
 use chrono::naive::{NaiveDate, NaiveDateTime};
 use ocaml_interop::{
-    BoxRoot, DynBox, FromOCaml, OCaml, OCamlBytes, OCamlFloat, OCamlInt, OCamlList, OCamlRef,
-    OCamlRuntime, ToOCaml,
+    BoxRoot, DynBox, OCaml, OCamlBytes, OCamlFloat, OCamlInt, OCamlList, OCamlRef, OCamlRuntime,
+    ToOCaml,
 };
 use polars::prelude::prelude::*;
 use polars::prelude::*;
 use polars_ocaml_macros::ocaml_interop_export;
-use std::fmt::Debug;
 
 // TODO: These helper fuctions should be replaced by a macro.
 fn series_binary_op<'a>(
@@ -38,34 +37,13 @@ fn series_binary_op_result<'a>(
     series.to_ocaml(cr)
 }
 
-pub struct DummyBoxRoot(BoxRoot<DummyBoxRoot>);
-
-unsafe impl FromOCaml<DummyBoxRoot> for DummyBoxRoot {
-    fn from_ocaml(v: OCaml<DummyBoxRoot>) -> Self {
-        DummyBoxRoot(v.root())
-    }
-}
-
-unsafe impl ToOCaml<DummyBoxRoot> for DummyBoxRoot {
-    fn to_ocaml<'a>(&self, cr: &'a mut OCamlRuntime) -> OCaml<'a, DummyBoxRoot> {
-        self.0.get(cr)
-    }
-}
-
-impl DummyBoxRoot {
-    unsafe fn new<'a, T>(boxroot: BoxRoot<T>) -> Self {
-        let boxroot: BoxRoot<DummyBoxRoot> = std::mem::transmute(boxroot);
-
-        DummyBoxRoot(boxroot)
-    }
-
-    fn interpret<'a, T>(&self, cr: &'a OCamlRuntime) -> OCaml<'a, T> {
-        let ocaml_value: OCaml<DummyBoxRoot> = self.0.get(cr);
-
-        unsafe { OCaml::new(cr, ocaml_value.raw()) }
-    }
-}
-
+// The rough idea of functions which take GADTDataType is that the argument or
+// the return type depends on the value of the GADTDataType, so we hide the
+// actual type of the argument or return value behind a DummyBoxRoot and
+// interpret it with or produce the value of the correct type later.
+//
+// In the case of series_new takes a vec of DummyBoxRoots, and we recurse when
+// data_type turns out to be a GADTDataType::List(inner_data_type).
 fn series_new(
     cr: &mut &mut OCamlRuntime,
     data_type: &GADTDataType,
@@ -161,7 +139,10 @@ fn series_new(
                                 data_type,
                                 name.clone(),
                                 list,
-                                // TODO: explain why this needs to be false
+                                // The OCaml GADT's type assumes all values are non-null for simplicity,
+                                // but we expose a top-level function that allows the outermost layer
+                                // to be optional. So, all recursive layers are non-optional so
+                                // are_values_options=false.
                                 false,
                             )
                             .map(Some),
@@ -179,7 +160,7 @@ fn series_new(
                             data_type,
                             name.clone(),
                             list,
-                            // TODO: explain why this needs to be false
+                            // See call above to series_new
                             false,
                         )
                     })
@@ -286,19 +267,6 @@ fn rust_series_date_range(
     .map_err(|err| err.to_string());
 
     series.to_ocaml(cr)
-}
-
-pub struct OCamlIntable<T>(T);
-
-unsafe impl<T> ToOCaml<OCamlInt> for OCamlIntable<T>
-where
-    T: TryInto<i64> + Copy,
-    <T as TryInto<i64>>::Error: Debug,
-{
-    fn to_ocaml<'a>(&self, _cr: &'a mut OCamlRuntime) -> OCaml<'a, OCamlInt> {
-        OCaml::of_i64(self.0.try_into().expect("Couldn't convert to i64"))
-            .expect("Number couldn't fit in OCaml integer")
-    }
 }
 
 fn series_to_boxrooted_ocaml_list<'a>(
@@ -438,7 +406,7 @@ fn series_to_boxrooted_ocaml_list<'a>(
                     .map(|serieso| match serieso {
                         None => Ok(None),
                         Some(series) => {
-                            // TODO: explain why this needs to be false
+                            // See comment on similar recursive call in series_new on why allow_nulls=false
                             series_to_boxrooted_ocaml_list(cr, data_type, series, false).map(Some)
                         }
                     })
@@ -460,7 +428,7 @@ fn series_to_boxrooted_ocaml_list<'a>(
                                 &ca.inner_dtype(),
                             )
                         };
-                        // TODO: explain why this needs to be false
+                        // See comment on similar recursive call in series_new on why allow_nulls=false
                         buf.push(series_to_boxrooted_ocaml_list(
                             cr, data_type, series, false,
                         )?)

@@ -1,14 +1,15 @@
 use ocaml_interop::{
     impl_from_ocaml_variant, ocaml_alloc_polymorphic_variant, ocaml_alloc_tagged_block,
     ocaml_alloc_variant, ocaml_unpack_polymorphic_variant, ocaml_unpack_variant,
-    polymorphic_variant_tag_hash, DynBox, FromOCaml, OCaml, OCamlInt, OCamlList, OCamlRuntime,
-    RawOCaml, ToOCaml,
+    polymorphic_variant_tag_hash, BoxRoot, DynBox, FromOCaml, OCaml, OCamlInt, OCamlList,
+    OCamlRuntime, ToOCaml,
 };
 use polars::series::IsSorted;
 use polars::{lazy::dsl::WindowMapping, prelude::*};
 use smartstring::{LazyCompact, SmartString};
 use std::any::type_name;
 use std::borrow::Borrow;
+use std::fmt::Debug;
 use std::marker::PhantomData;
 
 // This function is actually quite unsafe; as a general rule, additional use of
@@ -508,33 +509,6 @@ where
     }
 }
 
-unsafe impl<OCamlType, Via, T> FromOCaml<OCamlList<OCamlType>>
-    for Coerce<OCamlType, Vec<Via>, Vec<T>>
-where
-    Via: FromOCaml<OCamlType>,
-    T: TryFrom<Via>,
-    <T as TryFrom<Via>>::Error: std::fmt::Debug,
-{
-    fn from_ocaml(v: OCaml<OCamlList<OCamlType>>) -> Self {
-        let try_into_result = v
-            .to_rust::<Vec<Via>>()
-            .into_iter()
-            .map(|v| T::try_from(v))
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| {
-                format!(
-                    "Failed to convert OCaml<Vec<{}>> (from Vec<{}>) to Rust<Vec<{}>>: {:?}",
-                    type_name::<Via>(),
-                    type_name::<OCamlType>(),
-                    type_name::<T>(),
-                    e
-                )
-            });
-
-        Coerce(try_into_result, PhantomData, PhantomData)
-    }
-}
-
 pub struct PolarsIsSorted(pub IsSorted);
 unsafe impl FromOCaml<IsSorted> for PolarsIsSorted {
     fn from_ocaml(v: OCaml<IsSorted>) -> Self {
@@ -565,11 +539,57 @@ unsafe impl<T: 'static + Clone> ToOCaml<DynBox<T>> for Abstract<T> {
     }
 }
 
-pub struct UnsafeRawOCaml(pub RawOCaml);
+// TODO: perhaps ocaml_interop can expose the underlying boxroot value
+// (along with BoxRoot::new()), so that we don't need to lie and can just use
+// that?
 
-unsafe impl FromOCaml<RawOCaml> for UnsafeRawOCaml {
-    fn from_ocaml(v: OCaml<RawOCaml>) -> Self {
-        UnsafeRawOCaml(unsafe { v.raw() })
+// DummyBoxRoot represents a value BoxRoot<T> which has been coerced into a
+// BoxRoot<DummyBoxRoot>. This explicitly circumvents the type safety provided
+// by ocaml_interop's types, but is necessary if we want to take or return
+// values with types which are dependent on GADT arguments.
+pub struct DummyBoxRoot(BoxRoot<DummyBoxRoot>);
+
+unsafe impl FromOCaml<DummyBoxRoot> for DummyBoxRoot {
+    fn from_ocaml(v: OCaml<DummyBoxRoot>) -> Self {
+        DummyBoxRoot(v.root())
+    }
+}
+
+unsafe impl ToOCaml<DummyBoxRoot> for DummyBoxRoot {
+    fn to_ocaml<'a>(&self, cr: &'a mut OCamlRuntime) -> OCaml<'a, DummyBoxRoot> {
+        self.0.get(cr)
+    }
+}
+
+impl DummyBoxRoot {
+    pub unsafe fn new<'a, T>(boxroot: BoxRoot<T>) -> Self {
+        // It's quite unfortunate that we have to transmute here. Ideally we
+        // would coerce the type like we do in `interpret` below, but there is
+        // no such interface for BoxRoots so we can't do that.
+        //
+        // The type here is a phantom type so transmute (hopefully) should be safe.
+        let boxroot: BoxRoot<DummyBoxRoot> = std::mem::transmute(boxroot);
+
+        DummyBoxRoot(boxroot)
+    }
+
+    pub fn interpret<'a, T>(&self, cr: &'a OCamlRuntime) -> OCaml<'a, T> {
+        let ocaml_value: OCaml<DummyBoxRoot> = self.0.get(cr);
+
+        unsafe { OCaml::new(cr, ocaml_value.raw()) }
+    }
+}
+
+pub struct OCamlIntable<T>(pub T);
+
+unsafe impl<T> ToOCaml<OCamlInt> for OCamlIntable<T>
+where
+    T: TryInto<i64> + Copy,
+    <T as TryInto<i64>>::Error: Debug,
+{
+    fn to_ocaml<'a>(&self, _cr: &'a mut OCamlRuntime) -> OCaml<'a, OCamlInt> {
+        OCaml::of_i64(self.0.try_into().expect("Couldn't convert to i64"))
+            .expect("Number couldn't fit in OCaml integer")
     }
 }
 
