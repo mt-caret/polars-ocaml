@@ -229,7 +229,7 @@ fn rust_expr_reverse(
 // - tail
 // - sample_n
 
-#[ocaml_interop_export]
+#[ocaml_interop_export(raise_on_err)]
 fn rust_expr_head(
     cr: &mut &mut OCamlRuntime,
     expr: OCamlRef<DynBox<Expr>>,
@@ -238,12 +238,12 @@ fn rust_expr_head(
     let Abstract(expr) = expr.to_rust(cr);
     let length = length
         .to_rust::<Coerce<_, Option<i64>, Option<usize>>>(cr)
-        .get();
+        .get()?;
 
     Abstract(expr.head(length)).to_ocaml(cr)
 }
 
-#[ocaml_interop_export]
+#[ocaml_interop_export(raise_on_err)]
 fn rust_expr_tail(
     cr: &mut &mut OCamlRuntime,
     expr: OCamlRef<DynBox<Expr>>,
@@ -252,7 +252,7 @@ fn rust_expr_tail(
     let Abstract(expr) = expr.to_rust(cr);
     let length = length
         .to_rust::<Coerce<_, Option<i64>, Option<usize>>>(cr)
-        .get();
+        .get()?;
 
     Abstract(expr.tail(length)).to_ocaml(cr)
 }
@@ -266,7 +266,7 @@ fn rust_expr_take(
     expr_binary_op(cr, expr, idx, |a, b| a.take(b))
 }
 
-#[ocaml_interop_export]
+#[ocaml_interop_export(raise_on_err)]
 fn rust_expr_sample_n(
     cr: &mut &mut OCamlRuntime,
     expr: OCamlRef<DynBox<Expr>>,
@@ -277,12 +277,12 @@ fn rust_expr_sample_n(
     fixed_seed: OCamlRef<bool>,
 ) -> OCaml<DynBox<Expr>> {
     let Abstract(expr) = expr.to_rust(cr);
-    let n = n.to_rust::<Coerce<_, i64, usize>>(cr).get();
+    let n = n.to_rust::<Coerce<_, i64, usize>>(cr).get()?;
     let with_replacement: bool = with_replacement.to_rust(cr);
     let shuffle: bool = shuffle.to_rust(cr);
     let seed = seed
         .to_rust::<Coerce<_, Option<i64>, Option<u64>>>(cr)
-        .get();
+        .get()?;
     let fixed_seed = fixed_seed.to_rust(cr);
 
     Abstract(expr.sample_n(n, with_replacement, shuffle, seed, fixed_seed)).to_ocaml(cr)
@@ -548,7 +548,7 @@ fn rust_expr_fill_nan(
     expr_binary_op(cr, expr, with, |expr, with| expr.fill_nan(with))
 }
 
-#[ocaml_interop_export]
+#[ocaml_interop_export(raise_on_err)]
 fn rust_expr_rank(
     cr: &mut &mut OCamlRuntime,
     expr: OCamlRef<DynBox<Expr>>,
@@ -561,7 +561,7 @@ fn rust_expr_rank(
     let descending: bool = descending.to_rust(cr);
     let seed = seed
         .to_rust::<Coerce<_, Option<i64>, Option<u64>>>(cr)
-        .get();
+        .get()?;
     Abstract(expr.rank(RankOptions { method, descending }, seed)).to_ocaml(cr)
 }
 
@@ -701,13 +701,13 @@ fn rust_expr_suffix(
     expr_unary_op(cr, expr, |expr| expr.suffix(&suffix))
 }
 
-#[ocaml_interop_export]
+#[ocaml_interop_export(raise_on_err)]
 fn rust_expr_round(
     cr: &mut &mut OCamlRuntime,
     expr: OCamlRef<DynBox<Expr>>,
     decimals: OCamlRef<OCamlInt>,
 ) -> OCaml<DynBox<Expr>> {
-    let decimals = decimals.to_rust::<Coerce<_, i64, u32>>(cr).get();
+    let decimals = decimals.to_rust::<Coerce<_, i64, u32>>(cr).get()?;
 
     let Abstract(expr) = expr.to_rust(cr);
     Abstract(expr.round(decimals)).to_ocaml(cr)
@@ -1113,7 +1113,7 @@ fn rust_expr_str_ends_with(
     )
 }
 
-#[ocaml_interop_export]
+#[ocaml_interop_export(raise_on_err)]
 fn rust_expr_str_extract(
     cr: &mut &mut OCamlRuntime,
     expr: OCamlRef<DynBox<Expr>>,
@@ -1121,7 +1121,7 @@ fn rust_expr_str_extract(
     group_index: OCamlRef<OCamlInt>,
 ) -> OCaml<DynBox<Expr>> {
     let pat: String = pat.to_rust(cr);
-    let group_index = group_index.to_rust::<Coerce<_, i64, usize>>(cr).get();
+    let group_index = group_index.to_rust::<Coerce<_, i64, usize>>(cr).get()?;
 
     let Abstract(expr) = expr.to_rust(cr);
     let f = move |series: Series| {
@@ -1247,7 +1247,7 @@ fn rust_expr_str_to_uppercase(
     expr_unary_op(cr, expr, |expr| expr.str().to_uppercase())
 }
 
-#[ocaml_interop_export]
+#[ocaml_interop_export(raise_on_err)]
 fn rust_expr_str_slice(
     cr: &mut &mut OCamlRuntime,
     expr: OCamlRef<DynBox<Expr>>,
@@ -1257,7 +1257,7 @@ fn rust_expr_str_slice(
     let start: i64 = start.to_rust(cr);
     let length = length
         .to_rust::<Coerce<_, Option<i64>, Option<u64>>>(cr)
-        .get();
+        .get()?;
     expr_unary_op(cr, expr, |expr| expr.str().str_slice(start, length))
 }
 

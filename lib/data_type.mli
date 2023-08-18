@@ -5,7 +5,7 @@ module Time_unit : sig
     | Nanoseconds
     | Microseconds
     | Milliseconds
-  [@@deriving sexp, enumerate]
+  [@@deriving compare, sexp, enumerate, quickcheck]
 end
 
 type t =
@@ -30,6 +30,36 @@ type t =
   | Null
   | Struct of (string * t) list
   | Unknown
-[@@deriving sexp]
+[@@deriving compare, sexp, quickcheck]
 
 include Stringable.S with type t := t
+
+module Typed : sig
+    type untyped
+
+    type _ t =
+      | Boolean : bool t
+      | UInt8 : int t
+      | UInt16 : int t
+      | UInt32 : int t
+      | UInt64 : int t
+      | Int8 : int t
+      | Int16 : int t
+      | Int32 : int t
+      | Int64 : int t
+      | Float32 : float t
+      | Float64 : float t
+      | Utf8 : string t
+      | Binary : string t
+      | List : 'a t -> 'a list t
+
+    (** [strict_type_equal] returns type equality only if the two arguments
+        correspond to the same exact branch. *)
+    val strict_type_equal : 'a t -> 'b t -> ('a, 'b) Type_equal.t option
+
+    type packed = T : 'a t -> packed [@@deriving compare, sexp_of, quickcheck]
+
+    val to_untyped : 'a t -> untyped
+    val of_untyped : untyped -> packed option
+  end
+  with type untyped := t

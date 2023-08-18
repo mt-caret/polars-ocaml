@@ -127,8 +127,8 @@ val all : unit -> t
         Data_frame.create_exn
           Series.
             [ int "aa" [ 1; 2; 3 ]
-            ; string_option "ba" [ Some "a"; Some "b"; None ]
-            ; float_option "cc" [ None; Some 2.5; Some 1.5 ]
+            ; stringo "ba" [ Some "a"; Some "b"; None ]
+            ; floato "cc" [ None; Some 2.5; Some 1.5 ]
             ]
           ;;
       val df : Data_frame.t =
