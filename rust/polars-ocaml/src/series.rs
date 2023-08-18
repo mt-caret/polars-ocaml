@@ -327,35 +327,54 @@ fn series_to_boxrooted_ocaml_list<'a>(
     series: Series,
     allow_nulls: bool,
 ) -> Result<DummyBoxRoot, String> {
+    if !allow_nulls && series.null_count() > 0 {
+        return Err(format!(
+            "Series contains {} null values, expected none",
+            series.null_count()
+        )
+        .to_string());
+    }
+
+    macro_rules! create_boxrooted_ocaml_list {
+        ($rust_type:ty, $ocaml_type:ty, $body:expr) => {{
+            let vec: Vec<$rust_type> = $body;
+
+            let return_value: BoxRoot<OCamlList<$ocaml_type>> = vec.to_ocaml(cr).root();
+
+            Ok(unsafe { DummyBoxRoot::new(return_value) })
+        }};
+    }
+
+    macro_rules! create_boxrooted_ocaml_list_handle_nulls {
+        ($rust_type:ty, $ocaml_type:ty, $body_allow_nulls:expr, $body_disallow_nulls:expr) => {{
+            if allow_nulls {
+                create_boxrooted_ocaml_list!(
+                    Option<$rust_type>,
+                    Option<$ocaml_type>,
+                    $body_allow_nulls
+                )
+            } else {
+                create_boxrooted_ocaml_list!($rust_type, $ocaml_type, $body_disallow_nulls)
+            }
+        }};
+    }
+
     macro_rules! ocaml_intable {
         ($rust_type:ty, $ca:expr) => {{
             let ca = $ca.map_err(|err| err.to_string())?;
 
-            if allow_nulls {
-                let vec: Vec<Option<OCamlIntable<$rust_type>>> =
-                    ca.into_iter().map(|n| n.map(OCamlIntable)).collect();
-
-                let return_value: BoxRoot<OCamlList<Option<OCamlInt>>> = vec.to_ocaml(cr).root();
-
-                Ok(unsafe { DummyBoxRoot::new(return_value) })
-            } else {
-                if ca.null_count() > 0 {
-                    return Err("Series contains null values".to_string());
-                }
-
-                let vec: Vec<OCamlIntable<$rust_type>> = {
+            create_boxrooted_ocaml_list_handle_nulls!(
+                OCamlIntable<$rust_type>,
+                OCamlInt,
+                ca.into_iter().map(|n| n.map(OCamlIntable)).collect(),
+                {
                     let mut buf = Vec::with_capacity(ca.len());
-
                     for arr in ca.downcast_iter() {
                         buf.extend(arr.values_iter().map(|n| OCamlIntable(*n)))
                     }
                     buf
-                };
-
-                let return_value: BoxRoot<OCamlList<OCamlInt>> = vec.to_ocaml(cr).root();
-
-                Ok(unsafe { DummyBoxRoot::new(return_value) })
-            }
+                }
+            )
         }};
     }
 
@@ -363,30 +382,13 @@ fn series_to_boxrooted_ocaml_list<'a>(
         GADTDataType::Boolean => {
             let ca = series.bool().map_err(|err| err.to_string())?;
 
-            if allow_nulls {
-                let vec: Vec<Option<bool>> = ca.into_iter().collect();
-
-                let return_value: BoxRoot<OCamlList<Option<bool>>> = vec.to_ocaml(cr).root();
-
-                Ok(unsafe { DummyBoxRoot::new(return_value) })
-            } else {
-                if ca.null_count() > 0 {
-                    return Err("Series contains null values".to_string());
+            create_boxrooted_ocaml_list_handle_nulls!(bool, bool, ca.into_iter().collect(), {
+                let mut buf = Vec::with_capacity(ca.len());
+                for arr in ca.downcast_iter() {
+                    buf.extend(arr.values_iter())
                 }
-
-                let vec: Vec<bool> = {
-                    let mut buf = Vec::with_capacity(ca.len());
-
-                    for arr in ca.downcast_iter() {
-                        buf.extend(arr.values_iter())
-                    }
-                    buf
-                };
-
-                let return_value: BoxRoot<OCamlList<bool>> = vec.to_ocaml(cr).root();
-
-                Ok(unsafe { DummyBoxRoot::new(return_value) })
-            }
+                buf
+            })
         }
         GADTDataType::UInt8 => ocaml_intable!(u8, series.u8()),
         GADTDataType::UInt16 => ocaml_intable!(u16, series.u16()),
@@ -399,150 +401,81 @@ fn series_to_boxrooted_ocaml_list<'a>(
         GADTDataType::Float32 => {
             let ca = series.f32().map_err(|err| err.to_string())?;
 
-            if allow_nulls {
-                let vec: Vec<Option<f64>> = ca
-                    .into_iter()
+            create_boxrooted_ocaml_list_handle_nulls!(
+                f64,
+                OCamlFloat,
+                ca.into_iter()
                     .map(|f32o| f32o.map(|f32| f32 as f64))
-                    .collect();
-
-                let return_value: BoxRoot<OCamlList<Option<OCamlFloat>>> = vec.to_ocaml(cr).root();
-
-                Ok(unsafe { DummyBoxRoot::new(return_value) })
-            } else {
-                if ca.null_count() > 0 {
-                    return Err("Series contains null values".to_string());
-                }
-
-                let vec: Vec<f64> = {
+                    .collect(),
+                {
                     let mut buf = Vec::with_capacity(ca.len());
-
                     for arr in ca.downcast_iter() {
                         buf.extend(arr.values_iter().map(|f32| *f32 as f64))
                     }
                     buf
-                };
-
-                let return_value: BoxRoot<OCamlList<OCamlFloat>> = vec.to_ocaml(cr).root();
-
-                Ok(unsafe { DummyBoxRoot::new(return_value) })
-            }
+                }
+            )
         }
         GADTDataType::Float64 => {
             let ca = series.f64().map_err(|err| err.to_string())?;
 
-            if allow_nulls {
-                let vec: Vec<Option<f64>> = ca.into_iter().collect();
-
-                let return_value: BoxRoot<OCamlList<Option<OCamlFloat>>> = vec.to_ocaml(cr).root();
-
-                Ok(unsafe { DummyBoxRoot::new(return_value) })
-            } else {
-                if ca.null_count() > 0 {
-                    return Err("Series contains null values".to_string());
+            create_boxrooted_ocaml_list_handle_nulls!(f64, OCamlFloat, ca.into_iter().collect(), {
+                let mut buf = Vec::with_capacity(ca.len());
+                for arr in ca.downcast_iter() {
+                    buf.extend(arr.values_iter())
                 }
-
-                let vec: Vec<f64> = {
-                    let mut buf = Vec::with_capacity(ca.len());
-
-                    for arr in ca.downcast_iter() {
-                        buf.extend(arr.values_iter())
-                    }
-                    buf
-                };
-
-                let return_value: BoxRoot<OCamlList<OCamlFloat>> = vec.to_ocaml(cr).root();
-
-                Ok(unsafe { DummyBoxRoot::new(return_value) })
-            }
+                buf
+            })
         }
         GADTDataType::Utf8 => {
             let ca = series.utf8().map_err(|err| err.to_string())?;
-
-            if allow_nulls {
-                let vec: Vec<Option<String>> = ca
-                    .into_iter()
+            create_boxrooted_ocaml_list_handle_nulls!(
+                String,
+                String,
+                ca.into_iter()
                     .map(|utf8o| utf8o.map(|utf8| utf8.to_string()))
-                    .collect();
-
-                let return_value: BoxRoot<OCamlList<Option<String>>> = vec.to_ocaml(cr).root();
-
-                Ok(unsafe { DummyBoxRoot::new(return_value) })
-            } else {
-                if ca.null_count() > 0 {
-                    return Err("Series contains null values".to_string());
-                }
-
-                let vec: Vec<String> = {
+                    .collect(),
+                {
                     let mut buf = Vec::with_capacity(ca.len());
-
                     for arr in ca.downcast_iter() {
                         buf.extend(arr.values_iter().map(|str| str.to_string()))
                     }
                     buf
-                };
-
-                let return_value: BoxRoot<OCamlList<String>> = vec.to_ocaml(cr).root();
-
-                Ok(unsafe { DummyBoxRoot::new(return_value) })
-            }
+                }
+            )
         }
         GADTDataType::Binary => {
             let ca = series.binary().map_err(|err| err.to_string())?;
 
-            if allow_nulls {
-                let vec: Vec<Option<Vec<u8>>> = ca
-                    .into_iter()
-                    .map(|binaryo| binaryo.map(|binary| binary.to_vec()))
-                    .collect();
-
-                let return_value: BoxRoot<OCamlList<Option<String>>> = vec.to_ocaml(cr).root();
-
-                Ok(unsafe { DummyBoxRoot::new(return_value) })
-            } else {
-                if ca.null_count() > 0 {
-                    return Err("Series contains null values".to_string());
+            create_boxrooted_ocaml_list_handle_nulls!(&[u8], String, ca.into_iter().collect(), {
+                let mut buf = Vec::with_capacity(ca.len());
+                for arr in ca.downcast_iter() {
+                    buf.extend(arr.values_iter())
                 }
-
-                let vec: Vec<&[u8]> = {
-                    let mut buf = Vec::with_capacity(ca.len());
-
-                    for arr in ca.downcast_iter() {
-                        buf.extend(arr.values_iter())
-                    }
-                    buf
-                };
-
-                let return_value: BoxRoot<OCamlList<OCamlBytes>> = vec.to_ocaml(cr).root();
-
-                Ok(unsafe { DummyBoxRoot::new(return_value) })
-            }
+                buf
+            })
         }
         GADTDataType::List(data_type) => {
             let ca = series.list().map_err(|err| err.to_string())?;
 
-            if allow_nulls {
-                let vec: Vec<Option<DummyBoxRoot>> = ca
-                    .into_iter()
+            create_boxrooted_ocaml_list_handle_nulls!(
+                DummyBoxRoot,
+                DummyBoxRoot,
+                ca.into_iter()
                     .map(|serieso| match serieso {
                         None => Ok(None),
                         Some(series) => {
+                            // TODO: explain why this needs to be false
                             series_to_boxrooted_ocaml_list(cr, data_type, series, false).map(Some)
                         }
                     })
-                    .collect::<Result<_, _>>()?;
-
-                let return_value: BoxRoot<OCamlList<Option<DummyBoxRoot>>> =
-                    vec.to_ocaml(cr).root();
-
-                Ok(unsafe { DummyBoxRoot::new(return_value) })
-            } else {
-                if ca.null_count() > 0 {
-                    return Err("Series contains null values".to_string());
-                }
-
-                let vec: Vec<DummyBoxRoot> = {
+                    .collect::<Result<_, _>>()?,
+                {
                     let mut buf = Vec::with_capacity(ca.len());
 
+                    // Based off of
+                    // https://github.com/pola-rs/polars/blob/b91cd2d3fa42f80319d23d057fd9691ba474bd61/crates/polars-core/src/chunked_array/iterator/mod.rs#L304
+                    // TBH I don't fully understand how this works, but hey, it's quickcheck tested!
                     for arr in ca
                         .downcast_iter()
                         .flat_map(|arr| arr.iter().unwrap_required())
@@ -554,18 +487,15 @@ fn series_to_boxrooted_ocaml_list<'a>(
                                 &ca.inner_dtype(),
                             )
                         };
+                        // TODO: explain why this needs to be false
                         buf.push(series_to_boxrooted_ocaml_list(
                             cr, data_type, series, false,
                         )?)
                     }
 
                     buf
-                };
-
-                let return_value: BoxRoot<OCamlList<DummyBoxRoot>> = vec.to_ocaml(cr).root();
-
-                Ok(unsafe { DummyBoxRoot::new(return_value) })
-            }
+                }
+            )
         }
     }
 }
