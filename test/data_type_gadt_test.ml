@@ -34,10 +34,9 @@ let rec value_generator : type a. a Data_type.Typed.t -> a Quickcheck.Generator.
   | Binary -> Generator.string
   | List t ->
     value_generator t
-    |> Generator.list
-       (* Polars currently doesn't support passing empty Vec<Series> to Series::new.
+    |> (* Polars currently doesn't support passing empty Vec<Series> to Series::new.
           See test in rust/polars-ocaml/src/lib.rs. *)
-    |> Quickcheck.Generator.filter ~f:(Fn.non List.is_empty)
+    Generator.list_non_empty
 ;;
 
 let rec value_shrinker : type a. a Data_type.Typed.t -> a Quickcheck.Shrinker.t =
@@ -93,10 +92,7 @@ module Series_create = struct
   let quickcheck_generator =
     let open Quickcheck.Generator.Let_syntax in
     let%bind (T data_type) = Data_type.Typed.quickcheck_generator_packed in
-    let%map values =
-      Quickcheck.Generator.list (value_generator data_type)
-      |> Quickcheck.Generator.filter ~f:(Fn.non List.is_empty)
-    in
+    let%map values = Quickcheck.Generator.list_non_empty (value_generator data_type) in
     Args (data_type, values)
   ;;
 
