@@ -244,28 +244,32 @@ fn series_to_boxrooted_ocaml_list<'a>(
     cr: &mut &'a mut OCamlRuntime,
     data_type: &GADTDataType,
     series: Series,
-) -> DummyBoxRoot {
+) -> Result<DummyBoxRoot, String> {
     macro_rules! ocaml_intable {
         ($rust_type:ty, $ca:expr) => {{
             let vec: Vec<Option<OCamlIntable<$rust_type>>> = $ca
-                .unwrap()
+                .map_err(|err| err.to_string())?
                 .into_iter()
                 .map(|n| n.map(OCamlIntable))
                 .collect();
 
             let return_value: BoxRoot<OCamlList<Option<OCamlInt>>> = vec.to_ocaml(cr).root();
 
-            unsafe { DummyBoxRoot::new(return_value) }
+            Ok(unsafe { DummyBoxRoot::new(return_value) })
         }};
     }
 
     match data_type {
         GADTDataType::Boolean => {
-            let vec: Vec<Option<bool>> = series.bool().unwrap().into_iter().collect();
+            let vec: Vec<Option<bool>> = series
+                .bool()
+                .map_err(|err| err.to_string())?
+                .into_iter()
+                .collect();
 
             let return_value: BoxRoot<OCamlList<Option<bool>>> = vec.to_ocaml(cr).root();
 
-            unsafe { DummyBoxRoot::new(return_value) }
+            Ok(unsafe { DummyBoxRoot::new(return_value) })
         }
         GADTDataType::UInt8 => ocaml_intable!(u8, series.u8()),
         GADTDataType::UInt16 => ocaml_intable!(u16, series.u16()),
@@ -278,64 +282,60 @@ fn series_to_boxrooted_ocaml_list<'a>(
         GADTDataType::Float32 => {
             let vec: Vec<Option<f64>> = series
                 .f32()
-                .unwrap()
+                .map_err(|err| err.to_string())?
                 .into_iter()
                 .map(|f32o| f32o.map(|f32| f32 as f64))
                 .collect();
 
             let return_value: BoxRoot<OCamlList<Option<OCamlFloat>>> = vec.to_ocaml(cr).root();
 
-            unsafe { DummyBoxRoot::new(return_value) }
+            Ok(unsafe { DummyBoxRoot::new(return_value) })
         }
         GADTDataType::Float64 => {
             let vec: Vec<Option<f64>> = series.f64().unwrap().into_iter().collect();
 
             let return_value: BoxRoot<OCamlList<Option<OCamlFloat>>> = vec.to_ocaml(cr).root();
 
-            unsafe { DummyBoxRoot::new(return_value) }
+            Ok(unsafe { DummyBoxRoot::new(return_value) })
         }
         GADTDataType::Utf8 => {
             let vec: Vec<Option<String>> = series
                 .utf8()
-                .unwrap()
+                .map_err(|err| err.to_string())?
                 .into_iter()
                 .map(|utf8o| utf8o.map(|utf8| utf8.to_string()))
                 .collect();
 
             let return_value: BoxRoot<OCamlList<Option<String>>> = vec.to_ocaml(cr).root();
 
-            unsafe { DummyBoxRoot::new(return_value) }
+            Ok(unsafe { DummyBoxRoot::new(return_value) })
         }
         GADTDataType::Binary => {
             let vec: Vec<Option<Vec<u8>>> = series
                 .binary()
-                .unwrap()
+                .map_err(|err| err.to_string())?
                 .into_iter()
                 .map(|binaryo| binaryo.map(|binary| binary.to_vec()))
                 .collect();
 
             let return_value: BoxRoot<OCamlList<Option<String>>> = vec.to_ocaml(cr).root();
 
-            unsafe { DummyBoxRoot::new(return_value) }
+            Ok(unsafe { DummyBoxRoot::new(return_value) })
         }
         GADTDataType::List(data_type) => {
-            let vec: Vec<Option<Vec<DummyBoxRoot>>> = series
+            let vec: Vec<Option<DummyBoxRoot>> = series
                 .list()
+                .map_err(|err| err.to_string())?
                 .into_iter()
-                .map(|ca| {
-                    ca.into_iter()
-                        .map(|serieso| {
-                            serieso
-                                .map(|series| series_to_boxrooted_ocaml_list(cr, data_type, series))
-                        })
-                        .collect()
+                .map(|serieso| match serieso {
+                    None => Ok(None),
+                    Some(series) => series_to_boxrooted_ocaml_list(cr, data_type, series).map(Some),
                 })
-                .collect();
+                .collect::<Result<_, _>>()?;
 
-            let return_value: BoxRoot<OCamlList<Option<OCamlList<DummyBoxRoot>>>> =
-                vec.to_ocaml(cr).root();
+            let return_value: BoxRoot<OCamlList<Option<DummyBoxRoot>>> = vec.to_ocaml(cr).root();
 
-            unsafe { DummyBoxRoot::new(return_value) }
+            Ok(unsafe { DummyBoxRoot::new(return_value) })
         }
     }
 }
@@ -349,7 +349,7 @@ fn rust_series_to_list(
     let data_type: GADTDataType = data_type.to_rust(cr);
     let Abstract(series) = series.to_rust(cr);
 
-    series_to_boxrooted_ocaml_list(cr, &data_type, series).to_ocaml(cr)
+    series_to_boxrooted_ocaml_list(cr, &data_type, series)?.to_ocaml(cr)
 }
 
 #[ocaml_interop_export(raise_on_err)]
