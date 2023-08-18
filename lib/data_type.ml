@@ -6,7 +6,7 @@ module Time_unit = struct
       | Nanoseconds
       | Microseconds
       | Milliseconds
-    [@@deriving sexp, enumerate, quickcheck]
+    [@@deriving compare, sexp, enumerate, quickcheck]
   end
 
   include T
@@ -36,14 +36,14 @@ module T = struct
     | Null
     | Struct of (string * t) list
     | Unknown
-  [@@deriving sexp, quickcheck]
+  [@@deriving compare, sexp, quickcheck]
 end
 
 include T
 include Sexpable.To_stringable (T)
 
 module Typed = struct
-  type untyped = t [@@deriving sexp_of]
+  type untyped = t [@@deriving compare, sexp_of]
 
   type _ t =
     | Boolean : bool t
@@ -60,6 +60,29 @@ module Typed = struct
     | Utf8 : string t
     | Binary : string t
     | List : 'a t -> 'a list t
+
+  let rec strict_type_equal : type a b. a t -> b t -> (a, b) Type_equal.t option =
+    fun t1 t2 ->
+    match t1, t2 with
+    | Boolean, Boolean -> Some Type_equal.T
+    | UInt8, UInt8 -> Some Type_equal.T
+    | UInt16, UInt16 -> Some Type_equal.T
+    | UInt32, UInt32 -> Some Type_equal.T
+    | UInt64, UInt64 -> Some Type_equal.T
+    | Int8, Int8 -> Some Type_equal.T
+    | Int16, Int16 -> Some Type_equal.T
+    | Int32, Int32 -> Some Type_equal.T
+    | Int64, Int64 -> Some Type_equal.T
+    | Float32, Float32 -> Some Type_equal.T
+    | Float64, Float64 -> Some Type_equal.T
+    | Utf8, Utf8 -> Some Type_equal.T
+    | Binary, Binary -> Some Type_equal.T
+    | List t1, List t2 ->
+      (match strict_type_equal t1 t2 with
+       | None -> None
+       | Some Type_equal.T -> Some Type_equal.T)
+    | _, _ -> None
+  ;;
 
   type packed = T : _ t -> packed
 
@@ -99,6 +122,7 @@ module Typed = struct
   ;;
 
   let sexp_of_packed (T t) = [%sexp_of: untyped] (to_untyped t)
+  let compare_packed (T t1) (T t2) = [%compare: untyped] (to_untyped t1) (to_untyped t2)
 
   let quickcheck_generator_packed =
     Quickcheck.Generator.filter_map quickcheck_generator ~f:of_untyped
