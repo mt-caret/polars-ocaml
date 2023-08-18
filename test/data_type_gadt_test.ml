@@ -1,6 +1,26 @@
 open Core
 open Polars
 
+let%expect_test "unit tests" =
+  let series = Series.create' Int64 "series_name" [ Some 1; None; Some 2 ] in
+  Series.to_option_list Int64 series |> [%sexp_of: int option list] |> print_s;
+  [%expect {| ((1) () (2)) |}];
+  (* Trying to convert to non-null list when there are nulls should raise *)
+  Expect_test_helpers_core.require_does_raise [%here] (fun () ->
+    ignore (Series.to_list Int64 series));
+  [%expect
+    {|
+    (Failure
+     "Polars panicked: Series contains null values\nbacktrace not captured") |}];
+  (* Trying to convert to list of different type should raise *)
+  Expect_test_helpers_core.require_does_raise [%here] (fun () ->
+    ignore (Series.to_option_list Float64 series));
+  [%expect
+    {|
+    (Failure
+     "Polars panicked: data types don't match: invalid series dtype: expected `Float64`, got `i64`\nbacktrace not captured") |}]
+;;
+
 (* TODO: perhaps these things should be bundled in a module and there should be a single function like:
    {[
      val data_type_value
@@ -151,10 +171,74 @@ let%expect_test "Series.create doesn't raise" =
       match data_type with
       | List _ -> ()
       | _ ->
+        let args' = Series_create.Args (data_type, Series.to_list data_type series) in
+        [%test_result: Series_create.t] ~expect:args' args;
         let args' =
           Series_create.Args
-            (data_type, Series.to_list data_type series |> List.filter_opt)
+            (data_type, Series.to_option_list data_type series |> List.filter_opt)
         in
         [%test_result: Series_create.t] ~expect:args' args);
+  [%expect {||}]
+;;
+
+(* TODO: there's a *lot* of duplication with the Series_create module; perhaps
+   functorizing this would clean things up... *)
+module Series_create' = struct
+  type t = Args : 'a Data_type.Typed.t * 'a option list -> t
+
+  let compare (Args (data_type1, values1)) (Args (data_type2, values2)) =
+    match Data_type.Typed.strict_type_equal data_type1 data_type2 with
+    | None ->
+      [%compare: Data_type.t]
+        (Data_type.Typed.to_untyped data_type1)
+        (Data_type.Typed.to_untyped data_type1)
+    | Some T -> List.compare (Option.compare (value_compare data_type1)) values1 values2
+  ;;
+
+  let sexp_of_t (Args (data_type, values)) =
+    let sexp_of_value = value_to_sexp data_type in
+    [%sexp_of: Data_type.Typed.packed * value option list]
+      (Data_type.Typed.T data_type, values)
+  ;;
+
+  let quickcheck_generator =
+    let open Quickcheck.Generator.Let_syntax in
+    let%bind (T data_type) = Data_type.Typed.quickcheck_generator_packed in
+    let%map values =
+      Quickcheck.Generator.list_non_empty
+        (Base_quickcheck.Generator.option (value_generator data_type))
+    in
+    Args (data_type, values)
+  ;;
+
+  let quickcheck_shrinker =
+    Quickcheck.Shrinker.create (fun (Args (data_type, values)) ->
+      let value_shrinker =
+        Base_quickcheck.Shrinker.list
+          (Base_quickcheck.Shrinker.option (value_shrinker data_type))
+      in
+      Quickcheck.Shrinker.shrink value_shrinker values
+      |> Sequence.map ~f:(fun values -> Args (data_type, values)))
+  ;;
+
+  let quickcheck_observer =
+    Quickcheck.Observer.unmap
+      Data_type.Typed.quickcheck_observer_packed
+      ~f:(fun (Args (data_type, _values)) -> T data_type)
+  ;;
+end
+
+let%expect_test "Series.create' doesn't raise" =
+  Base_quickcheck.Test.run_exn
+    (module Series_create')
+    ~f:(fun (Series_create'.Args (data_type, values) as args) ->
+      let series = Series.create' data_type "series_name" values in
+      match data_type with
+      | List _ -> ()
+      | _ ->
+        let args' =
+          Series_create'.Args (data_type, Series.to_option_list data_type series)
+        in
+        [%test_result: Series_create'.t] ~expect:args' args);
   [%expect {||}]
 ;;

@@ -12,7 +12,13 @@ module T = struct
     -> t
     = "rust_series_new_option"
 
-  external to_list : 'a Data_type.Typed.t -> t -> 'a option list = "rust_series_to_list"
+  external to_list : 'a Data_type.Typed.t -> t -> 'a list = "rust_series_to_list"
+
+  external to_option_list
+    :  'a Data_type.Typed.t
+    -> t
+    -> 'a option list
+    = "rust_series_to_option_list"
 
   let int = create Int64
   let int' = create' Int64

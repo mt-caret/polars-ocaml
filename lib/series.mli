@@ -4,7 +4,8 @@ type t
 
 val create : 'a Data_type.Typed.t -> string -> 'a list -> t
 val create' : 'a Data_type.Typed.t -> string -> 'a option list -> t
-val to_list : 'a Data_type.Typed.t -> t -> 'a option list
+val to_list : 'a Data_type.Typed.t -> t -> 'a list
+val to_option_list : 'a Data_type.Typed.t -> t -> 'a option list
 val int : string -> int list -> t
 val int' : string -> int option list -> t
 val float : string -> float list -> t
