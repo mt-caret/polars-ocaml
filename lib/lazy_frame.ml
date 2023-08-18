@@ -72,6 +72,16 @@ external profile
   -> (Data_frame0.t * Data_frame0.t, string) result
   = "rust_lazy_frame_profile"
 
+type profile_result =
+  { collected : Data_frame0.t
+  ; profile : Data_frame0.t
+  }
+
+let profile t =
+  let%map.Result collected, profile = profile t in
+  { collected; profile }
+;;
+
 let profile_exn t = profile t |> Result.map_error ~f:Error.of_string |> Or_error.ok_exn
 
 external fetch
