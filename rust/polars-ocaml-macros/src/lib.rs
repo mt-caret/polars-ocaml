@@ -6,7 +6,6 @@ use syn::{parse::Parser, parse_macro_input, punctuated::Punctuated};
 
 struct MacroArgs {
     raise_on_err: bool,
-    custom_block: bool,
 }
 
 // TODO: currently, the macro panicks all over the place which is not very nice.
@@ -79,12 +78,13 @@ fn ocaml_interop_export_implementation(item_fn: syn::ItemFn, args: MacroArgs) ->
     let block = item_fn.block.clone();
 
     let native_function = if !args.raise_on_err {
-        let block = if args.custom_block {
-            quote! { #block }
-        } else {
-            quote! {
-                {
-                    let #runtime_name = unsafe { &mut ::ocaml_interop::OCamlRuntime::recover_handle() };
+        quote! {
+            #[no_mangle]
+            pub extern "C" #signature {
+                match ::std::panic::catch_unwind(|| {
+                    let #runtime_name = unsafe {
+                        &mut ::ocaml_interop::OCamlRuntime::recover_handle()
+                    };
 
                     #( #locals )*
 
@@ -93,14 +93,7 @@ fn ocaml_interop_export_implementation(item_fn: syn::ItemFn, args: MacroArgs) ->
 
                         unsafe { return_value.raw() }
                     }
-                }
-            }
-        };
-
-        quote! {
-            #[no_mangle]
-            pub extern "C" #signature {
-                match ::std::panic::catch_unwind(|| #block) {
+                }) {
                     Ok(value) => value,
                     Err(cause) => {
                         // This is only safe if the runtime lock is held, which
@@ -123,12 +116,13 @@ fn ocaml_interop_export_implementation(item_fn: syn::ItemFn, args: MacroArgs) ->
             }
         }
     } else {
-        let block = if args.custom_block {
-            quote! { #block }
-        } else {
-            quote! {
-                {
-                    let #runtime_name = unsafe { &mut ::ocaml_interop::OCamlRuntime::recover_handle() };
+        quote! {
+            #[no_mangle]
+            pub extern "C" #signature {
+                match ::std::panic::catch_unwind(|| {
+                    let #runtime_name = unsafe {
+                        &mut ::ocaml_interop::OCamlRuntime::recover_handle()
+                    };
 
                     #( #locals )*
 
@@ -137,14 +131,7 @@ fn ocaml_interop_export_implementation(item_fn: syn::ItemFn, args: MacroArgs) ->
 
                         Ok(unsafe { return_value.raw() })
                     }
-                }
-            }
-        };
-
-        quote! {
-            #[no_mangle]
-            pub extern "C" #signature {
-                match ::std::panic::catch_unwind(|| #block) {
+                }) {
                     Ok(Ok(value)) => value,
                     Ok(Err(error)) => {
                         let cr = unsafe { &mut ::ocaml_interop::OCamlRuntime::recover_handle() };
@@ -208,12 +195,10 @@ pub fn ocaml_interop_export(args: TokenStream, annotated_item: TokenStream) -> T
 
     let mut macro_args = MacroArgs {
         raise_on_err: false,
-        custom_block: false,
     };
     for arg in &args {
         match arg.as_str() {
             "raise_on_err" => macro_args.raise_on_err = true,
-            "custom_block" => macro_args.custom_block = true,
             _ => panic!(
                 "unexpected argument in ocaml_interop_export: {} in {:?}",
                 arg, args
@@ -366,7 +351,6 @@ mod tests {
             },
             MacroArgs {
                 raise_on_err: false,
-                custom_block: false,
             },
         );
 
@@ -408,10 +392,7 @@ mod tests {
                     OCaml::box_value(cr, col(&name))
                 }
             },
-            MacroArgs {
-                raise_on_err: true,
-                custom_block: false,
-            },
+            MacroArgs { raise_on_err: true },
         );
 
         expect![[r##"
@@ -437,41 +418,6 @@ mod tests {
                         let cr = unsafe { &mut ::ocaml_interop::OCamlRuntime::recover_handle() };
                         unsafe { raise_ocaml_exception(cr, error) }
                     }
-                    Err(cause) => {
-                        let cr = unsafe { &mut ::ocaml_interop::OCamlRuntime::recover_handle() };
-                        unsafe { raise_ocaml_exception_from_panic(cr, cause) }
-                    }
-                }
-            }
-        "##]]
-        .assert_eq(&macro_output);
-
-        let macro_output = apply_macro_and_pretty_print(
-            quote! {
-                fn rust_expr_col(
-                    cr: &mut &mut OCamlRuntime,
-                    name: OCamlRef<String>
-                ) -> OCaml<DynBox<Expr>> {
-                    let name: String = name.to_rust(cr);
-                    OCaml::box_value(cr, col(&name))
-                }
-            },
-            MacroArgs {
-                raise_on_err: false,
-                custom_block: true,
-            },
-        );
-
-        expect![[r##"
-            #[no_mangle]
-            pub extern "C" fn rust_expr_col(
-                name: ::ocaml_interop::RawOCaml,
-            ) -> ::ocaml_interop::RawOCaml {
-                match ::std::panic::catch_unwind(|| {
-                    let name: String = name.to_rust(cr);
-                    OCaml::box_value(cr, col(&name))
-                }) {
-                    Ok(value) => value,
                     Err(cause) => {
                         let cr = unsafe { &mut ::ocaml_interop::OCamlRuntime::recover_handle() };
                         unsafe { raise_ocaml_exception_from_panic(cr, cause) }
@@ -507,7 +453,6 @@ mod tests {
             },
             MacroArgs {
                 raise_on_err: false,
-                custom_block: false,
             },
         );
 
