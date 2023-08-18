@@ -612,6 +612,15 @@ fn rust_series_rename(
 }
 
 #[ocaml_interop_export]
+fn rust_series_dtype(
+    cr: &mut &mut OCamlRuntime,
+    series: OCamlRef<DynBox<Series>>,
+) -> OCaml<DataType> {
+    let Abstract(series) = series.to_rust(cr);
+    PolarsDataType(series.dtype().clone()).to_ocaml(cr)
+}
+
+#[ocaml_interop_export]
 fn rust_series_to_data_frame(
     cr: &mut &mut OCamlRuntime,
     series: OCamlRef<DynBox<Series>>,

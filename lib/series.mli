@@ -53,6 +53,7 @@ val get : 'a Data_type.Typed.t -> t -> int -> 'a option
 val get_exn : 'a Data_type.Typed.t -> t -> int -> 'a
 val name : t -> string
 val rename : t -> name:string -> t
+val dtype : t -> Data_type.t
 val to_data_frame : t -> Data_frame0.t
 val sort : ?descending:bool -> t -> t
 val head : ?length:int -> t -> t
