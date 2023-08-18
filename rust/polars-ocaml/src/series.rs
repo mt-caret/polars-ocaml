@@ -227,6 +227,87 @@ fn rust_series_new(
     OCaml::box_value(cr, series)
 }
 
+#[ocaml_interop_export(raise_on_err)]
+fn rust_series_new_option(
+    cr: &mut &mut OCamlRuntime,
+    data_type: OCamlRef<GADTDataType>,
+    name: OCamlRef<String>,
+    values: OCamlRef<OCamlList<DummyBoxRoot>>,
+) -> OCaml<DynBox<Series>> {
+    let name: String = name.to_rust(cr);
+    let data_type: GADTDataType = data_type.to_rust(cr);
+    let values: Vec<DummyBoxRoot> = values.to_rust(cr);
+
+    let series = series_new(cr, &data_type, name, values, true)?;
+
+    OCaml::box_value(cr, series)
+}
+
+#[ocaml_interop_export]
+fn rust_series_new_datetime(
+    cr: &mut &mut OCamlRuntime,
+    name: OCamlRef<String>,
+    values: OCamlRef<OCamlList<DynBox<NaiveDateTime>>>,
+) -> OCaml<DynBox<Series>> {
+    let name: String = name.to_rust(cr);
+    let values = unwrap_abstract_vec(values.to_rust(cr));
+    OCaml::box_value(cr, Series::new(&name, values))
+}
+
+#[ocaml_interop_export]
+fn rust_series_new_date(
+    cr: &mut &mut OCamlRuntime,
+    name: OCamlRef<String>,
+    values: OCamlRef<OCamlList<DynBox<NaiveDate>>>,
+) -> OCaml<DynBox<Series>> {
+    let name: String = name.to_rust(cr);
+    let values = unwrap_abstract_vec(values.to_rust(cr));
+    OCaml::box_value(cr, Series::new(&name, values))
+}
+
+#[ocaml_interop_export]
+fn rust_series_date_range(
+    cr: &mut &mut OCamlRuntime,
+    name: OCamlRef<String>,
+    start: OCamlRef<DynBox<NaiveDateTime>>,
+    stop: OCamlRef<DynBox<NaiveDateTime>>,
+    every: OCamlRef<Option<String>>,
+    cast_to_date: OCamlRef<bool>,
+) -> OCaml<Result<DynBox<Series>, String>> {
+    let name: String = name.to_rust(cr);
+
+    let Abstract(start) = start.to_rust(cr);
+    let Abstract(stop) = stop.to_rust(cr);
+
+    let every: String = every
+        .to_rust::<Option<String>>(cr)
+        .unwrap_or("1d".to_string());
+
+    let cast_to_date: bool = cast_to_date.to_rust(cr);
+
+    let series = date_range(
+        &name,
+        start,
+        stop,
+        Duration::parse(&every),
+        ClosedWindow::Both,
+        TimeUnit::Milliseconds,
+        None,
+    )
+    .and_then(|date_range| {
+        let series = date_range.into_series();
+        if cast_to_date {
+            series.cast(&DataType::Date)
+        } else {
+            Ok(series)
+        }
+    })
+    .map(Abstract)
+    .map_err(|err| err.to_string());
+
+    series.to_ocaml(cr)
+}
+
 pub struct OCamlIntable<T>(T);
 
 unsafe impl<T> ToOCaml<OCamlInt> for OCamlIntable<T>
@@ -244,6 +325,7 @@ fn series_to_boxrooted_ocaml_list<'a>(
     cr: &mut &'a mut OCamlRuntime,
     data_type: &GADTDataType,
     series: Series,
+    allow_nulls: bool,
 ) -> Result<DummyBoxRoot, String> {
     macro_rules! ocaml_intable {
         ($rust_type:ty, $ca:expr) => {{
@@ -329,7 +411,9 @@ fn series_to_boxrooted_ocaml_list<'a>(
                 .into_iter()
                 .map(|serieso| match serieso {
                     None => Ok(None),
-                    Some(series) => series_to_boxrooted_ocaml_list(cr, data_type, series).map(Some),
+                    Some(series) => {
+                        series_to_boxrooted_ocaml_list(cr, data_type, series, false).map(Some)
+                    }
                 })
                 .collect::<Result<_, _>>()?;
 
@@ -349,88 +433,7 @@ fn rust_series_to_list(
     let data_type: GADTDataType = data_type.to_rust(cr);
     let Abstract(series) = series.to_rust(cr);
 
-    series_to_boxrooted_ocaml_list(cr, &data_type, series)?.to_ocaml(cr)
-}
-
-#[ocaml_interop_export(raise_on_err)]
-fn rust_series_new_option(
-    cr: &mut &mut OCamlRuntime,
-    data_type: OCamlRef<GADTDataType>,
-    name: OCamlRef<String>,
-    values: OCamlRef<OCamlList<DummyBoxRoot>>,
-) -> OCaml<DynBox<Series>> {
-    let name: String = name.to_rust(cr);
-    let data_type: GADTDataType = data_type.to_rust(cr);
-    let values: Vec<DummyBoxRoot> = values.to_rust(cr);
-
-    let series = series_new(cr, &data_type, name, values, true)?;
-
-    OCaml::box_value(cr, series)
-}
-
-#[ocaml_interop_export]
-fn rust_series_new_datetime(
-    cr: &mut &mut OCamlRuntime,
-    name: OCamlRef<String>,
-    values: OCamlRef<OCamlList<DynBox<NaiveDateTime>>>,
-) -> OCaml<DynBox<Series>> {
-    let name: String = name.to_rust(cr);
-    let values = unwrap_abstract_vec(values.to_rust(cr));
-    OCaml::box_value(cr, Series::new(&name, values))
-}
-
-#[ocaml_interop_export]
-fn rust_series_new_date(
-    cr: &mut &mut OCamlRuntime,
-    name: OCamlRef<String>,
-    values: OCamlRef<OCamlList<DynBox<NaiveDate>>>,
-) -> OCaml<DynBox<Series>> {
-    let name: String = name.to_rust(cr);
-    let values = unwrap_abstract_vec(values.to_rust(cr));
-    OCaml::box_value(cr, Series::new(&name, values))
-}
-
-#[ocaml_interop_export]
-fn rust_series_date_range(
-    cr: &mut &mut OCamlRuntime,
-    name: OCamlRef<String>,
-    start: OCamlRef<DynBox<NaiveDateTime>>,
-    stop: OCamlRef<DynBox<NaiveDateTime>>,
-    every: OCamlRef<Option<String>>,
-    cast_to_date: OCamlRef<bool>,
-) -> OCaml<Result<DynBox<Series>, String>> {
-    let name: String = name.to_rust(cr);
-
-    let Abstract(start) = start.to_rust(cr);
-    let Abstract(stop) = stop.to_rust(cr);
-
-    let every: String = every
-        .to_rust::<Option<String>>(cr)
-        .unwrap_or("1d".to_string());
-
-    let cast_to_date: bool = cast_to_date.to_rust(cr);
-
-    let series = date_range(
-        &name,
-        start,
-        stop,
-        Duration::parse(&every),
-        ClosedWindow::Both,
-        TimeUnit::Milliseconds,
-        None,
-    )
-    .and_then(|date_range| {
-        let series = date_range.into_series();
-        if cast_to_date {
-            series.cast(&DataType::Date)
-        } else {
-            Ok(series)
-        }
-    })
-    .map(Abstract)
-    .map_err(|err| err.to_string());
-
-    series.to_ocaml(cr)
+    series_to_boxrooted_ocaml_list(cr, &data_type, series, true)?.to_ocaml(cr)
 }
 
 #[ocaml_interop_export]
