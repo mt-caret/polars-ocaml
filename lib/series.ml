@@ -3,19 +3,28 @@ open! Core
 module T = struct
   type t
 
-  external int : string -> int list -> t = "rust_series_new_int"
-  external int_option : string -> int option list -> t = "rust_series_new_int_option"
-  external float : string -> float list -> t = "rust_series_new_float"
+  (* TODO: Consider using Bigarray here instead of OCaml lists to keep memory outside the
+     OCaml heap and skip a copy. *)
+  external create : 'a Data_type.Typed.t -> string -> 'a list -> t = "rust_series_new"
 
-  external float_option
-    :  string
-    -> float option list
+  external createo
+    :  'a Data_type.Typed.t
+    -> string
+    -> 'a option list
     -> t
-    = "rust_series_new_float_option"
+    = "rust_series_new_option"
 
-  external bool : string -> bool list -> t = "rust_series_new_bool"
-  external bool_option : string -> bool option list -> t = "rust_series_new_bool_option"
-  external string : string -> string list -> t = "rust_series_new_string"
+  let int = create Int64
+  let into = createo Int64
+  let float = create Float64
+  let floato = createo Float64
+  let bool = create Boolean
+  let boolo = createo Boolean
+
+  (* TODO: perhaps this should actually be Bytes? *)
+
+  let string = create Utf8
+  let stringo = createo Utf8
 
   external datetime
     :  string
@@ -30,12 +39,6 @@ module T = struct
   external date : string -> Common.Naive_date.t list -> t = "rust_series_new_date"
 
   let date name dates = date name (List.map dates ~f:Common.Naive_date.of_date)
-
-  external string_option
-    :  string
-    -> string option list
-    -> t
-    = "rust_series_new_string_option"
 
   external date_range
     :  string
@@ -90,8 +93,21 @@ module T = struct
     |> Or_error.ok_exn
   ;;
 
+  external to_list : 'a Data_type.Typed.t -> t -> 'a list = "rust_series_to_list"
+
+  external to_option_list
+    :  'a Data_type.Typed.t
+    -> t
+    -> 'a option list
+    = "rust_series_to_option_list"
+
+  external get : 'a Data_type.Typed.t -> t -> int -> 'a option = "rust_series_get"
+
+  let get_exn data_type t i = get data_type t i |> Option.value_exn ~here:[%here]
+
   external name : t -> string = "rust_series_name"
   external rename : t -> name:string -> t = "rust_series_rename"
+  external dtype : t -> Data_type.t = "rust_series_dtype"
   external to_data_frame : t -> Data_frame0.t = "rust_series_to_data_frame"
   external sort : t -> descending:bool -> t = "rust_series_sort"
 
@@ -176,21 +192,6 @@ module T = struct
   external sub : t -> t -> t = "rust_series_sub"
   external mul : t -> t -> t = "rust_series_mul"
   external div : t -> t -> t = "rust_series_div"
-
-  type typed_list =
-    | Int of int option list
-    | Int32 of Int32.t option list
-    | Float of float option list
-    | String of string option list
-    | Bytes of bytes option list
-  [@@deriving sexp_of]
-
-  external to_typed_list : t -> (typed_list, string) result = "rust_series_to_typed_list"
-
-  let to_typed_list_exn t =
-    t |> to_typed_list |> Result.map_error ~f:Error.of_string |> ok_exn
-  ;;
-
   external to_string_hum : t -> string = "rust_series_to_string_hum"
 
   let print t = print_endline (to_string_hum t)

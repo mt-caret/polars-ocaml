@@ -7,8 +7,7 @@ let%expect_test "CSV" =
     let path = temp_dir ^/ "path.csv" in
     let df =
       Data_frame.create_exn
-        Series.
-          [ int "foo" [ 1; 2; 3 ]; string_option "bar" [ None; Some "bak"; Some "baz" ] ]
+        Series.[ int "foo" [ 1; 2; 3 ]; stringo "bar" [ None; Some "bak"; Some "baz" ] ]
     in
     Data_frame.print df;
     [%expect
@@ -65,8 +64,7 @@ let%expect_test "Parquet" =
     let path = temp_dir ^/ "path.parquet" in
     let df =
       Data_frame.create_exn
-        Series.
-          [ int "foo" [ 1; 2; 3 ]; string_option "bar" [ None; Some "bak"; Some "baz" ] ]
+        Series.[ int "foo" [ 1; 2; 3 ]; stringo "bar" [ None; Some "bak"; Some "baz" ] ]
     in
     Data_frame.print df;
     [%expect
@@ -116,8 +114,7 @@ let%expect_test "JSON files" =
     let path = temp_dir ^/ "path.json" in
     let df =
       Data_frame.create_exn
-        Series.
-          [ int "foo" [ 1; 2; 3 ]; string_option "bar" [ None; Some "bak"; Some "baz" ] ]
+        Series.[ int "foo" [ 1; 2; 3 ]; stringo "bar" [ None; Some "bak"; Some "baz" ] ]
     in
     Data_frame.print df;
     [%expect
@@ -196,9 +193,7 @@ let%expect_test "Multiple" =
       let df =
         Data_frame.create_exn
           Series.
-            [ int "foo" [ 1; 2; 3 ]
-            ; string_option "bar" [ None; Some "Ham"; Some "Spam" ]
-            ]
+            [ int "foo" [ 1; 2; 3 ]; stringo "bar" [ None; Some "Ham"; Some "Spam" ] ]
       in
       for i = 0 to 4 do
         Data_frame.write_csv_exn df (temp_dir ^/ [%string "my_many_files_%{i#Int}.csv"])
@@ -206,7 +201,8 @@ let%expect_test "Multiple" =
       Data_frame.read_csv_exn (temp_dir ^/ "my_many_files_*.csv") |> Data_frame.print));
   (* Globs are currently not supported in polars-ocaml, so passing glob patterns
      in read/scan functions do not work. *)
-  [%expect {| "No such file or directory (os error 2)" |}]
+  [%expect {|
+    "No such file or directory (os error 2)" |}]
 ;;
 
 (* Implementation of database, AWS, and BigQuery IO are blocked by a good OCaml

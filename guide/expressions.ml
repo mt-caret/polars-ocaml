@@ -7,8 +7,8 @@ let%expect_test "Basic Operators" =
   let df =
     Data_frame.create_exn
       Series.
-        [ int_option "nrs" [ Some 1; Some 2; Some 3; None; Some 5 ]
-        ; string_option "names" [ Some "foo"; Some "ham"; Some "spam"; Some "egg"; None ]
+        [ into "nrs" [ Some 1; Some 2; Some 3; None; Some 5 ]
+        ; stringo "names" [ Some "foo"; Some "ham"; Some "spam"; Some "egg"; None ]
         ; float "random" (List.init 5 ~f:(fun _ -> Random.State.float r 5.))
         ; string "groups" [ "A"; "A"; "B"; "C"; "B" ]
         ]
@@ -90,7 +90,7 @@ let%expect_test "Functions" =
   let df =
     Data_frame.create_exn
       Series.
-        [ int_option "nrs" [ Some 1; Some 2; Some 3; None; Some 5 ]
+        [ into "nrs" [ Some 1; Some 2; Some 3; None; Some 5 ]
         ; string "names" [ "foo"; "ham"; "spam"; "egg"; "spam" ]
         ; float "random" (List.init 5 ~f:(fun _ -> Random.State.float r 5.))
         ; string "groups" [ "A"; "A"; "B"; "C"; "B" ]
@@ -437,8 +437,7 @@ let%expect_test "Casting" =
   let df =
     Data_frame.create_exn
       Series.
-        [ string_option "animal" [ Some "Crab"; Some "cat and dog"; Some "rab$bit"; None ]
-        ]
+        [ stringo "animal" [ Some "Crab"; Some "cat and dog"; Some "rab$bit"; None ] ]
   in
   Data_frame.select_exn
     df
@@ -832,7 +831,7 @@ let%expect_test "Aggregation" =
 
 (* Examples from https://pola-rs.github.io/polars-book/user-guide/expressions/null/ *)
 let%expect_test "Missing data" =
-  let df = Data_frame.create_exn Series.[ int_option "value" [ Some 1; None ] ] in
+  let df = Data_frame.create_exn Series.[ into "value" [ Some 1; None ] ] in
   Data_frame.print df;
   [%expect
     {|
@@ -870,7 +869,7 @@ let%expect_test "Missing data" =
     └───────┘ |}];
   let df =
     Data_frame.create_exn
-      Series.[ int "col1" [ 1; 2; 3 ]; int_option "col2" [ Some 1; None; Some 3 ] ]
+      Series.[ int "col1" [ 1; 2; 3 ]; into "col2" [ Some 1; None; Some 3 ] ]
   in
   Data_frame.print df;
   [%expect

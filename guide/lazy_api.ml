@@ -8,7 +8,8 @@ let%expect_test "Schema" =
   |> Lazy_frame.schema_exn
   |> [%sexp_of: Schema.t]
   |> print_s;
-  [%expect {| ((foo Utf8) (bar Int64)) |}];
+  [%expect {|
+    ((foo Utf8) (bar Int64)) |}];
   let lazy_eager_query =
     Data_frame.create_exn
       Series.

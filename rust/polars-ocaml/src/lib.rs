@@ -179,4 +179,13 @@ mod tests {
     //         prev = Some(df);
     //     }
     // }
+
+    // Issue when creating Series out of Vec<Series>: https://github.com/pola-rs/polars/issues/10561
+    #[test]
+    #[should_panic]
+    fn empty_series_creation() {
+        let values: Vec<Series> = Vec::new();
+
+        expect![[r#""#]].assert_eq(&format!("{}", Series::new("column", values)))
+    }
 }
