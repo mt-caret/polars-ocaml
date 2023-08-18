@@ -10,15 +10,15 @@ use std::any::type_name;
 use std::borrow::Borrow;
 use std::marker::PhantomData;
 
+// This function is actually quite unsafe; as a general rule, additional use of
+// this is strongly discouraged. See comment for `raise_ocaml_exception` in the
+// implementation of `ocaml_interop_backtrace_support` for more details.
+//
+// TODO: we unfortunately can't use `ocaml_sys::caml_failwith_value` which would
+// prevent us from leaking memory since `cr` isn't accessible in `from_ocaml`
+// calls which are where this function is being used (and I'm not sure
+// recovering the runtime in these place is safe).
 pub unsafe fn ocaml_failwith(error_message: &str) -> ! {
-    let error_message = std::ffi::CString::new(error_message).expect("CString::new failed");
-    unsafe {
-        ocaml_sys::caml_failwith(error_message.as_ptr());
-    }
-    unreachable!("caml_failwith should never return")
-}
-
-pub unsafe fn ocaml_invalid_argument(error_message: &str) -> ! {
     let error_message = std::ffi::CString::new(error_message).expect("CString::new failed");
     unsafe {
         ocaml_sys::caml_failwith(error_message.as_ptr());
@@ -412,9 +412,13 @@ unsafe impl FromOCaml<StartBy> for PolarsStartBy {
 // type Via, will try_into() T and will raise an OCaml exception if the
 // conversion fails. For example, Coerce<OCamlInt, i64, u32> will convert an
 // OCamlInt into an i64 and then try to convert that i64 into a u32.
-pub struct Coerce<OCamlType, Via, T>(pub T, pub PhantomData<Via>, pub PhantomData<OCamlType>);
+pub struct Coerce<OCamlType, Via, T>(
+    pub Result<T, String>,
+    pub PhantomData<Via>,
+    pub PhantomData<OCamlType>,
+);
 impl<OCamlType, Via, T> Coerce<OCamlType, Via, T> {
-    pub fn get(self) -> T {
+    pub fn get(self) -> Result<T, String> {
         self.0
     }
 }
@@ -425,18 +429,17 @@ where
     <T as TryFrom<Via>>::Error: std::fmt::Debug,
 {
     fn from_ocaml(v: OCaml<OCamlType>) -> Self {
-        match T::try_from(v.to_rust::<Via>()) {
-            Ok(v) => Coerce(v, PhantomData, PhantomData),
-            Err(e) => unsafe {
-                ocaml_invalid_argument(&format!(
-                    "Failed to convert OCaml<{}> (from {}) to Rust<{}>: {:?}",
-                    type_name::<Via>(),
-                    type_name::<OCamlType>(),
-                    type_name::<T>(),
-                    e
-                ))
-            },
-        }
+        let try_into_result = T::try_from(v.to_rust::<Via>()).map_err(|e| {
+            format!(
+                "Failed to convert OCaml<{}> (from {}) to Rust<{}>: {:?}",
+                type_name::<Via>(),
+                type_name::<OCamlType>(),
+                type_name::<T>(),
+                e
+            )
+        });
+
+        Coerce(try_into_result, PhantomData, PhantomData)
     }
 }
 unsafe impl<OCamlType, Via, T> FromOCaml<Option<OCamlType>>
@@ -447,21 +450,22 @@ where
     <T as TryFrom<Via>>::Error: std::fmt::Debug,
 {
     fn from_ocaml(v: OCaml<Option<OCamlType>>) -> Self {
+        let try_into_result =
         match v.to_rust::<Option<Via>>() {
-            None => Coerce(None, PhantomData, PhantomData),
+            None => Ok(None),
             Some(v) => match T::try_from(v) {
-                Ok(v) => Coerce(Some(v), PhantomData, PhantomData),
-                Err(e) => unsafe {
-                    ocaml_invalid_argument(&format!(
+                Ok(v) => Ok(Some(v)),
+                Err(e) => Err(format!(
                         "Failed to convert OCaml<Option<{}>> (from Option<{}>) to Rust<Option<{}>>: {:?}",
                         type_name::<Via>(),
                         type_name::<OCamlType>(),
                         type_name::<T>(),
                         e
-                    ))
-                },
+                    )),
             },
-        }
+        };
+
+        Coerce(try_into_result, PhantomData, PhantomData)
     }
 }
 

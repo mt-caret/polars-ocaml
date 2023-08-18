@@ -251,7 +251,7 @@ fn rust_series_sort(
     OCaml::box_value(cr, series.sort(descending))
 }
 
-#[ocaml_interop_export]
+#[ocaml_interop_export(raise_on_err)]
 fn rust_series_head(
     cr: &mut &mut OCamlRuntime,
     series: OCamlRef<DynBox<Series>>,
@@ -260,12 +260,12 @@ fn rust_series_head(
     let Abstract(series) = series.to_rust(cr);
     let length = length
         .to_rust::<Coerce<_, Option<i64>, Option<usize>>>(cr)
-        .get();
+        .get()?;
 
     Abstract(series.head(length)).to_ocaml(cr)
 }
 
-#[ocaml_interop_export]
+#[ocaml_interop_export(raise_on_err)]
 fn rust_series_tail(
     cr: &mut &mut OCamlRuntime,
     series: OCamlRef<DynBox<Series>>,
@@ -274,12 +274,12 @@ fn rust_series_tail(
     let Abstract(series) = series.to_rust(cr);
     let length = length
         .to_rust::<Coerce<_, Option<i64>, Option<usize>>>(cr)
-        .get();
+        .get()?;
 
     Abstract(series.tail(length)).to_ocaml(cr)
 }
 
-#[ocaml_interop_export]
+#[ocaml_interop_export(raise_on_err)]
 fn rust_series_sample_n(
     cr: &mut &mut OCamlRuntime,
     series: OCamlRef<DynBox<Series>>,
@@ -289,12 +289,12 @@ fn rust_series_sample_n(
     seed: OCamlRef<Option<OCamlInt>>,
 ) -> OCaml<Result<DynBox<Series>, String>> {
     let Abstract(series) = series.to_rust(cr);
-    let n = n.to_rust::<Coerce<_, i64, usize>>(cr).get();
+    let n = n.to_rust::<Coerce<_, i64, usize>>(cr).get()?;
     let with_replacement: bool = with_replacement.to_rust(cr);
     let shuffle: bool = shuffle.to_rust(cr);
     let seed = seed
         .to_rust::<Coerce<_, Option<i64>, Option<u64>>>(cr)
-        .get();
+        .get()?;
 
     series
         .sample_n(n, with_replacement, shuffle, seed)
