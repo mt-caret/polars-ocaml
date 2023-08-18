@@ -3,6 +3,8 @@ open! Core
 module T = struct
   type t
 
+  (* TODO: Consider using Bigarray here instead of OCaml lists to keep memory outside the
+     OCaml heap and skip a copy. *)
   external create : 'a Data_type.Typed.t -> string -> 'a list -> t = "rust_series_new"
 
   external create'
@@ -185,21 +187,6 @@ module T = struct
   external sub : t -> t -> t = "rust_series_sub"
   external mul : t -> t -> t = "rust_series_mul"
   external div : t -> t -> t = "rust_series_div"
-
-  type typed_list =
-    | Int of int option list
-    | Int32 of Int32.t option list
-    | Float of float option list
-    | String of string option list
-    | Bytes of bytes option list
-  [@@deriving sexp_of]
-
-  external to_typed_list : t -> (typed_list, string) result = "rust_series_to_typed_list"
-
-  let to_typed_list_exn t =
-    t |> to_typed_list |> Result.map_error ~f:Error.of_string |> ok_exn
-  ;;
-
   external to_string_hum : t -> string = "rust_series_to_string_hum"
 
   let print t = print_endline (to_string_hum t)

@@ -11,7 +11,7 @@ let%expect_test "unit tests" =
   [%expect
     {|
     (Failure
-     "Polars panicked: Series contains null values\nbacktrace not captured") |}];
+     "Polars panicked: Series contains 1 null values, expected none\nbacktrace not captured") |}];
   (* Trying to convert to list of different type should raise *)
   Expect_test_helpers_core.require_does_raise [%here] (fun () ->
     ignore (Series.to_option_list Float64 series));

@@ -38,26 +38,6 @@ fn series_binary_op_result<'a>(
     series.to_ocaml(cr)
 }
 
-pub enum TypedList {
-    Int(Vec<Option<i64>>),
-    Int32(Vec<Option<i32>>),
-    Float(Vec<Option<f64>>),
-    String(Vec<Option<String>>),
-    Bytes(Vec<Option<Vec<u8>>>),
-}
-
-impl_to_ocaml_variant! {
-    // Optionally, if Rust and OCaml types don't match:
-    // RustType => OCamlType { ... }
-    TypedList {
-        TypedList::Int(l: OCamlList<Option<OCamlInt>>),
-        TypedList::Int32(l: OCamlList<Option<OCamlInt32>>),
-        TypedList::Float(l: OCamlList<Option<OCamlFloat>>),
-        TypedList::String(l: OCamlList<Option<String>>),
-        TypedList::Bytes(l: OCamlList<Option<OCamlBytes>>),
-    }
-}
-
 pub struct DummyBoxRoot(BoxRoot<DummyBoxRoot>);
 
 unsafe impl FromOCaml<DummyBoxRoot> for DummyBoxRoot {
@@ -754,75 +734,4 @@ fn rust_series_to_string_hum(
 ) -> OCaml<String> {
     let Abstract(series) = series.to_rust(cr);
     ToString::to_string(&series).to_ocaml(cr)
-}
-
-// TODO: Consider using Bigarray here instead of OCamlList to keep memory outside the
-// OCaml heap and skip a copy.
-// TODO: Consider mapping to smaller OCaml values like Int8, Float32, etc instead of
-// casting up
-#[ocaml_interop_export]
-fn rust_series_to_typed_list(
-    cr: &mut &mut OCamlRuntime,
-    series: OCamlRef<DynBox<Series>>,
-) -> OCaml<Result<TypedList, String>> {
-    let Abstract(series) = series.to_rust(cr);
-
-    // Get and process series based on its data type
-    let result: Result<TypedList, _> = match series.dtype() {
-        DataType::Int8 | DataType::Int16 => series
-            .cast(&DataType::Int32)
-            .and_then(|series| {
-                series
-                    .i32()
-                    .map(|elems| elems.into_iter().collect())
-                    .map(TypedList::Int32)
-            })
-            .map_err(|e| e.to_string()),
-        DataType::Int32 => series
-            .i32()
-            .map_err(|e| e.to_string())
-            .map(|elems| elems.into_iter().collect())
-            .map(TypedList::Int32),
-        DataType::Int64 => series
-            .i64()
-            .map_err(|e| e.to_string())
-            .map(|elems| elems.into_iter().collect())
-            .map(TypedList::Int),
-        DataType::Float32 => series
-            .cast(&DataType::Float64)
-            .and_then(|series| {
-                series
-                    .f64()
-                    .map(|elems| elems.into_iter().collect())
-                    .map(TypedList::Float)
-            })
-            .map_err(|e| e.to_string()),
-        DataType::Float64 => series
-            .f64()
-            .map_err(|e| e.to_string())
-            .map(|elems| elems.into_iter().collect())
-            .map(TypedList::Float),
-        DataType::Utf8 => series
-            .utf8()
-            .map_err(|e| e.to_string())
-            .map(|elems| {
-                elems
-                    .into_iter()
-                    .map(|s_opt| s_opt.map(|s| s.to_string()))
-                    .collect()
-            })
-            .map(TypedList::String),
-        DataType::Binary => series
-            .binary()
-            .map_err(|e| e.to_string())
-            .map(|elems| {
-                elems
-                    .into_iter()
-                    .map(|s_opt| s_opt.map(|b| b.to_vec()))
-                    .collect()
-            })
-            .map(TypedList::Bytes),
-        dtype => Result::Err(format!("Unsupported dtype: {:?}", dtype)),
-    };
-    result.to_ocaml(cr)
 }

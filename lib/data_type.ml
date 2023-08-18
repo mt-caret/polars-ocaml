@@ -45,6 +45,8 @@ include Sexpable.To_stringable (T)
 module Typed = struct
   type untyped = t [@@deriving compare, sexp_of]
 
+  (* TODO: Consider mapping to smaller OCaml values like Int8, Float32, etc instead of
+     casting up *)
   type _ t =
     | Boolean : bool t
     | UInt8 : int t
