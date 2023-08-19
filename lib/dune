@@ -1,33 +1,32 @@
 (rule
- (targets libpolars_ocaml.a dllpolars_ocaml.so)
+ (enabled_if
+  (= %{system} macosx))
  (deps
-  (glob_files ../rust/Cargo.*)
-  (glob_files ../rust/polars-ocaml/Cargo.*)
-  (glob_files ../rust/polars-ocaml/src/*.rs)
-  (glob_files ../rust/polars-ocaml-macros/Cargo.*)
-  (glob_files ../rust/polars-ocaml-macros/src/*.rs))
- ;(action
- ; (progn
- ;  (run sh -c "cd %{project_root}/rust && cargo build --release")
- ;  (run
- ;   sh
- ;   -c
- ;   "cp %{project_root}/rust/target/release/libpolars_ocaml.so ./dllpolars_ocaml.so 2> /dev/null || cp %{project_root}/rust/target/release/libpolars_ocaml.dylib ./dllpolars_ocaml.so")
- ;  (run
- ;   cp
- ;   %{project_root}/rust/target/release/libpolars_ocaml.a
- ;   libpolars_ocaml.a)))
+  (source_tree ../rust))
+ (targets libpolars_ocaml.a dllpolars_ocaml.so)
  (action
-  (progn
-   (run sh -c "cd %{project_root}/rust && cargo build")
-   (run
-    sh
-    -c
-    "cp %{project_root}/rust/target/debug/libpolars_ocaml.so ./dllpolars_ocaml.so 2> /dev/null || cp %{project_root}/rust/target/debug/libpolars_ocaml.dylib ./dllpolars_ocaml.so")
-   (run
-    cp
-    %{project_root}/rust/target/debug/libpolars_ocaml.a
-    libpolars_ocaml.a))))
+  (no-infer
+   (progn
+    (chdir
+     ../rust
+     (run cargo build))
+    (copy ../rust/target/debug/libpolars_ocaml.dylib dllpolars_ocaml.so)
+    (copy ../rust/target/debug/libpolars_ocaml.a libpolars_ocaml.a)))))
+
+(rule
+ (enabled_if
+  (<> %{system} macosx))
+ (deps
+  (source_tree ../rust))
+ (targets libpolars_ocaml.a dllpolars_ocaml.so)
+ (action
+  (no-infer
+   (progn
+    (chdir
+     ../rust
+     (run cargo build))
+    (copy ../rust/target/debug/libpolars_ocaml.so dllpolars_ocaml.so)
+    (copy ../rust/target/debug/libpolars_ocaml.a libpolars_ocaml.a)))))
 
 (library
  (name polars)
@@ -36,7 +35,8 @@
  (libraries core core_kernel.nonempty_list)
  (inline_tests)
  (preprocess
-  (pps ppx_jane)))
+  (pps ppx_jane))
+ (c_library_flags -framework CoreFoundation -framework IOKit))
 
 (env
  (utop
