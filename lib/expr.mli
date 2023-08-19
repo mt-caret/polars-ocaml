@@ -8,6 +8,7 @@ open! Core
 type t
 
 (** [col] return column(s) in a dataframe:
+
     {@ocaml[
       # let df =
           Data_frame.create_exn
@@ -35,6 +36,7 @@ type t
     ]}
 
     Use the wildcard [*] to represent all columns:
+
     {@ocaml[
       # Data_frame.select_exn df ~exprs:Expr.[ col "*" ]
       - : Data_frame.t =
@@ -64,6 +66,7 @@ type t
     ]}
 
     Regular expressions are also supported:
+
     {@ocaml[
       # Data_frame.select_exn df ~exprs:Expr.[ col "^ham.*$" ]
       - : Data_frame.t =
@@ -81,6 +84,7 @@ type t
 val col : string -> t
 
 (** Use [cols] to specify multiple columns at once:
+
     {@ocaml[
       # Data_frame.select_exn df ~exprs:Expr.[ cols [ "hamburger"; "foo" ] ]
       - : Data_frame.t =
@@ -354,13 +358,236 @@ val series : Series.t -> t
     ]} *)
 val sort : ?descending:bool -> t -> t
 
+(** [sort_by] sorts this column based on the ordering on expressions passed to
+    [by]. When used in a projection/selection context, the whole column is
+    sorted. When used in a groupby context, the groups are sorted.
+
+    Pass a single column name ot sort by that column:
+
+    {@ocaml[
+      # let df =
+        Data_frame.create_exn
+          Series.
+            [ string "group" [ "a"; "a"; "b"; "b" ]
+            ; int "value1" [ 1; 3; 4; 2 ]
+            ; int "value2" [ 8; 7; 6; 5 ]
+            ]
+      ...
+
+      # Data_frame.select_exn df ~exprs:Expr.[ col "group" |> sort_by ~by:[ col "value1" ] ]
+      - : Data_frame.t =
+      shape: (4, 1)
+      +-------+
+      | group |
+      | ---   |
+      | str   |
+      +=======+
+      | a     |
+      | b     |
+      | a     |
+      | b     |
+      +-------+
+    ]}
+
+    Sorting by expressions is also supported:
+
+    {@ocaml[
+      # Data_frame.select_exn df ~exprs:Expr.[ col "group" |> sort_by ~by:[ col "value1" + col "value2" ] ]
+      - : Data_frame.t =
+      shape: (4, 1)
+      +-------+
+      | group |
+      | ---   |
+      | str   |
+      +=======+
+      | b     |
+      | a     |
+      | a     |
+      | b     |
+      +-------+
+    ]}
+
+    Sort by multiple columns by passing a list of columns:
+
+    {@ocaml[
+      # Data_frame.select_exn df ~exprs:Expr.[ col "group" |> sort_by ~by:[ col "value1"; col "value2" ] ~descending:true ]
+      - : Data_frame.t =
+      shape: (4, 1)
+      +-------+
+      | group |
+      | ---   |
+      | str   |
+      +=======+
+      | b     |
+      | a     |
+      | b     |
+      | a     |
+      +-------+
+    ]}
+
+    When sorting in a groupby context, the groups are sorted:
+
+    {@ocaml[
+      # Data_frame.groupby df ~by:Expr.[ col "group" ] ~agg:Expr.[ col "value1" |> sort_by ~by:[ col "value2" ] ]
+      - : (Data_frame.t, string) result =
+      Core.Ok
+       shape: (2, 2)
+      +-------+-----------+
+      | group | value1    |
+      | ---   | ---       |
+      | str   | list[i64] |
+      +===================+
+      | a     | [3, 1]    |
+      | b     | [2, 4]    |
+      +-------+-----------+
+    ]}
+
+    Take a single row from each group where a column attains its minimal value
+    within that group:
+
+    {@ocaml[
+      # Data_frame.groupby_exn df ~by:Expr.[ col "group" ] ~agg:Expr.[ all () |> sort_by ~by:[ col "value2" ] ]
+      - : Data_frame.t =
+      shape: (2, 3)
+      +-------+-----------+-----------+
+      | group | value1    | value2    |
+      | ---   | ---       | ---       |
+      | str   | list[i64] | list[i64] |
+      +===============================+
+      | a     | [3, 1]    | [7, 8]    |
+      | b     | [2, 4]    | [5, 6]    |
+      +-------+-----------+-----------+
+    ]} *)
 val sort_by : ?descending:bool -> t -> by:t list -> t
+
+(** [set_sorted_flag] allows manipulation of the flag used for toggling the fast
+    path for sorted arrays. Please not that this would result in incorrect
+    results if the underlying data is not sorted.
+
+    {@ocaml[
+      # let df = Data_frame.create_exn Series.[ int "values" [ 1; 2; 3 ] ] in
+        Data_frame.select_exn df ~exprs:Expr.[ col "values" |> set_sorted_flag ~sorted:`Ascending |> max ]
+      - : Data_frame.t =
+      shape: (1, 1)
+      +--------+
+      | values |
+      | ---    |
+      | i64    |
+      +========+
+      | 3      |
+      +--------+
+    ]} *)
 val set_sorted_flag : t -> sorted:[ `Ascending | `Descending | `Not ] -> t
+
+(** Get the first value:
+
+    {@ocaml[
+      # let df = Data_frame.create_exn Series.[ int "a" [ 1; 1; 2 ] ] in
+        Data_frame.select_exn df ~exprs:Expr.[ col "a" |> first ]
+      - : Data_frame.t =
+      shape: (1, 1)
+      +-----+
+      | a   |
+      | --- |
+      | i64 |
+      +=====+
+      | 1   |
+      +-----+
+    ]} *)
 val first : t -> t
+
+(** Get the first value:
+
+    {@ocaml[
+      # let df = Data_frame.create_exn Series.[ int "a" [ 1; 1; 2 ] ] in
+        Data_frame.select_exn df ~exprs:Expr.[ col "a" |> last ]
+      - : Data_frame.t =
+      shape: (1, 1)
+      +-----+
+      | a   |
+      | --- |
+      | i64 |
+      +=====+
+      | 2   |
+      +-----+
+    ]} *)
 val last : t -> t
+
+(** [reverse] reverses the selection:
+
+    {@ocaml[
+      # let df = Data_frame.create_exn Series.[ int "A" [ 1; 2; 3; 4; 5 ]; string "fruits" [ "banana"; "banana"; "apple"; "apple"; "banana" ]; int "B" [ 5; 4; 3; 2; 1 ]; string "cars" [ "beetle"; "audi"; "beetle"; "beetle"; "beetle" ] ] in
+        Data_frame.select_exn df ~exprs:Expr.[ all (); all () |> reverse |> suffix ~suffix:"_reverse" ]
+      - : Data_frame.t =
+      shape: (5, 8)
+      +-----+--------+-----+--------+-----------+----------------+-----------+--------------+
+      | A   | fruits | B   | cars   | A_reverse | fruits_reverse | B_reverse | cars_reverse |
+      | --- | ---    | --- | ---    | ---       | ---            | ---       | ---          |
+      | i64 | str    | i64 | str    | i64       | str            | i64       | str          |
+      +=====================================================================================+
+      | 1   | banana | 5   | beetle | 5         | banana         | 1         | beetle       |
+      | 2   | banana | 4   | audi   | 4         | apple          | 2         | beetle       |
+      | 3   | apple  | 3   | beetle | 3         | apple          | 3         | beetle       |
+      | 4   | apple  | 2   | beetle | 2         | banana         | 4         | audi         |
+      | 5   | banana | 1   | beetle | 1         | banana         | 5         | beetle       |
+      +-----+--------+-----+--------+-----------+----------------+-----------+--------------+
+    ]} *)
 val reverse : t -> t
+
+(** [head] returns the first n rows, defaulting to 10:
+
+    {@ocaml[
+      # let df = Data_frame.create_exn Series.[ int "foo" [ 1; 2; 3; 4; 5; 6; 7 ] ] in
+        Data_frame.select_exn df ~exprs:Expr.[ col "foo" |> head ~length:3 ]
+      - : Data_frame.t =
+      shape: (3, 1)
+      +-----+
+      | foo |
+      | --- |
+      | i64 |
+      +=====+
+      | 1   |
+      | 2   |
+      | 3   |
+      +-----+
+    ]} *)
 val head : ?length:int -> t -> t
+
+(** [tail] returns the last n rows, defaulting to 10:
+
+    {@ocaml[
+      # let df = Data_frame.create_exn Series.[ int "foo" [ 1; 2; 3; 4; 5; 6; 7 ] ] in
+        Data_frame.select_exn df ~exprs:Expr.[ col "foo" |> tail ~length:3 ]
+      - : Data_frame.t =
+      shape: (3, 1)
+      +-----+
+      | foo |
+      | --- |
+      | i64 |
+      +=====+
+      | 5   |
+      | 6   |
+      | 7   |
+      +-----+
+    ]} *)
 val tail : ?length:int -> t -> t
+
+(** [take] returns the value based on index:
+
+    {@ocaml[
+      # let df = Data_frame.create_exn Series.[ string "group" [ "one"; "one"; "one"; "two"; "two"; "two" ]; int "value" [ 1; 98; 2; 3; 99; 4 ] ] in
+        Data_frame.groupby_exn df ~by:Expr.[ col "group" ] ~agg:Expr.[ col "value" |> take ~idx:(int 1) ]
+      - : Data_frame.t =
+      shape: (2, 2)
+      +-------+-------+
+      | group | value |
+      | ---   | ---   |
+      | str   | i64   |
+      +===============+
+      | one   | 98    |
+      | two   | 99    |
+      +-------+-------+
+    ]} *)
 val take : t -> idx:t -> t
 
 val sample_n
