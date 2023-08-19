@@ -185,7 +185,7 @@ val exclude : t -> names:string list -> t
           Data_frame.create_exn
             Series.
               [ int "a" [ 1; 8; 3 ]
-              ; int "b" [4; 5; 2 ]
+              ; int "b" [ 4; 5; 2 ]
               ]
         in
         Data_frame.with_columns_exn df ~exprs:Expr.[
@@ -213,7 +213,7 @@ val exclude : t -> names:string list -> t
           Data_frame.create_exn
             Series.
               [ int "a" [ 1; 8; 3 ]
-              ; int "b" [4; 5; 2 ]
+              ; int "b" [ 4; 5; 2 ]
               ]
         in
         Data_frame.with_columns_exn df ~exprs:Expr.[
@@ -235,8 +235,40 @@ val exclude : t -> names:string list -> t
     ]} *)
 val element : unit -> t
 
+(** [cast] casts the values to a different data type. [strict] defaults to true,
+    and raises an error if the conversion could not be done, for example, due
+    to an overflow.
+
+    {@ocaml[
+      # let df =
+          Data_frame.create_exn
+            Series.
+              [ int "a" [ 1; 8; 3 ]
+              ; string "b" [ "4"; "5"; "2" ]
+              ]
+        in
+        Data_frame.with_columns_exn df ~exprs:Expr.[
+          col "a" |> cast ~to_:Float64
+        ; col "b" |> cast ~to_:Int32
+        ]
+      - : Data_frame.t =
+      shape: (3, 2)
+      +-----+-----+
+      | a   | b   |
+      | --- | --- |
+      | f64 | i32 |
+      +===========+
+      | 1.0 | 4   |
+      | 8.0 | 5   |
+      | 3.0 | 2   |
+      +-----+-----+
+    ]} *)
 val cast : ?strict:bool -> t -> to_:Data_type.t -> t
+
+(** [null], [int], [float], [bool], [string], [naive_date], [naive_datetime], and
+    [series] are expressions representing literal values. *)
 val null : unit -> t
+
 val int : int -> t
 val float : float -> t
 val bool : bool -> t
@@ -244,7 +276,84 @@ val string : string -> t
 val naive_date : Common.Naive_date.t -> t
 val naive_datetime : Common.Naive_datetime.t -> t
 val series : Series.t -> t
+
+(** [sort] sorts this column. When used in a projection/selection context, the
+    whole column is sorted. When used in a groupby context, the groups are
+    sorted.
+
+    {@ocaml[
+      # let df =
+          Data_frame.create_exn
+            Series.[ into "a" [ Some 1; None; Some 3; Some 2 ] ]
+      ...
+
+      # Data_frame.with_columns_exn df ~exprs:Expr.[ col "a" |> sort ]
+      - : Data_frame.t =
+      shape: (4, 1)
+      +------+
+      | a    |
+      | ---  |
+      | i64  |
+      +======+
+      | null |
+      | 1    |
+      | 2    |
+      | 3    |
+      +------+
+
+      # Data_frame.with_columns_exn df ~exprs:Expr.[ col "a" |> sort ~descending:true ]
+      - : Data_frame.t =
+      shape: (4, 1)
+      +------+
+      | a    |
+      | ---  |
+      | i64  |
+      +======+
+      | null |
+      | 3    |
+      | 2    |
+      | 1    |
+      +------+
+
+      # let df =
+          Data_frame.create_exn
+            Series.
+              [ string "group" [ "one"; "one"; "one"; "two"; "two"; "two" ]
+              ; int "value" [ 1; 98; 2; 3; 99; 4 ]
+              ]
+      val df : Data_frame.t =
+        shape: (6, 2)
+      +-------+-------+
+      | group | value |
+      | ---   | ---   |
+      | str   | i64   |
+      +===============+
+      | one   | 1     |
+      | one   | 98    |
+      | one   | 2     |
+      | two   | 3     |
+      | two   | 99    |
+      | two   | 4     |
+      +-------+-------+
+
+      # Data_frame.groupby
+          df
+          ~by:Expr.[ col "group" ]
+          ~agg:Expr.[ col "value" |> sort ]
+      - : (Data_frame.t, string) result =
+      Core.Ok
+       shape: (2, 2)
+      +-------+------------+
+      | group | value      |
+      | ---   | ---        |
+      | str   | list[i64]  |
+      +====================+
+      | one   | [1, 2, 98] |
+      | two   | [3, 4, 99] |
+      +-------+------------+
+    ]} *)
 val sort : ?descending:bool -> t -> t
+
 val sort_by : ?descending:bool -> t -> by:t list -> t
 val set_sorted_flag : t -> sorted:[ `Ascending | `Descending | `Not ] -> t
 val first : t -> t

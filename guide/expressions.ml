@@ -609,7 +609,6 @@ let%expect_test "Aggregation" =
   let df =
     Data_frame.lazy_ dataset
     |> Lazy_frame.groupby
-         ~is_stable:true
          ~by:Expr.[ col "first_name" ]
          ~agg:
            Expr.
@@ -639,7 +638,6 @@ let%expect_test "Aggregation" =
   let df =
     Data_frame.lazy_ dataset
     |> Lazy_frame.groupby
-         ~is_stable:true
          ~by:Expr.[ col "state" ]
          ~agg:
            Expr.
@@ -668,7 +666,6 @@ let%expect_test "Aggregation" =
   let df =
     Data_frame.lazy_ dataset
     |> Lazy_frame.groupby
-         ~is_stable:true
          ~by:Expr.[ col "state"; col "party" ]
          ~agg:Expr.[ col "party" |> count |> alias ~name:"count" ]
     |> Lazy_frame.filter
@@ -705,7 +702,6 @@ let%expect_test "Aggregation" =
   let df =
     Data_frame.lazy_ dataset
     |> Lazy_frame.groupby
-         ~is_stable:true
          ~by:Expr.[ col "state" ]
          ~agg:
            Expr.
@@ -737,7 +733,6 @@ let%expect_test "Aggregation" =
     Data_frame.lazy_ dataset
     |> Lazy_frame.sort ~by_column:"birthday" ~descending:true ~nulls_last:true
     |> Lazy_frame.groupby
-         ~is_stable:true
          ~by:Expr.[ col "state" ]
          ~agg:
            Expr.
@@ -766,7 +761,6 @@ let%expect_test "Aggregation" =
     Data_frame.lazy_ dataset
     |> Lazy_frame.sort ~by_column:"birthday" ~descending:true ~nulls_last:true
     |> Lazy_frame.groupby
-         ~is_stable:true
          ~by:Expr.[ col "state" ]
          ~agg:
            Expr.
@@ -796,7 +790,6 @@ let%expect_test "Aggregation" =
     Data_frame.lazy_ dataset
     |> Lazy_frame.sort ~by_column:"birthday" ~descending:true ~nulls_last:true
     |> Lazy_frame.groupby
-         ~is_stable:true
          ~by:Expr.[ col "state" ]
          ~agg:
            Expr.
