@@ -96,6 +96,10 @@ fn ocaml_interop_export_implementation(item_fn: syn::ItemFn, args: MacroArgs) ->
                 }) {
                     Ok(value) => value,
                     Err(cause) => {
+                        {
+                            println!("caught panic");
+                        }
+
                         // This is only safe if the runtime lock is held, which
                         // *won't* be the case if any Rust code panics while we have
                         // given up the runtime lock. I think when we start adding
@@ -271,6 +275,12 @@ pub fn ocaml_interop_backtrace_support(_item: TokenStream) -> TokenStream {
             cr: &mut &mut ::ocaml_interop::OCamlRuntime,
             cause: String
         ) -> ! {
+
+            {
+                println!("raising ocaml exception");
+            }
+
+
             let error_message = {
                 let last_backtrace = LAST_BACKTRACE.with(|last_backtrace| last_backtrace.take());
 
@@ -301,6 +311,11 @@ pub fn ocaml_interop_backtrace_support(_item: TokenStream) -> TokenStream {
             cr: &mut &mut ::ocaml_interop::OCamlRuntime,
             cause: Box<dyn ::core::any::Any + Send>
         ) -> ! {
+
+            {
+                println!("raising ocaml exception from panic");
+            }
+
             let error_message =
                 if let Some(cause) = cause.downcast_ref::<&str>() {
                     cause.to_string()
