@@ -1,1 +1,1 @@
-let () = print_endline "Hello, World!"
+let () = Polars.Common.For_testing.panic "This is a panic"
