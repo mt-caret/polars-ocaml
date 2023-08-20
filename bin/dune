@@ -2,4 +2,5 @@
  (package polars)
  (public_name polars)
  (name main)
- (libraries polars))
+ (libraries polars)
+ (ocamlopt_flags -cc c++))
