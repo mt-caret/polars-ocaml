@@ -34,6 +34,13 @@ module Naive_date = struct
          ~error:(Error.create_s [%message "Unexpected invalid date" (date : Date.t)])
   ;;
 
+  external to_ocaml : t -> int * int * int = "rust_naive_date_to_ocaml"
+
+  let to_date_exn t =
+    let year, month, day = to_ocaml t in
+    Date.create_exn ~y:year ~m:(Month.of_int_exn month) ~d:day
+  ;;
+
   let of_string str = Date.of_string str |> of_date
 end
 

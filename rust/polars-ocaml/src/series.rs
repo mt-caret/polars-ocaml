@@ -127,6 +127,25 @@ fn series_new(
         GADTDataType::Float64 => create_series!(OCamlFloat, f64),
         GADTDataType::Utf8 => create_series!(String, String),
         GADTDataType::Binary => create_series!(OCamlBytes, Vec<u8>),
+        GADTDataType::Date => {
+            if are_values_options {
+                let values: Vec<Option<NaiveDate>> = values
+                    .into_iter()
+                    .map(|v| v.interpret::<Option<DynBox<NaiveDate>>>(cr).to_rust())
+                    .map(|v: Option<Abstract<NaiveDate>>| v.map(|Abstract(naive_date)| naive_date))
+                    .collect();
+
+                Ok(Series::new(&name, values))
+            } else {
+                let values: Vec<NaiveDate> = values
+                    .into_iter()
+                    .map(|v| v.interpret::<DynBox<NaiveDate>>(cr).to_rust())
+                    .map(|Abstract(naive_date)| naive_date)
+                    .collect();
+
+                Ok(Series::new(&name, values))
+            }
+        }
         GADTDataType::List(data_type) => {
             if are_values_options {
                 let values: Vec<Option<Series>> = values
@@ -396,6 +415,24 @@ fn series_to_boxrooted_ocaml_list<'a>(
                 buf
             })
         }
+        GADTDataType::Date => {
+            let ca = series.date().map_err(|err| err.to_string())?;
+
+            create_boxrooted_ocaml_list_handle_nulls!(
+                Abstract<NaiveDate>,
+                DynBox<NaiveDate>,
+                ca.as_date_iter().map(|o| o.map(Abstract)).collect(),
+                {
+                    let mut buf = Vec::with_capacity(ca.len());
+                    for arr in ca.downcast_iter() {
+                        buf.extend(arr.values_iter().map(|date| {
+                            Abstract(arrow2::temporal_conversions::date32_to_date(*date))
+                        }))
+                    }
+                    buf
+                }
+            )
+        }
         GADTDataType::List(data_type) => {
             let ca = series.list().map_err(|err| err.to_string())?;
 
@@ -531,6 +568,15 @@ fn series_get<'a>(
             &[u8],
             String,
             series.binary().map_err(|err| err.to_string())?.get(index)
+        ),
+        GADTDataType::Date => extract_value!(
+            Abstract<NaiveDate>,
+            DynBox<NaiveDate>,
+            series
+                .date()
+                .map_err(|err| err.to_string())?
+                .get(index)
+                .map(|date| Abstract(arrow2::temporal_conversions::date32_to_date(date)))
         ),
         GADTDataType::List(data_type) => extract_value!(
             DummyBoxRoot,

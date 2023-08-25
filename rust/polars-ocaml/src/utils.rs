@@ -173,6 +173,7 @@ pub enum GADTDataType {
     Float32,
     Float64,
     Utf8,
+    Date,
     Binary,
     List(Box<GADTDataType>),
 }
@@ -192,6 +193,7 @@ impl_from_ocaml_variant! {
         GADTDataType::Float64,
         GADTDataType::Utf8,
         GADTDataType::Binary,
+        GADTDataType::Date,
         GADTDataType::List(data_type: GADTDataType),
     }
 }

@@ -1,6 +1,7 @@
 use crate::utils::PolarsDataType;
 use crate::utils::*;
 use chrono::naive::{NaiveDate, NaiveDateTime};
+use chrono::Datelike;
 use ocaml_interop::{DynBox, OCaml, OCamlInt, OCamlList, OCamlRef, ToOCaml};
 use polars::prelude::*;
 use polars_ocaml_macros::ocaml_interop_export;
@@ -19,6 +20,20 @@ fn rust_naive_date(
     NaiveDate::from_ymd_opt(year, month, day)
         .map(Abstract)
         .to_ocaml(cr)
+}
+
+#[ocaml_interop_export]
+fn rust_naive_date_to_ocaml(
+    cr: &mut &mut OCamlRuntime,
+    date: OCamlRef<DynBox<NaiveDate>>,
+) -> OCaml<(OCamlInt, OCamlInt, OCamlInt)> {
+    let Abstract(date) = date.to_rust(cr);
+
+    let year = date.year() as i64;
+    let month = date.month() as i64;
+    let day = date.day() as i64;
+
+    (year, month, day).to_ocaml(cr)
 }
 
 #[ocaml_interop_export(raise_on_err)]

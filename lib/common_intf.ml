@@ -60,6 +60,7 @@ module type Common = sig
 
     val create : year:int -> month:int -> day:int -> t option
     val of_date : Date.t -> t
+    val to_date_exn : t -> Date.t
     val of_string : string -> t
   end
 

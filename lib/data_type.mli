@@ -51,6 +51,7 @@ module Typed : sig
       | Float64 : float t
       | Utf8 : string t
       | Binary : string t
+      | Date : Common.Naive_date.t t
       | List : 'a t -> 'a list t
 
     (** [strict_type_equal] returns type equality only if the two arguments
