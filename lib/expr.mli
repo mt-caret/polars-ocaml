@@ -590,6 +590,30 @@ val tail : ?length:int -> t -> t
     ]} *)
 val take : t -> idx:t -> t
 
+(** [sample_n] Sample n times from expression:
+
+    {@ocaml[
+      # let df = Data_frame.create_exn Series.[ int "a" [ 1; 2; 3 ] ] in
+        Data_frame.select_exn df ~exprs:Expr.[ col "a" |> sample_n ~seed:0 ~fixed_seed:true ~n:2 ~with_replacement:true ~shuffle:true ]
+      - : Data_frame.t =
+      shape: (2, 1)
+      +-----+
+      | a   |
+      | --- |
+      | i64 |
+      +=====+
+      | 2   |
+      | 2   |
+      +-----+
+    ]}
+
+    @param seed
+      The seed for the random number generator; if not passed will to use the
+      built-in random number generator in Rust.
+
+    @param fixed_seed
+      if true, the seed will not be incremented between draws, making output
+      predictable when executing concurrently (defaults to true). *)
 val sample_n
   :  ?seed:int
   -> ?fixed_seed:bool

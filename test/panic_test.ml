@@ -17,10 +17,10 @@ let%expect_test "test" =
   |> String.substr_replace_all ~pattern:"\\n" ~with_:"\n" (* Expand out newlines *)
   |> String.split_lines
   |> List.filter ~f:(Fn.non (String.is_substring ~substring:" at "))
-     (* Lines containing " at " correpond to file paths, which are noisy *)
+  (* Lines containing " at " correpond to file paths, which are noisy *)
   |> String.concat_lines
   |> String.filter ~f:(Fn.non Char.is_digit)
-     (* Remvoe all digits which may correspond to line/column numbers *)
+  (* Remvoe all digits which may correspond to line/column numbers *)
   |> print_endline;
   [%expect
     {|
