@@ -32,13 +32,33 @@ module T = struct
     -> t
     = "rust_series_new_datetime"
 
+  external datetime_option
+    :  string
+    -> Common.Naive_datetime.t option list
+    -> t
+    = "rust_series_new_datetime_option"
+
   let datetime' name dates =
     datetime name (List.map dates ~f:Common.Naive_datetime.of_date)
+  ;;
+
+  let datetime_option' name dates =
+    datetime_option name (List.map dates ~f:(Option.map ~f:Common.Naive_datetime.of_date))
   ;;
 
   external date : string -> Common.Naive_date.t list -> t = "rust_series_new_date"
 
   let date name dates = date name (List.map dates ~f:Common.Naive_date.of_date)
+
+  external date_option
+    :  string
+    -> Common.Naive_date.t option list
+    -> t
+    = "rust_series_new_date_option"
+
+  let date_option name dates =
+    date_option name (List.map dates ~f:(Option.map ~f:Common.Naive_date.of_date))
+  ;;
 
   external date_range
     :  string
