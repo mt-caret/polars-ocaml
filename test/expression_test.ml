@@ -54,6 +54,33 @@ let%expect_test "Rounding" =
     └────────┴──────┴───────┘ |}]
 ;;
 
+let%expect_test "Exponents" =
+  let df =
+    Data_frame.create_exn [ Series.float "floats" [ -2.; -1.5; 0.; 1.5; 2. ] ]
+    |> Data_frame.with_columns_exn
+         ~exprs:
+           Expr.
+             [ col "floats" |> Fn.flip pow (float 2.) |> alias ~name:"ceil"
+             ; col "floats" |> Fn.flip pow (float 0.5) |> alias ~name:"floor"
+             ]
+  in
+  Data_frame.print df;
+  [%expect
+    {|
+    shape: (5, 3)
+    ┌────────┬──────┬──────────┐
+    │ floats ┆ ceil ┆ floor    │
+    │ ---    ┆ ---  ┆ ---      │
+    │ f64    ┆ f64  ┆ f64      │
+    ╞════════╪══════╪══════════╡
+    │ -2.0   ┆ 4.0  ┆ NaN      │
+    │ -1.5   ┆ 2.25 ┆ NaN      │
+    │ 0.0    ┆ 0.0  ┆ 0.0      │
+    │ 1.5    ┆ 2.25 ┆ 1.224745 │
+    │ 2.0    ┆ 4.0  ┆ 1.414214 │
+    └────────┴──────┴──────────┘ |}]
+;;
+
 let%expect_test "Clamping" =
   let df =
     Data_frame.create_exn

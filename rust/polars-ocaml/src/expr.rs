@@ -349,6 +349,15 @@ fn rust_expr_clip_max_int(
 }
 
 #[ocaml_interop_export]
+fn rust_expr_pow(
+    cr: &mut &mut OCamlRuntime,
+    base: OCamlRef<DynBox<Expr>>,
+    exponent: OCamlRef<DynBox<Expr>>,
+) -> OCaml<DynBox<Expr>> {
+    expr_binary_op(cr, base, exponent, |b, e| b.pow(e))
+}
+
+#[ocaml_interop_export]
 fn rust_expr_sum(cr: &mut &mut OCamlRuntime, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
     expr_unary_op(cr, expr, |expr| expr.sum())
 }
