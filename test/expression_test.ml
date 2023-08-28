@@ -60,25 +60,25 @@ let%expect_test "Exponents" =
     |> Data_frame.with_columns_exn
          ~exprs:
            Expr.
-             [ col "floats" |> Fn.flip pow (float 2.) |> alias ~name:"ceil"
-             ; col "floats" |> Fn.flip pow (float 0.5) |> alias ~name:"floor"
+             [ col "floats" |> Fn.flip pow (float 2.) |> alias ~name:"square"
+             ; col "floats" |> Fn.flip pow (float 0.5) |> alias ~name:"sqrt"
              ]
   in
   Data_frame.print df;
   [%expect
     {|
     shape: (5, 3)
-    ┌────────┬──────┬──────────┐
-    │ floats ┆ ceil ┆ floor    │
-    │ ---    ┆ ---  ┆ ---      │
-    │ f64    ┆ f64  ┆ f64      │
-    ╞════════╪══════╪══════════╡
-    │ -2.0   ┆ 4.0  ┆ NaN      │
-    │ -1.5   ┆ 2.25 ┆ NaN      │
-    │ 0.0    ┆ 0.0  ┆ 0.0      │
-    │ 1.5    ┆ 2.25 ┆ 1.224745 │
-    │ 2.0    ┆ 4.0  ┆ 1.414214 │
-    └────────┴──────┴──────────┘ |}]
+    ┌────────┬────────┬──────────┐
+    │ floats ┆ square ┆ sqrt     │
+    │ ---    ┆ ---    ┆ ---      │
+    │ f64    ┆ f64    ┆ f64      │
+    ╞════════╪════════╪══════════╡
+    │ -2.0   ┆ 4.0    ┆ NaN      │
+    │ -1.5   ┆ 2.25   ┆ NaN      │
+    │ 0.0    ┆ 0.0    ┆ 0.0      │
+    │ 1.5    ┆ 2.25   ┆ 1.224745 │
+    │ 2.0    ┆ 4.0    ┆ 1.414214 │
+    └────────┴────────┴──────────┘ |}]
 ;;
 
 let%expect_test "Clamping" =
