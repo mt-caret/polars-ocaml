@@ -7,14 +7,14 @@ let%expect_test "unit tests" =
   [%expect {| ((1) () (2)) |}];
   (* Trying to convert to non-null list when there are nulls should raise *)
   Expect_test_helpers_core.require_does_raise [%here] (fun () ->
-    ignore (Series.to_list Int64 series));
+    Series.to_list Int64 series);
   [%expect
     {|
     (Failure
      "Polars panicked: Series contains 1 null values, expected none\nbacktrace not captured") |}];
   (* Trying to convert to list of different type should raise *)
   Expect_test_helpers_core.require_does_raise [%here] (fun () ->
-    ignore (Series.to_option_list Float64 series));
+    Series.to_option_list Float64 series);
   [%expect
     {|
     (Failure

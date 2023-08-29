@@ -70,6 +70,7 @@ module T = struct
   external clip_max_float : t -> max:float -> t = "rust_expr_clip_max_float"
   external clip_min_int : t -> min:int -> t = "rust_expr_clip_min_int"
   external clip_max_int : t -> max:int -> t = "rust_expr_clip_max_int"
+  external pow : t -> t -> t = "rust_expr_pow"
   external sum : t -> t = "rust_expr_sum"
   external mean : t -> t = "rust_expr_mean"
   external median : t -> t = "rust_expr_median"
