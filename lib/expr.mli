@@ -590,7 +590,7 @@ val tail : ?length:int -> t -> t
     ]} *)
 val take : t -> idx:t -> t
 
-(** [sample_n] Sample n times from expression:
+(** [sample_n] samples n times from expression:
 
     {@ocaml[
       # let df = Data_frame.create_exn Series.[ int "a" [ 1; 2; 3 ] ] in
@@ -623,7 +623,22 @@ val sample_n
   -> shuffle:bool
   -> t
 
+(** [filter] filters a single column according to a predicate:
+
+    {@ocaml[
+      # let df = Data_frame.create_exn Series.[ string "group_col" [ "g1"; "g1"; "g2" ]; int "b" [ 1; 2; 3 ] ] in
+        Data_frame.groupby_exn df ~by:Expr.[ col "group_col" ] ~agg:Expr.[ col "b" |> filter ~predicate:(col "b" < int 2) |> sum |> alias ~name:"lt"; col "b" |> filter ~predicate:(col "b" >= int 2) |> sum |> alias ~name:"gte" ]
+        |> Data_frame.sort_exn ~by:[ col "group_col" ]
+      Line 3, characters 30-49:
+      Error: The function applied to this argument has type
+               ?descending:bool list ->
+               ?maintain_order:bool ->
+               Polars.Data_frame.t ->
+               by_column:string list -> Polars__Data_frame0.t
+      This argument cannot be applied with label ~by
+    ]} *)
 val filter : t -> predicate:t -> t
+
 val ceil : t -> t
 val floor : t -> t
 val clip_min_float : t -> min:float -> t
