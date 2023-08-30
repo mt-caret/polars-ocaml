@@ -52,6 +52,12 @@ module Typed : sig
       | Utf8 : string t
       | Binary : string t
       | List : 'a t -> 'a list t
+      | Custom :
+          { data_type : 'a t
+          ; f : 'a -> 'b
+          ; f_inverse : 'b -> 'a
+          }
+          -> 'b t
 
     (** [strict_type_equal] returns type equality only if the two arguments
         correspond to the same exact branch. *)

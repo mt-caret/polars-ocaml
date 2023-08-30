@@ -47,7 +47,7 @@ include T
 include Sexpable.To_stringable (T)
 
 module Typed = struct
-  type untyped = t [@@deriving compare, sexp_of]
+  type untyped = t [@@deriving compare, sexp, quickcheck]
 
   (* TODO: Consider mapping to smaller OCaml values like Int8, Float32, etc instead of
      casting up *)
@@ -66,6 +66,12 @@ module Typed = struct
     | Utf8 : string t
     | Binary : string t
     | List : 'a t -> 'a list t
+    | Custom :
+        { data_type : 'a t
+        ; f : 'a -> 'b
+        ; f_inverse : 'b -> 'a
+        }
+        -> 'b t
 
   let rec strict_type_equal : type a b. a t -> b t -> (a, b) Type_equal.t option =
     fun t1 t2 ->
@@ -107,6 +113,7 @@ module Typed = struct
     | Utf8 -> Utf8
     | Binary -> Binary
     | List t -> List (to_untyped t)
+    | Custom { data_type; f = _; f_inverse = _ } -> to_untyped data_type
   ;;
 
   let rec of_untyped : untyped -> packed option = function
@@ -127,11 +134,34 @@ module Typed = struct
     | Date | Datetime _ | Duration _ | Time | Null | Struct _ | Unknown -> None
   ;;
 
-  let sexp_of_packed (T t) = [%sexp_of: untyped] (to_untyped t)
+  let rec sexp_of_packed (T t) =
+    match t with
+    | Custom { data_type; f = _; f_inverse = _ } ->
+      let sexp = sexp_of_packed (T data_type) in
+      [%message "Custom" ~_:(sexp : Sexp.t)]
+    | _ -> [%sexp_of: untyped] (to_untyped t)
+  ;;
+
   let compare_packed (T t1) (T t2) = [%compare: untyped] (to_untyped t1) (to_untyped t2)
 
+  type 'a wrapped =
+    | Just of 'a
+    | Wrapped of 'a wrapped
+  [@@deriving quickcheck]
+
+  let rec unwrap : packed wrapped -> packed = function
+    | Just t -> t
+    | Wrapped wrapped ->
+      let (T data_type) = unwrap wrapped in
+      T (Custom { data_type; f = Fn.id; f_inverse = Fn.id })
+  ;;
+
   let quickcheck_generator_packed =
-    Quickcheck.Generator.filter_map quickcheck_generator ~f:of_untyped
+    let generator_without_custom =
+      Quickcheck.Generator.filter_map quickcheck_generator ~f:of_untyped
+    in
+    quickcheck_generator_wrapped generator_without_custom
+    |> Quickcheck.Generator.map ~f:unwrap
   ;;
 
   let quickcheck_shrinker_packed =
