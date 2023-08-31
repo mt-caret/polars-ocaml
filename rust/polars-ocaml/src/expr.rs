@@ -10,6 +10,12 @@ use polars_ocaml_macros::ocaml_interop_export;
 use crate::utils::PolarsDataType;
 use crate::utils::*;
 
+macro_rules! expr_op {
+    ($name:ident, |$($var:ident),+| $body:expr) => {
+        dyn_box_op!($name, Expr, |$($var),+| $body);
+    }
+}
+
 fn expr_series_map<'a>(
     cr: &'a mut &'a mut OCamlRuntime,
     expr: OCamlRef<'a, DynBox<Expr>>,
@@ -161,26 +167,9 @@ fn rust_expr_set_sorted_flag(
     dyn_box!(cr, |expr| expr.set_sorted_flag(is_sorted))
 }
 
-#[ocaml_interop_export]
-fn rust_expr_first(
-    cr: &mut &mut OCamlRuntime,
-    expr: OCamlRef<DynBox<Expr>>,
-) -> OCaml<DynBox<Expr>> {
-    dyn_box!(cr, |expr| expr.first())
-}
-
-#[ocaml_interop_export]
-fn rust_expr_last(cr: &mut &mut OCamlRuntime, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
-    dyn_box!(cr, |expr| expr.last())
-}
-
-#[ocaml_interop_export]
-fn rust_expr_reverse(
-    cr: &mut &mut OCamlRuntime,
-    expr: OCamlRef<DynBox<Expr>>,
-) -> OCaml<DynBox<Expr>> {
-    dyn_box!(cr, |expr| expr.reverse())
-}
+expr_op!(rust_expr_first, |expr| expr.first());
+expr_op!(rust_expr_last, |expr| expr.last());
+expr_op!(rust_expr_reverse, |expr| expr.reverse());
 
 // TODO: the following functions are ~roughly the same between Expr, Series,
 // and DataFrame; it would be nice if we could reduce the boilerplace around
@@ -215,14 +204,7 @@ fn rust_expr_tail(
     dyn_box!(cr, |expr| expr.tail(length))
 }
 
-#[ocaml_interop_export]
-fn rust_expr_take(
-    cr: &mut &mut OCamlRuntime,
-    expr: OCamlRef<DynBox<Expr>>,
-    idx: OCamlRef<DynBox<Expr>>,
-) -> OCaml<DynBox<Expr>> {
-    dyn_box!(cr, |expr, idx| expr.take(idx))
-}
+expr_op!(rust_expr_take, |expr, idx| expr.take(idx));
 
 #[ocaml_interop_export(raise_on_err)]
 fn rust_expr_sample_n(
@@ -251,27 +233,9 @@ fn rust_expr_sample_n(
     ))
 }
 
-#[ocaml_interop_export]
-fn rust_expr_filter(
-    cr: &mut &mut OCamlRuntime,
-    expr: OCamlRef<DynBox<Expr>>,
-    predicate: OCamlRef<DynBox<Expr>>,
-) -> OCaml<DynBox<Expr>> {
-    dyn_box!(cr, |expr, predicate| expr.filter(predicate))
-}
-
-#[ocaml_interop_export]
-fn rust_expr_ceil(cr: &mut &mut OCamlRuntime, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
-    dyn_box!(cr, |expr| expr.ceil())
-}
-
-#[ocaml_interop_export]
-fn rust_expr_floor(
-    cr: &mut &mut OCamlRuntime,
-    expr: OCamlRef<DynBox<Expr>>,
-) -> OCaml<DynBox<Expr>> {
-    dyn_box!(cr, |expr| expr.floor())
-}
+expr_op!(rust_expr_filter, |expr, predicate| expr.filter(predicate));
+expr_op!(rust_expr_ceil, |expr| expr.ceil());
+expr_op!(rust_expr_floor, |expr| expr.floor());
 
 #[ocaml_interop_export]
 fn rust_expr_clip_min_float(
@@ -313,66 +277,15 @@ fn rust_expr_clip_max_int(
     dyn_box!(cr, |expr| expr.clip_max(AnyValue::Int64(max)))
 }
 
-#[ocaml_interop_export]
-fn rust_expr_pow(
-    cr: &mut &mut OCamlRuntime,
-    base: OCamlRef<DynBox<Expr>>,
-    exponent: OCamlRef<DynBox<Expr>>,
-) -> OCaml<DynBox<Expr>> {
-    dyn_box!(cr, |base, exponent| base.pow(exponent))
-}
-
-#[ocaml_interop_export]
-fn rust_expr_sum(cr: &mut &mut OCamlRuntime, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
-    dyn_box!(cr, |expr| expr.sum())
-}
-
-#[ocaml_interop_export]
-fn rust_expr_mean(cr: &mut &mut OCamlRuntime, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
-    dyn_box!(cr, |expr| expr.mean())
-}
-
-#[ocaml_interop_export]
-fn rust_expr_median(
-    cr: &mut &mut OCamlRuntime,
-    expr: OCamlRef<DynBox<Expr>>,
-) -> OCaml<DynBox<Expr>> {
-    dyn_box!(cr, |expr| expr.median())
-}
-
-#[ocaml_interop_export]
-fn rust_expr_max(cr: &mut &mut OCamlRuntime, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
-    dyn_box!(cr, |expr| expr.max())
-}
-
-#[ocaml_interop_export]
-fn rust_expr_min(cr: &mut &mut OCamlRuntime, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
-    dyn_box!(cr, |expr| expr.min())
-}
-
-#[ocaml_interop_export]
-fn rust_expr_arg_max(
-    cr: &mut &mut OCamlRuntime,
-    expr: OCamlRef<DynBox<Expr>>,
-) -> OCaml<DynBox<Expr>> {
-    dyn_box!(cr, |expr| expr.arg_max())
-}
-
-#[ocaml_interop_export]
-fn rust_expr_arg_min(
-    cr: &mut &mut OCamlRuntime,
-    expr: OCamlRef<DynBox<Expr>>,
-) -> OCaml<DynBox<Expr>> {
-    dyn_box!(cr, |expr| expr.arg_min())
-}
-
-#[ocaml_interop_export]
-fn rust_expr_count(
-    cr: &mut &mut OCamlRuntime,
-    expr: OCamlRef<DynBox<Expr>>,
-) -> OCaml<DynBox<Expr>> {
-    dyn_box!(cr, |expr| expr.count())
-}
+expr_op!(rust_expr_pow, |base, exponent| base.pow(exponent));
+expr_op!(rust_expr_sum, |expr| expr.sum());
+expr_op!(rust_expr_mean, |expr| expr.mean());
+expr_op!(rust_expr_median, |expr| expr.median());
+expr_op!(rust_expr_max, |expr| expr.max());
+expr_op!(rust_expr_min, |expr| expr.min());
+expr_op!(rust_expr_arg_max, |expr| expr.arg_max());
+expr_op!(rust_expr_arg_min, |expr| expr.arg_min());
+expr_op!(rust_expr_count, |expr| expr.count());
 
 #[ocaml_interop_export]
 fn rust_expr_count_(cr: &mut &mut OCamlRuntime, unit: OCamlRef<()>) -> OCaml<DynBox<Expr>> {
@@ -380,29 +293,9 @@ fn rust_expr_count_(cr: &mut &mut OCamlRuntime, unit: OCamlRef<()>) -> OCaml<Dyn
     OCaml::box_value(cr, count())
 }
 
-#[ocaml_interop_export]
-fn rust_expr_n_unique(
-    cr: &mut &mut OCamlRuntime,
-    expr: OCamlRef<DynBox<Expr>>,
-) -> OCaml<DynBox<Expr>> {
-    dyn_box!(cr, |expr| expr.n_unique())
-}
-
-#[ocaml_interop_export]
-fn rust_expr_approx_unique(
-    cr: &mut &mut OCamlRuntime,
-    expr: OCamlRef<DynBox<Expr>>,
-) -> OCaml<DynBox<Expr>> {
-    dyn_box!(cr, |expr| expr.approx_unique())
-}
-
-#[ocaml_interop_export]
-fn rust_expr_explode(
-    cr: &mut &mut OCamlRuntime,
-    expr: OCamlRef<DynBox<Expr>>,
-) -> OCaml<DynBox<Expr>> {
-    dyn_box!(cr, |expr| expr.explode())
-}
+expr_op!(rust_expr_n_unique, |expr| expr.n_unique());
+expr_op!(rust_expr_approx_unique, |expr| expr.approx_unique());
+expr_op!(rust_expr_explode, |expr| expr.explode());
 
 #[ocaml_interop_export]
 fn rust_expr_over(
@@ -435,54 +328,13 @@ fn rust_expr_concat_list(
         .to_ocaml(cr)
 }
 
-#[ocaml_interop_export]
-fn rust_expr_null_count(
-    cr: &mut &mut OCamlRuntime,
-    expr: OCamlRef<DynBox<Expr>>,
-) -> OCaml<DynBox<Expr>> {
-    dyn_box!(cr, |expr| expr.null_count())
-}
-
-#[ocaml_interop_export]
-fn rust_expr_is_null(
-    cr: &mut &mut OCamlRuntime,
-    expr: OCamlRef<DynBox<Expr>>,
-) -> OCaml<DynBox<Expr>> {
-    dyn_box!(cr, |expr| expr.is_null())
-}
-
-#[ocaml_interop_export]
-fn rust_expr_is_not_null(
-    cr: &mut &mut OCamlRuntime,
-    expr: OCamlRef<DynBox<Expr>>,
-) -> OCaml<DynBox<Expr>> {
-    dyn_box!(cr, |expr| expr.is_not_null())
-}
-
-#[ocaml_interop_export]
-fn rust_expr_is_nan(
-    cr: &mut &mut OCamlRuntime,
-    expr: OCamlRef<DynBox<Expr>>,
-) -> OCaml<DynBox<Expr>> {
-    dyn_box!(cr, |expr| expr.is_nan())
-}
-
-#[ocaml_interop_export]
-fn rust_expr_is_not_nan(
-    cr: &mut &mut OCamlRuntime,
-    expr: OCamlRef<DynBox<Expr>>,
-) -> OCaml<DynBox<Expr>> {
-    dyn_box!(cr, |expr| expr.is_not_nan())
-}
-
-#[ocaml_interop_export]
-fn rust_expr_fill_null(
-    cr: &mut &mut OCamlRuntime,
-    expr: OCamlRef<DynBox<Expr>>,
-    with: OCamlRef<DynBox<Expr>>,
-) -> OCaml<DynBox<Expr>> {
-    dyn_box!(cr, |expr, with| expr.fill_null(with))
-}
+expr_op!(rust_expr_null_count, |expr| expr.null_count());
+expr_op!(rust_expr_is_null, |expr| expr.is_null());
+expr_op!(rust_expr_is_not_null, |expr| expr.is_not_null());
+expr_op!(rust_expr_is_nan, |expr| expr.is_nan());
+expr_op!(rust_expr_is_not_nan, |expr| expr.is_not_nan());
+expr_op!(rust_expr_fill_null, |expr, with| expr.fill_null(with));
+expr_op!(rust_expr_fill_nan, |expr, with| expr.fill_nan(with));
 
 #[ocaml_interop_export]
 fn rust_expr_fill_null_with_strategy(
@@ -507,15 +359,6 @@ fn rust_expr_interpolate(
 ) -> OCaml<DynBox<Expr>> {
     let PolarsInterpolationMethod(method) = method.to_rust(cr);
     dyn_box!(cr, |expr| expr.interpolate(method))
-}
-
-#[ocaml_interop_export]
-fn rust_expr_fill_nan(
-    cr: &mut &mut OCamlRuntime,
-    expr: OCamlRef<DynBox<Expr>>,
-    with: OCamlRef<DynBox<Expr>>,
-) -> OCaml<DynBox<Expr>> {
-    dyn_box!(cr, |expr, with| expr.fill_nan(with))
 }
 
 #[ocaml_interop_export(raise_on_err)]
@@ -683,136 +526,21 @@ fn rust_expr_round(
     dyn_box!(cr, |expr| expr.round(decimals))
 }
 
-#[ocaml_interop_export]
-fn rust_expr_eq(
-    cr: &mut &mut OCamlRuntime,
-    expr: OCamlRef<DynBox<Expr>>,
-    other: OCamlRef<DynBox<Expr>>,
-) -> OCaml<DynBox<Expr>> {
-    dyn_box!(cr, |expr, other| expr.eq(other))
-}
-
-#[ocaml_interop_export]
-fn rust_expr_neq(
-    cr: &mut &mut OCamlRuntime,
-    expr: OCamlRef<DynBox<Expr>>,
-    other: OCamlRef<DynBox<Expr>>,
-) -> OCaml<DynBox<Expr>> {
-    dyn_box!(cr, |expr, other| expr.neq(other))
-}
-
-#[ocaml_interop_export]
-fn rust_expr_gt(
-    cr: &mut &mut OCamlRuntime,
-    expr: OCamlRef<DynBox<Expr>>,
-    other: OCamlRef<DynBox<Expr>>,
-) -> OCaml<DynBox<Expr>> {
-    dyn_box!(cr, |expr, other| expr.gt(other))
-}
-
-#[ocaml_interop_export]
-fn rust_expr_gt_eq(
-    cr: &mut &mut OCamlRuntime,
-    expr: OCamlRef<DynBox<Expr>>,
-    other: OCamlRef<DynBox<Expr>>,
-) -> OCaml<DynBox<Expr>> {
-    dyn_box!(cr, |expr, other| expr.gt_eq(other))
-}
-
-#[ocaml_interop_export]
-fn rust_expr_lt(
-    cr: &mut &mut OCamlRuntime,
-    expr: OCamlRef<DynBox<Expr>>,
-    other: OCamlRef<DynBox<Expr>>,
-) -> OCaml<DynBox<Expr>> {
-    dyn_box!(cr, |expr, other| expr.lt(other))
-}
-
-#[ocaml_interop_export]
-fn rust_expr_lt_eq(
-    cr: &mut &mut OCamlRuntime,
-    expr: OCamlRef<DynBox<Expr>>,
-    other: OCamlRef<DynBox<Expr>>,
-) -> OCaml<DynBox<Expr>> {
-    dyn_box!(cr, |expr, other| expr.lt_eq(other))
-}
-
-#[ocaml_interop_export]
-fn rust_expr_not(cr: &mut &mut OCamlRuntime, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
-    dyn_box!(cr, |expr| expr.not())
-}
-
-#[ocaml_interop_export]
-fn rust_expr_and(
-    cr: &mut &mut OCamlRuntime,
-    expr: OCamlRef<DynBox<Expr>>,
-    other: OCamlRef<DynBox<Expr>>,
-) -> OCaml<DynBox<Expr>> {
-    dyn_box!(cr, |expr, other| expr.and(other))
-}
-
-#[ocaml_interop_export]
-fn rust_expr_or(
-    cr: &mut &mut OCamlRuntime,
-    expr: OCamlRef<DynBox<Expr>>,
-    other: OCamlRef<DynBox<Expr>>,
-) -> OCaml<DynBox<Expr>> {
-    dyn_box!(cr, |expr, other| expr.or(other))
-}
-
-#[ocaml_interop_export]
-fn rust_expr_xor(
-    cr: &mut &mut OCamlRuntime,
-    expr: OCamlRef<DynBox<Expr>>,
-    other: OCamlRef<DynBox<Expr>>,
-) -> OCaml<DynBox<Expr>> {
-    dyn_box!(cr, |expr, other| expr.xor(other))
-}
-
-#[ocaml_interop_export]
-fn rust_expr_add(
-    cr: &mut &mut OCamlRuntime,
-    expr: OCamlRef<DynBox<Expr>>,
-    other: OCamlRef<DynBox<Expr>>,
-) -> OCaml<DynBox<Expr>> {
-    dyn_box!(cr, |expr, other| expr + other)
-}
-
-#[ocaml_interop_export]
-fn rust_expr_sub(
-    cr: &mut &mut OCamlRuntime,
-    expr: OCamlRef<DynBox<Expr>>,
-    other: OCamlRef<DynBox<Expr>>,
-) -> OCaml<DynBox<Expr>> {
-    dyn_box!(cr, |expr, other| expr - other)
-}
-
-#[ocaml_interop_export]
-fn rust_expr_mul(
-    cr: &mut &mut OCamlRuntime,
-    expr: OCamlRef<DynBox<Expr>>,
-    other: OCamlRef<DynBox<Expr>>,
-) -> OCaml<DynBox<Expr>> {
-    dyn_box!(cr, |expr, other| expr * other)
-}
-
-#[ocaml_interop_export]
-fn rust_expr_div(
-    cr: &mut &mut OCamlRuntime,
-    expr: OCamlRef<DynBox<Expr>>,
-    other: OCamlRef<DynBox<Expr>>,
-) -> OCaml<DynBox<Expr>> {
-    dyn_box!(cr, |expr, other| expr / other)
-}
-
-#[ocaml_interop_export]
-fn rust_expr_floor_div(
-    cr: &mut &mut OCamlRuntime,
-    expr: OCamlRef<DynBox<Expr>>,
-    other: OCamlRef<DynBox<Expr>>,
-) -> OCaml<DynBox<Expr>> {
-    dyn_box!(cr, |expr, other| expr.floor_div(other))
-}
+expr_op!(rust_expr_eq, |expr, other| expr.eq(other));
+expr_op!(rust_expr_neq, |expr, other| expr.neq(other));
+expr_op!(rust_expr_gt, |expr, other| expr.gt(other));
+expr_op!(rust_expr_gt_eq, |expr, other| expr.gt_eq(other));
+expr_op!(rust_expr_lt, |expr, other| expr.lt(other));
+expr_op!(rust_expr_lt_eq, |expr, other| expr.lt_eq(other));
+expr_op!(rust_expr_not, |expr| expr.not());
+expr_op!(rust_expr_and, |expr, other| expr.and(other));
+expr_op!(rust_expr_or, |expr, other| expr.or(other));
+expr_op!(rust_expr_xor, |expr, other| expr.xor(other));
+expr_op!(rust_expr_add, |expr, other| expr + other);
+expr_op!(rust_expr_sub, |expr, other| expr - other);
+expr_op!(rust_expr_mul, |expr, other| expr * other);
+expr_op!(rust_expr_div, |expr, other| expr / other);
+expr_op!(rust_expr_floor_div, |expr, other| expr.floor_div(other));
 
 #[ocaml_interop_export]
 fn rust_expr_dt_strftime(
@@ -848,29 +576,9 @@ fn rust_expr_dt_replace_time_zone(
     })
 }
 
-#[ocaml_interop_export]
-fn rust_expr_dt_year(
-    cr: &mut &mut OCamlRuntime,
-    expr: OCamlRef<DynBox<Expr>>,
-) -> OCaml<DynBox<Expr>> {
-    dyn_box!(cr, |expr| expr.dt().year())
-}
-
-#[ocaml_interop_export]
-fn rust_expr_dt_month(
-    cr: &mut &mut OCamlRuntime,
-    expr: OCamlRef<DynBox<Expr>>,
-) -> OCaml<DynBox<Expr>> {
-    dyn_box!(cr, |expr| expr.dt().month())
-}
-
-#[ocaml_interop_export]
-fn rust_expr_dt_day(
-    cr: &mut &mut OCamlRuntime,
-    expr: OCamlRef<DynBox<Expr>>,
-) -> OCaml<DynBox<Expr>> {
-    dyn_box!(cr, |expr| expr.dt().day())
-}
+expr_op!(rust_expr_dt_year, |expr| expr.dt().year());
+expr_op!(rust_expr_dt_month, |expr| expr.dt().month());
+expr_op!(rust_expr_dt_day, |expr| expr.dt().day());
 
 #[ocaml_interop_export]
 fn rust_expr_dt_days(
@@ -1202,21 +910,8 @@ fn rust_expr_str_rstrip(
     dyn_box!(cr, |expr| expr.str().rstrip(matches))
 }
 
-#[ocaml_interop_export]
-fn rust_expr_str_to_lowercase(
-    cr: &mut &mut OCamlRuntime,
-    expr: OCamlRef<DynBox<Expr>>,
-) -> OCaml<DynBox<Expr>> {
-    dyn_box!(cr, |expr| expr.str().to_lowercase())
-}
-
-#[ocaml_interop_export]
-fn rust_expr_str_to_uppercase(
-    cr: &mut &mut OCamlRuntime,
-    expr: OCamlRef<DynBox<Expr>>,
-) -> OCaml<DynBox<Expr>> {
-    dyn_box!(cr, |expr| expr.str().to_uppercase())
-}
+expr_op!(rust_expr_str_to_lowercase, |expr| expr.str().to_lowercase());
+expr_op!(rust_expr_str_to_uppercase, |expr| expr.str().to_uppercase());
 
 #[ocaml_interop_export(raise_on_err)]
 fn rust_expr_str_slice(
@@ -1232,51 +927,13 @@ fn rust_expr_str_slice(
     dyn_box!(cr, |expr| expr.str().str_slice(start, length))
 }
 
-#[ocaml_interop_export]
-fn rust_expr_list_lengths(
-    cr: &mut &mut OCamlRuntime,
-    expr: OCamlRef<DynBox<Expr>>,
-) -> OCaml<DynBox<Expr>> {
-    dyn_box!(cr, |expr| expr.list().lengths())
-}
-
-#[ocaml_interop_export]
-fn rust_expr_list_slice(
-    cr: &mut &mut OCamlRuntime,
-    expr: OCamlRef<DynBox<Expr>>,
-    offset: OCamlRef<DynBox<Expr>>,
-    length: OCamlRef<DynBox<Expr>>,
-) -> OCaml<DynBox<Expr>> {
-    dyn_box!(cr, |expr, offset, length| {
-        expr.list().slice(offset, length)
-    })
-}
-
-#[ocaml_interop_export]
-fn rust_expr_list_head(
-    cr: &mut &mut OCamlRuntime,
-    expr: OCamlRef<DynBox<Expr>>,
-    n: OCamlRef<DynBox<Expr>>,
-) -> OCaml<DynBox<Expr>> {
-    dyn_box!(cr, |expr, n| expr.list().head(n))
-}
-
-#[ocaml_interop_export]
-fn rust_expr_list_tail(
-    cr: &mut &mut OCamlRuntime,
-    expr: OCamlRef<DynBox<Expr>>,
-    n: OCamlRef<DynBox<Expr>>,
-) -> OCaml<DynBox<Expr>> {
-    dyn_box!(cr, |expr, n| expr.list().tail(n))
-}
-
-#[ocaml_interop_export]
-fn rust_expr_list_sum(
-    cr: &mut &mut OCamlRuntime,
-    expr: OCamlRef<DynBox<Expr>>,
-) -> OCaml<DynBox<Expr>> {
-    dyn_box!(cr, |expr| expr.list().sum())
-}
+expr_op!(rust_expr_list_lengths, |expr| expr.list().lengths());
+expr_op!(rust_expr_list_slice, |expr, offset, length| {
+    expr.list().slice(offset, length)
+});
+expr_op!(rust_expr_list_head, |expr, n| expr.list().head(n));
+expr_op!(rust_expr_list_tail, |expr, n| expr.list().tail(n));
+expr_op!(rust_expr_list_sum, |expr| expr.list().sum());
 
 #[ocaml_interop_export]
 fn rust_expr_list_eval(

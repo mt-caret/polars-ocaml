@@ -203,8 +203,7 @@ fn rust_data_frame_lazy(
     cr: &mut &mut OCamlRuntime,
     data_frame: OCamlRef<DynBox<DataFrame>>,
 ) -> OCaml<DynBox<LazyFrame>> {
-    let Abstract(data_frame) = data_frame.to_rust(cr);
-    OCaml::box_value(cr, data_frame.lazy())
+    dyn_box!(cr, |data_frame| data_frame.lazy())
 }
 
 #[ocaml_interop_export]
@@ -213,13 +212,9 @@ fn rust_data_frame_column(
     data_frame: OCamlRef<DynBox<DataFrame>>,
     name: OCamlRef<String>,
 ) -> OCaml<Result<DynBox<Series>, String>> {
-    let Abstract(data_frame) = data_frame.to_rust(cr);
     let name: String = name.to_rust(cr);
-    data_frame
-        .column(&name)
-        .map(|series| Abstract(series.clone()))
-        .map_err(|err| err.to_string())
-        .to_ocaml(cr)
+
+    dyn_box_result!(cr, |data_frame| data_frame.column(&name).cloned())
 }
 
 #[ocaml_interop_export]
@@ -313,8 +308,6 @@ fn rust_data_frame_pivot(
     separator: OCamlRef<Option<String>>,
     stable: OCamlRef<bool>,
 ) -> OCaml<Result<DynBox<DataFrame>, String>> {
-    let Abstract(data_frame) = data_frame.to_rust(cr);
-
     let values: Vec<String> = values.to_rust(cr);
     let index: Vec<String> = index.to_rust(cr);
     let columns: Vec<String> = columns.to_rust(cr);
@@ -326,30 +319,29 @@ fn rust_data_frame_pivot(
 
     let stable: bool = stable.to_rust(cr);
 
-    if stable {
-        pivot::pivot_stable(
-            &data_frame,
-            &values,
-            &index,
-            &columns,
-            sort_columns,
-            agg_expr,
-            separator.as_deref(),
-        )
-    } else {
-        pivot::pivot(
-            &data_frame,
-            &values,
-            &index,
-            &columns,
-            sort_columns,
-            agg_expr,
-            separator.as_deref(),
-        )
-    }
-    .map(Abstract)
-    .map_err(|err| err.to_string())
-    .to_ocaml(cr)
+    dyn_box_result!(cr, |data_frame| {
+        if stable {
+            pivot::pivot_stable(
+                &data_frame,
+                &values,
+                &index,
+                &columns,
+                sort_columns,
+                agg_expr,
+                separator.as_deref(),
+            )
+        } else {
+            pivot::pivot(
+                &data_frame,
+                &values,
+                &index,
+                &columns,
+                sort_columns,
+                agg_expr,
+                separator.as_deref(),
+            )
+        }
+    })
 }
 
 #[ocaml_interop_export]
@@ -362,8 +354,6 @@ fn rust_data_frame_melt(
     value_name: OCamlRef<Option<String>>,
     streamable: OCamlRef<bool>,
 ) -> OCaml<Result<DynBox<DataFrame>, String>> {
-    let Abstract(data_frame) = data_frame.to_rust(cr);
-
     let id_vars: Vec<SmartString<LazyCompact>> = id_vars
         .to_rust::<Vec<String>>(cr)
         .into_iter()
@@ -388,11 +378,8 @@ fn rust_data_frame_melt(
         value_name,
         streamable,
     };
-    data_frame
-        .melt2(melt_args)
-        .map(Abstract)
-        .map_err(|err| err.to_string())
-        .to_ocaml(cr)
+
+    dyn_box_result!(cr, |data_frame| data_frame.melt2(melt_args))
 }
 
 #[ocaml_interop_export]
@@ -403,16 +390,13 @@ fn rust_data_frame_sort(
     descending: OCamlRef<OCamlList<bool>>,
     maintain_order: OCamlRef<bool>,
 ) -> OCaml<Result<DynBox<DataFrame>, String>> {
-    let Abstract(data_frame) = data_frame.to_rust(cr);
     let by_column: Vec<String> = by_column.to_rust(cr);
     let descending: Vec<bool> = descending.to_rust(cr);
     let maintain_order: bool = maintain_order.to_rust(cr);
 
-    data_frame
-        .sort(by_column, descending, maintain_order)
-        .map(Abstract)
-        .map_err(|err| err.to_string())
-        .to_ocaml(cr)
+    dyn_box_result!(cr, |data_frame| {
+        data_frame.sort(by_column, descending, maintain_order)
+    })
 }
 
 #[ocaml_interop_export(raise_on_err)]
@@ -421,12 +405,11 @@ fn rust_data_frame_head(
     data_frame: OCamlRef<DynBox<DataFrame>>,
     length: OCamlRef<Option<OCamlInt>>,
 ) -> OCaml<DynBox<DataFrame>> {
-    let Abstract(data_frame) = data_frame.to_rust(cr);
     let length = length
         .to_rust::<Coerce<_, Option<i64>, Option<usize>>>(cr)
         .get()?;
 
-    Abstract(data_frame.head(length)).to_ocaml(cr)
+    dyn_box!(cr, |data_frame| data_frame.head(length))
 }
 
 #[ocaml_interop_export(raise_on_err)]
@@ -435,12 +418,11 @@ fn rust_data_frame_tail(
     data_frame: OCamlRef<DynBox<DataFrame>>,
     length: OCamlRef<Option<OCamlInt>>,
 ) -> OCaml<DynBox<DataFrame>> {
-    let Abstract(data_frame) = data_frame.to_rust(cr);
     let length = length
         .to_rust::<Coerce<_, Option<i64>, Option<usize>>>(cr)
         .get()?;
 
-    Abstract(data_frame.tail(length)).to_ocaml(cr)
+    dyn_box!(cr, |data_frame| data_frame.tail(length))
 }
 
 #[ocaml_interop_export(raise_on_err)]
@@ -452,7 +434,6 @@ fn rust_data_frame_sample_n(
     shuffle: OCamlRef<bool>,
     seed: OCamlRef<Option<OCamlInt>>,
 ) -> OCaml<Result<DynBox<DataFrame>, String>> {
-    let Abstract(data_frame) = data_frame.to_rust(cr);
     let n = n.to_rust::<Coerce<_, i64, usize>>(cr).get()?;
     let with_replacement: bool = with_replacement.to_rust(cr);
     let shuffle: bool = shuffle.to_rust(cr);
@@ -460,48 +441,23 @@ fn rust_data_frame_sample_n(
         .to_rust::<Coerce<_, Option<i64>, Option<u64>>>(cr)
         .get()?;
 
-    data_frame
-        .sample_n(n, with_replacement, shuffle, seed)
-        .map(Abstract)
-        .map_err(|err| err.to_string())
-        .to_ocaml(cr)
+    dyn_box_result!(cr, |data_frame| {
+        data_frame.sample_n(n, with_replacement, shuffle, seed)
+    })
 }
 
-#[ocaml_interop_export]
-fn rust_data_frame_sum(
-    cr: &mut &mut OCamlRuntime,
-    data_frame: OCamlRef<DynBox<DataFrame>>,
-) -> OCaml<DynBox<DataFrame>> {
-    let Abstract(data_frame) = data_frame.to_rust(cr);
-    Abstract(data_frame.sum()).to_ocaml(cr)
-}
-
-#[ocaml_interop_export]
-fn rust_data_frame_mean(
-    cr: &mut &mut OCamlRuntime,
-    data_frame: OCamlRef<DynBox<DataFrame>>,
-) -> OCaml<DynBox<DataFrame>> {
-    let Abstract(data_frame) = data_frame.to_rust(cr);
-    Abstract(data_frame.mean()).to_ocaml(cr)
-}
-
-#[ocaml_interop_export]
-fn rust_data_frame_median(
-    cr: &mut &mut OCamlRuntime,
-    data_frame: OCamlRef<DynBox<DataFrame>>,
-) -> OCaml<DynBox<DataFrame>> {
-    let Abstract(data_frame) = data_frame.to_rust(cr);
-    Abstract(data_frame.median()).to_ocaml(cr)
-}
-
-#[ocaml_interop_export]
-fn rust_data_frame_null_count(
-    cr: &mut &mut OCamlRuntime,
-    data_frame: OCamlRef<DynBox<DataFrame>>,
-) -> OCaml<DynBox<DataFrame>> {
-    let Abstract(data_frame) = data_frame.to_rust(cr);
-    Abstract(data_frame.null_count()).to_ocaml(cr)
-}
+dyn_box_op!(rust_data_frame_sum, DataFrame, |data_frame| {
+    data_frame.sum()
+});
+dyn_box_op!(rust_data_frame_mean, DataFrame, |data_frame| {
+    data_frame.mean()
+});
+dyn_box_op!(rust_data_frame_median, DataFrame, |data_frame| {
+    data_frame.median()
+});
+dyn_box_op!(rust_data_frame_null_count, DataFrame, |data_frame| {
+    data_frame.null_count()
+});
 
 #[ocaml_interop_export]
 fn rust_data_frame_fill_null_with_strategy(
@@ -509,14 +465,9 @@ fn rust_data_frame_fill_null_with_strategy(
     data_frame: OCamlRef<DynBox<DataFrame>>,
     strategy: OCamlRef<FillNullStrategy>,
 ) -> OCaml<Result<DynBox<DataFrame>, String>> {
-    let Abstract(data_frame) = data_frame.to_rust(cr);
     let PolarsFillNullStrategy(strategy) = strategy.to_rust(cr);
 
-    data_frame
-        .fill_null(strategy)
-        .map(Abstract)
-        .map_err(|err| err.to_string())
-        .to_ocaml(cr)
+    dyn_box_result!(cr, |data_frame| data_frame.fill_null(strategy))
 }
 
 #[ocaml_interop_export]
@@ -525,19 +476,17 @@ fn rust_data_frame_interpolate(
     data_frame: OCamlRef<DynBox<DataFrame>>,
     method: OCamlRef<InterpolationMethod>,
 ) -> OCaml<Result<DynBox<DataFrame>, String>> {
-    let Abstract(data_frame) = data_frame.to_rust(cr);
     let PolarsInterpolationMethod(method) = method.to_rust(cr);
 
-    let series = data_frame
-        .get_columns()
-        .iter()
-        .map(|series| interpolate(series, method))
-        .collect::<Vec<_>>();
+    dyn_box_result!(cr, |data_frame| {
+        let series = data_frame
+            .get_columns()
+            .iter()
+            .map(|series| interpolate(series, method))
+            .collect::<Vec<_>>();
 
-    DataFrame::new(series)
-        .map(Abstract)
-        .map_err(|err| err.to_string())
-        .to_ocaml(cr)
+        DataFrame::new(series)
+    })
 }
 
 #[ocaml_interop_export]
@@ -550,31 +499,29 @@ fn rust_data_frame_upsample(
     offset: OCamlRef<String>,
     stable: OCamlRef<bool>,
 ) -> OCaml<Result<DynBox<DataFrame>, String>> {
-    let Abstract(data_frame) = data_frame.to_rust(cr);
     let by: Vec<String> = by.to_rust(cr);
     let time_column: String = time_column.to_rust(cr);
     let every: String = every.to_rust(cr);
     let offset: String = offset.to_rust(cr);
     let stable: bool = stable.to_rust(cr);
 
-    if stable {
-        data_frame.upsample_stable(
-            &by,
-            &time_column,
-            Duration::parse(&every),
-            Duration::parse(&offset),
-        )
-    } else {
-        data_frame.upsample(
-            &by,
-            &time_column,
-            Duration::parse(&every),
-            Duration::parse(&offset),
-        )
-    }
-    .map(Abstract)
-    .map_err(|err| err.to_string())
-    .to_ocaml(cr)
+    dyn_box_result!(cr, |data_frame| {
+        if stable {
+            data_frame.upsample_stable(
+                &by,
+                &time_column,
+                Duration::parse(&every),
+                Duration::parse(&offset),
+            )
+        } else {
+            data_frame.upsample(
+                &by,
+                &time_column,
+                Duration::parse(&every),
+                Duration::parse(&offset),
+            )
+        }
+    })
 }
 
 #[ocaml_interop_export]
@@ -583,14 +530,9 @@ fn rust_data_frame_explode(
     data_frame: OCamlRef<DynBox<DataFrame>>,
     columns: OCamlRef<OCamlList<String>>,
 ) -> OCaml<Result<DynBox<DataFrame>, String>> {
-    let Abstract(data_frame) = data_frame.to_rust(cr);
     let columns: Vec<String> = columns.to_rust(cr);
 
-    data_frame
-        .explode(columns)
-        .map(Abstract)
-        .map_err(|err| err.to_string())
-        .to_ocaml(cr)
+    dyn_box_result!(cr, |data_frame| data_frame.explode(columns))
 }
 
 #[ocaml_interop_export]
@@ -598,8 +540,7 @@ fn rust_data_frame_schema(
     cr: &mut &mut OCamlRuntime,
     data_frame: OCamlRef<DynBox<DataFrame>>,
 ) -> OCaml<DynBox<Schema>> {
-    let Abstract(data_frame) = data_frame.to_rust(cr);
-    OCaml::box_value(cr, data_frame.schema())
+    dyn_box!(cr, |data_frame| data_frame.schema())
 }
 
 #[ocaml_interop_export]
