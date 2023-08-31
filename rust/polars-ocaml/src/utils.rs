@@ -12,6 +12,63 @@ use std::borrow::Borrow;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 
+macro_rules! dyn_box {
+    ($cr:ident, |$($var:ident),+| $body:expr) => {
+        {
+            $(
+                let Abstract($var) = $var.to_rust($cr);
+            )+
+
+            OCaml::box_value($cr, $body)
+        }
+    };
+}
+
+macro_rules! dyn_box_result {
+    ($cr:ident, |$($var:ident),+| $body:expr) => {
+        {
+            $(
+                let Abstract($var) = $var.to_rust($cr);
+            )+
+
+            $body.map(Abstract).map_err(|err| err.to_string()).to_ocaml($cr)
+        }
+    };
+}
+
+macro_rules! dyn_box_op {
+    ($name:ident, $type:ty, |$($var:ident),+| $body:expr) => {
+        #[ocaml_interop_export]
+        fn $name(
+            cr: &mut &mut OCamlRuntime,
+            $(
+                $var: OCamlRef<DynBox<$type>>,
+            )+
+        ) -> OCaml<DynBox<$type>> {
+            dyn_box!(cr, |$($var),+| $body)
+        }
+    }
+}
+
+macro_rules! dyn_box_op_result {
+    ($name:ident, $type:ty, |$($var:ident),+| $body:expr) => {
+        #[ocaml_interop_export]
+        fn $name(
+            cr: &mut &mut OCamlRuntime,
+            $(
+                $var: OCamlRef<DynBox<$type>>,
+            )+
+        ) -> OCaml<Result<DynBox<$type>, String>> {
+            dyn_box_result!(cr, |$($var),+| $body)
+        }
+    }
+}
+
+pub(crate) use dyn_box;
+pub(crate) use dyn_box_op;
+pub(crate) use dyn_box_op_result;
+pub(crate) use dyn_box_result;
+
 // This function is actually quite unsafe; as a general rule, additional use of
 // this is strongly discouraged. See comment for `raise_ocaml_exception` in the
 // implementation of `ocaml_interop_backtrace_support` for more details.
