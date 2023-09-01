@@ -418,7 +418,9 @@ val sort : ?descending:bool -> t -> t
             ]
       ...
 
-      # Data_frame.select_exn df ~exprs:Expr.[ col "group" |> sort_by ~by:[ col "value1" ] ]
+      # Data_frame.select_exn
+          df
+          ~exprs:Expr.[ col "group" |> sort_by ~by:[ col "value1" ] ]
       - : Data_frame.t =
       shape: (4, 1)
       +-------+
@@ -436,7 +438,9 @@ val sort : ?descending:bool -> t -> t
     Sorting by expressions is also supported:
 
     {@ocaml[
-      # Data_frame.select_exn df ~exprs:Expr.[ col "group" |> sort_by ~by:[ col "value1" + col "value2" ] ]
+      # Data_frame.select_exn
+          df
+          ~exprs:Expr.[ col "group" |> sort_by ~by:[ col "value1" + col "value2" ] ]
       - : Data_frame.t =
       shape: (4, 1)
       +-------+
@@ -454,7 +458,9 @@ val sort : ?descending:bool -> t -> t
     Sort by multiple columns by passing a list of columns:
 
     {@ocaml[
-      # Data_frame.select_exn df ~exprs:Expr.[ col "group" |> sort_by ~by:[ col "value1"; col "value2" ] ~descending:true ]
+      # Data_frame.select_exn
+          df
+          ~exprs:Expr.[ col "group" |> sort_by ~by:[ col "value1"; col "value2" ] ~descending:true ]
       - : Data_frame.t =
       shape: (4, 1)
       +-------+
@@ -472,7 +478,10 @@ val sort : ?descending:bool -> t -> t
     When sorting in a groupby context, the groups are sorted:
 
     {@ocaml[
-      # Data_frame.groupby df ~by:Expr.[ col "group" ] ~agg:Expr.[ col "value1" |> sort_by ~by:[ col "value2" ] ]
+      # Data_frame.groupby
+          df
+          ~by:Expr.[ col "group" ]
+          ~agg:Expr.[ col "value1" |> sort_by ~by:[ col "value2" ] ]
       - : (Data_frame.t, string) result =
       Core.Ok
        shape: (2, 2)
@@ -490,7 +499,9 @@ val sort : ?descending:bool -> t -> t
     within that group:
 
     {@ocaml[
-      # Data_frame.groupby_exn df ~by:Expr.[ col "group" ] ~agg:Expr.[ all () |> sort_by ~by:[ col "value2" ] ]
+      # Data_frame.groupby_exn
+          df
+          ~by:Expr.[ col "group" ] ~agg:Expr.[ all () |> sort_by ~by:[ col "value2" ] ]
       - : Data_frame.t =
       shape: (2, 3)
       +-------+-----------+-----------+
@@ -510,7 +521,9 @@ val sort_by : ?descending:bool -> t -> by:t list -> t
 
     {@ocaml[
       # let df = Data_frame.create_exn Series.[ int "values" [ 1; 2; 3 ] ] in
-        Data_frame.select_exn df ~exprs:Expr.[ col "values" |> set_sorted_flag ~sorted:`Ascending |> max ]
+        Data_frame.select_exn
+          df
+          ~exprs:Expr.[ col "values" |> set_sorted_flag ~sorted:`Ascending |> max ]
       - : Data_frame.t =
       shape: (1, 1)
       +--------+
@@ -560,7 +573,15 @@ val last : t -> t
 (** [reverse] reverses the selection:
 
     {@ocaml[
-      # let df = Data_frame.create_exn Series.[ int "A" [ 1; 2; 3; 4; 5 ]; string "fruits" [ "banana"; "banana"; "apple"; "apple"; "banana" ]; int "B" [ 5; 4; 3; 2; 1 ]; string "cars" [ "beetle"; "audi"; "beetle"; "beetle"; "beetle" ] ] in
+      # let df =
+          Data_frame.create_exn
+            Series.
+              [ int "A" [ 1; 2; 3; 4; 5 ]
+              ; string "fruits" [ "banana"; "banana"; "apple"; "apple"; "banana" ]
+              ; int "B" [ 5; 4; 3; 2; 1 ]
+              ; string "cars" [ "beetle"; "audi"; "beetle"; "beetle"; "beetle" ]
+              ]
+        in
         Data_frame.select_exn df ~exprs:Expr.[ all (); all () |> reverse |> suffix ~suffix:"_reverse" ]
       - : Data_frame.t =
       shape: (5, 8)
@@ -619,8 +640,16 @@ val tail : ?length:int -> t -> t
 (** [take] returns the value based on index:
 
     {@ocaml[
-      # let df = Data_frame.create_exn Series.[ string "group" [ "one"; "one"; "one"; "two"; "two"; "two" ]; int "value" [ 1; 98; 2; 3; 99; 4 ] ] in
-        Data_frame.groupby_exn df ~by:Expr.[ col "group" ] ~agg:Expr.[ col "value" |> take ~idx:(int 1) ]
+      # let df =
+          Data_frame.create_exn
+            Series.
+              [ string "group" [ "one"; "one"; "one"; "two"; "two"; "two" ]
+              ; int "value" [ 1; 98; 2; 3; 99; 4 ] ]
+        in
+        Data_frame.groupby_exn
+          df
+          ~by:Expr.[ col "group" ]
+          ~agg:Expr.[ col "value" |> take ~idx:(int 1) ]
       - : Data_frame.t =
       shape: (2, 2)
       +-------+-------+
@@ -637,8 +666,12 @@ val take : t -> idx:t -> t
 (** [sample_n] samples n times from expression:
 
     {@ocaml[
-      # let df = Data_frame.create_exn Series.[ int "a" [ 1; 2; 3 ] ] in
-        Data_frame.select_exn df ~exprs:Expr.[ col "a" |> sample_n ~seed:0 ~fixed_seed:true ~n:2 ~with_replacement:true ~shuffle:true ]
+      # let df =Data_frame.create_exn Series.[ int "a" [ 1; 2; 3 ] ] in
+        Data_frame.select_exn
+          df
+          ~exprs:
+            Expr.
+              [ col "a" |> sample_n ~seed:0 ~fixed_seed:true ~n:2 ~with_replacement:true ~shuffle:true ]
       - : Data_frame.t =
       shape: (2, 1)
       +-----+
@@ -670,16 +703,32 @@ val sample_n
 (** [filter] filters a single column according to a predicate:
 
     {@ocaml[
-      # let df = Data_frame.create_exn Series.[ string "group_col" [ "g1"; "g1"; "g2" ]; int "b" [ 1; 2; 3 ] ] in
-        Data_frame.groupby_exn df ~by:Expr.[ col "group_col" ] ~agg:Expr.[ col "b" |> filter ~predicate:(col "b" < int 2) |> sum |> alias ~name:"lt"; col "b" |> filter ~predicate:(col "b" >= int 2) |> sum |> alias ~name:"gte" ]
-        |> Data_frame.sort_exn ~by:[ col "group_col" ]
-      Line 3, characters 30-49:
-      Error: The function applied to this argument has type
-               ?descending:bool list ->
-               ?maintain_order:bool ->
-               Polars.Data_frame.t ->
-               by_column:string list -> Polars__Data_frame0.t
-      This argument cannot be applied with label ~by
+      # let df =
+          Data_frame.create_exn
+            Series.
+              [ string "group_col" [ "g1"; "g1"; "g2" ]
+              ; int "b" [ 1; 2; 3 ]
+              ]
+        in
+        Data_frame.groupby_exn
+          df
+          ~by:Expr.[ col "group_col" ]
+          ~agg:
+            Expr.
+              [ col "b" |> filter ~predicate:(col "b" < int 2) |> sum |> alias ~name:"lt"
+              ; col "b" |> filter ~predicate:(col "b" >= int 2) |> sum |> alias ~name:"gte"
+              ]
+        |> Data_frame.sort_exn ~by_column:[ "group_col" ]
+      - : Data_frame.t =
+      shape: (2, 3)
+      +-----------+-----+-----+
+      | group_col | lt  | gte |
+      | ---       | --- | --- |
+      | str       | i64 | i64 |
+      +=======================+
+      | g1        | 1   | 2   |
+      | g2        | 0   | 3   |
+      +-----------+-----+-----+
     ]} *)
 val filter : t -> predicate:t -> t
 
