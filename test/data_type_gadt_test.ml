@@ -163,7 +163,7 @@ module Series_create = struct
   ;;
 end
 
-let%expect_test "Series.create doesn't raise" =
+let%expect_test "Series.create roundtrip" =
   Base_quickcheck.Test.run_exn
     (module Series_create)
     ~f:(fun (Series_create.Args (data_type, values) as args) ->
@@ -229,7 +229,7 @@ module Series_createo = struct
   ;;
 end
 
-let%expect_test "Series.createo doesn't raise" =
+let%expect_test "Series.createo roundtrip" =
   Base_quickcheck.Test.run_exn
     (module Series_createo)
     ~f:(fun (Series_createo.Args (data_type, values) as args) ->
@@ -281,7 +281,7 @@ module Expr_lit = struct
   ;;
 end
 
-let%expect_test "Expr.lit doesn't raise" =
+let%expect_test "Expr.lit roundtrip" =
   Base_quickcheck.Test.run_exn
     (module Expr_lit)
     ~f:(fun (Expr_lit.Args (data_type, value) as args) ->
