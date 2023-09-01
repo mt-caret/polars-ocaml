@@ -139,30 +139,6 @@ fn rust_expr_lit(
 }
 
 #[ocaml_interop_export]
-fn rust_expr_int(cr: &mut &mut OCamlRuntime, value: OCamlRef<OCamlInt>) -> OCaml<DynBox<Expr>> {
-    let value: i64 = value.to_rust(cr);
-    OCaml::box_value(cr, lit(value))
-}
-
-#[ocaml_interop_export]
-fn rust_expr_float(cr: &mut &mut OCamlRuntime, value: OCamlRef<OCamlFloat>) -> OCaml<DynBox<Expr>> {
-    let value: f64 = value.to_rust(cr);
-    OCaml::box_value(cr, lit(value))
-}
-
-#[ocaml_interop_export]
-fn rust_expr_bool(cr: &mut &mut OCamlRuntime, value: OCamlRef<bool>) -> OCaml<DynBox<Expr>> {
-    let value: bool = value.to_rust(cr);
-    OCaml::box_value(cr, lit(value))
-}
-
-#[ocaml_interop_export]
-fn rust_expr_string(cr: &mut &mut OCamlRuntime, value: OCamlRef<String>) -> OCaml<DynBox<Expr>> {
-    let value: String = value.to_rust(cr);
-    OCaml::box_value(cr, lit(value))
-}
-
-#[ocaml_interop_export]
 fn rust_expr_naive_date(
     cr: &mut &mut OCamlRuntime,
     value: OCamlRef<DynBox<NaiveDate>>,
