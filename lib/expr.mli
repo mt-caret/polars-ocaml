@@ -645,6 +645,7 @@ val clip_min_float : t -> min:float -> t
 val clip_max_float : t -> max:float -> t
 val clip_min_int : t -> min:int -> t
 val clip_max_int : t -> max:int -> t
+val pow : t -> t -> t
 val sum : t -> t
 val mean : t -> t
 val median : t -> t
