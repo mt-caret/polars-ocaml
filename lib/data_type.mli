@@ -63,6 +63,12 @@ module Typed : sig
         correspond to the same exact branch. *)
     val strict_type_equal : 'a t -> 'b t -> ('a, 'b) Type_equal.t option
 
+    (** [flatten_custom] extracts out any internal instances of the [Custom _]
+        variant to the outermost point e.g.
+        [List (Custom { data_type = Boolean; ... })] to
+        [Custom { data_type = List Boolean; ... }] . *)
+    val flatten_custom : 'a t -> 'a t
+
     type packed = T : 'a t -> packed [@@deriving compare, sexp_of, quickcheck]
 
     val to_untyped : 'a t -> untyped

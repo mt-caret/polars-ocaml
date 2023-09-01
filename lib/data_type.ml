@@ -96,6 +96,25 @@ module Typed = struct
     | _, _ -> None
   ;;
 
+  let rec flatten_custom : type a. a t -> a t = function
+    | Custom
+        { data_type = Custom { data_type; f = f'; f_inverse = f_inverse' }; f; f_inverse }
+      ->
+      flatten_custom
+        (Custom
+           { data_type; f = Fn.compose f f'; f_inverse = Fn.compose f_inverse' f_inverse })
+    | List t ->
+      (match flatten_custom t with
+       | Custom { data_type; f; f_inverse } ->
+         Custom
+           { data_type = List data_type
+           ; f = List.map ~f
+           ; f_inverse = List.map ~f:f_inverse
+           }
+       | t -> List t)
+    | t -> t
+  ;;
+
   type packed = T : _ t -> packed
 
   let rec to_untyped : type a. a t -> untyped = function
