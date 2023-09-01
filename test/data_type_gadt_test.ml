@@ -242,3 +242,70 @@ let%expect_test "Series.createo doesn't raise" =
         assert (value_equal value (Series.get data_type series i))));
   [%expect {||}]
 ;;
+
+module Expr_lit = struct
+  type t = Args : 'a Data_type.Typed.t * 'a -> t
+
+  let compare (Args (data_type1, value1)) (Args (data_type2, value2)) =
+    match Data_type.Typed.strict_type_equal data_type1 data_type2 with
+    | None ->
+      [%compare: Data_type.t]
+        (Data_type.Typed.to_untyped data_type1)
+        (Data_type.Typed.to_untyped data_type1)
+    | Some T -> (value_compare data_type1) value1 value2
+  ;;
+
+  let sexp_of_t (Args (data_type, value)) =
+    let sexp_of_value = value_to_sexp data_type in
+    [%sexp_of: Data_type.Typed.packed * value] (Data_type.Typed.T data_type, value)
+  ;;
+
+  let quickcheck_generator =
+    let open Quickcheck.Generator.Let_syntax in
+    let%bind (T data_type) = Data_type.Typed.quickcheck_generator_packed in
+    let%map value = value_generator data_type in
+    Args (data_type, value)
+  ;;
+
+  let quickcheck_shrinker =
+    Quickcheck.Shrinker.create (fun (Args (data_type, value)) ->
+      let value_shrinker = value_shrinker data_type in
+      Quickcheck.Shrinker.shrink value_shrinker value
+      |> Sequence.map ~f:(fun value -> Args (data_type, value)))
+  ;;
+
+  let quickcheck_observer =
+    Quickcheck.Observer.unmap
+      Data_type.Typed.quickcheck_observer_packed
+      ~f:(fun (Args (data_type, _value)) -> T data_type)
+  ;;
+end
+
+let%expect_test "Expr.lit doesn't raise" =
+  Base_quickcheck.Test.run_exn
+    (module Expr_lit)
+    ~f:(fun (Expr_lit.Args (data_type, value) as args) ->
+      match data_type with
+      | List _ ->
+        (* Lists don't work for some reason:
+
+           {[
+             "Base_quickcheck.Test.run: test failed" (input ((List Int8) (-113)))
+             (error
+             ((Failure
+             "Polars panicked: data types don't match: invalid series dtype: expected `List`, got `i8`\
+             \nbacktrace not captured")
+           ]} *)
+        ()
+      | _ ->
+        let value' =
+          Data_frame.create_exn []
+          |> Data_frame.select_exn
+               ~exprs:Expr.[ lit data_type value |> alias ~name:"col" ]
+          |> Data_frame.column_exn ~name:"col"
+          |> Series.to_list data_type
+        in
+        assert (List.length value' = 1);
+        let args' = Expr_lit.Args (data_type, List.hd_exn value') in
+        [%test_result: Expr_lit.t] ~expect:args' args)
+;;

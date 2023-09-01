@@ -1,6 +1,6 @@
 use chrono::{NaiveDate, NaiveDateTime};
 use ocaml_interop::{
-    DynBox, OCaml, OCamlFloat, OCamlInt, OCamlList, OCamlRef, OCamlRuntime, ToOCaml,
+    DynBox, OCaml, OCamlBytes, OCamlFloat, OCamlInt, OCamlList, OCamlRef, OCamlRuntime, ToOCaml,
 };
 use polars::lazy::dsl::GetOutput;
 use polars::prelude::*;
@@ -93,6 +93,49 @@ fn rust_expr_exclude(cr: &mut &mut OCamlRuntime, name: OCamlRef<String>) -> OCam
 fn rust_expr_null(cr: &mut &mut OCamlRuntime, unit: OCamlRef<()>) -> OCaml<DynBox<Expr>> {
     let (): () = unit.to_rust(cr);
     OCaml::box_value(cr, lit(NULL))
+}
+
+#[ocaml_interop_export(raise_on_err)]
+fn rust_expr_lit(
+    cr: &mut &mut OCamlRuntime,
+    data_type: OCamlRef<GADTDataType>,
+    value: OCamlRef<DummyBoxRoot>,
+) -> OCaml<DynBox<Expr>> {
+    let data_type: GADTDataType = data_type.to_rust(cr);
+    let value: DummyBoxRoot = value.to_rust(cr);
+
+    macro_rules! expr_lit_int {
+        ($rust_type:ty) => {{
+            let value = value.interpret::<OCamlInt>(cr).to_rust::<i64>();
+            let value = TryInto::<$rust_type>::try_into(value).map_err(|err| err.to_string())?;
+            lit(value)
+        }};
+    }
+
+    let lit = match data_type {
+        GADTDataType::Boolean => lit(value.interpret::<bool>(cr).to_rust::<bool>()),
+        GADTDataType::UInt8 => expr_lit_int!(u8),
+        GADTDataType::UInt16 => expr_lit_int!(u16),
+        GADTDataType::UInt32 => expr_lit_int!(u32),
+        GADTDataType::UInt64 => expr_lit_int!(u64),
+        GADTDataType::Int8 => expr_lit_int!(i8),
+        GADTDataType::Int16 => expr_lit_int!(i16),
+        GADTDataType::Int32 => expr_lit_int!(i32),
+        GADTDataType::Int64 => expr_lit_int!(i64),
+        GADTDataType::Float32 => lit(value.interpret::<OCamlFloat>(cr).to_rust::<f64>() as f32),
+        GADTDataType::Float64 => lit(value.interpret::<OCamlFloat>(cr).to_rust::<f64>()),
+        GADTDataType::Utf8 => lit(value.interpret::<String>(cr).to_rust::<String>()),
+        GADTDataType::Binary => lit(value.interpret::<OCamlBytes>(cr).to_rust::<Vec<u8>>()),
+        GADTDataType::List(data_type) => {
+            let values = value
+                .interpret::<OCamlList<DummyBoxRoot>>(cr)
+                .to_rust::<Vec<DummyBoxRoot>>();
+            let series = crate::series::series_new(cr, &data_type, "series", values, false)?;
+            lit(series)
+        }
+    };
+
+    OCaml::box_value(cr, lit)
 }
 
 #[ocaml_interop_export]

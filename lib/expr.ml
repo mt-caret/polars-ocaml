@@ -14,6 +14,7 @@ module T = struct
 
   let cast ?(strict = true) t ~to_ = cast t ~to_ ~strict
 
+  external lit : 'a Data_type.Typed.t -> 'a -> t = "rust_expr_lit"
   external null : unit -> t = "rust_expr_null"
   external int : int -> t = "rust_expr_int"
   external float : float -> t = "rust_expr_float"

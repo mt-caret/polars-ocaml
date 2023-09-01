@@ -9,6 +9,7 @@ val exclude : string -> t
 val element : unit -> t
 val cast : ?strict:bool -> t -> to_:Data_type.t -> t
 val null : unit -> t
+val lit : 'a Data_type.Typed.t -> 'a -> t
 val int : int -> t
 val float : float -> t
 val bool : bool -> t
