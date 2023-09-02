@@ -87,7 +87,7 @@ jobs:
 
       - uses: rui314/setup-mold@v1
       - run: rm ./rust/.cargo/config.toml
-      - run: sed -i '/.*mold.*/d' test/dune
+      - run: sed -i '/.*mold.*/d' test/dune guide/dune
 
       - run: opam install . --deps-only --with-doc --with-test
 
