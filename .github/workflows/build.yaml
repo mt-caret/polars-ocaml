@@ -93,6 +93,8 @@ jobs:
 
       - run: opam install . --deps-only --with-doc --with-test
 
+      - run: sed -i "s/cargo build/cargo build --target $CARGO_BUILD_TARGET/" lib/dune
+      - run: sed -i 's/rust\/target/rust\/target\/'"$CARGO_BUILD_TARGET"'/' lib/dune
       - run: opam exec -- dune build --profile release
       - run: opam exec -- dune runtest --profile release
 
