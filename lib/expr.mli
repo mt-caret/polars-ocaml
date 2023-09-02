@@ -15,6 +15,7 @@ val bool : bool -> t
 val string : string -> t
 val naive_date : Common.Naive_date.t -> t
 val naive_datetime : Common.Naive_datetime.t -> t
+val time : Time_ns.t -> t
 val series : Series.t -> t
 val sort : ?descending:bool -> t -> t
 val sort_by : ?descending:bool -> t -> by:t list -> t
