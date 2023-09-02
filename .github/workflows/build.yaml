@@ -60,22 +60,25 @@ jobs:
         run: cargo fmt --all -- --check
         working-directory: ./rust
 
+  # In the past we tried to support building this on 32bit architectures, but
+  # some of polars' crates clearly don't support it[1] and getting both the
+  # OCaml and Rust compilers to work on 32bit is a pain, so we are leaving
+  # this comment as a reminder so that we do not try this without sufficient
+  # motivation again.
+  #
+  # [1]: https://github.com/pola-rs/polars/blob/c4fdbfe2c7f7ce7616ad9301981bc5d616c3beef/crates/polars-row/src/row.rs#L21
   build-ocaml:
     strategy:
       fail-fast: false
       matrix:
         ocaml-compiler:
           - 4.14.1
-          - ocaml-variants.4.14.1+options,ocaml-option-32bit
     runs-on: ubuntu-latest
-    env:
-      CARGO_BUILD_TARGET: ${{ matrix.ocaml-compiler == '4.14.1' && 'x86_64-unknown-linux-gnu' || 'i686-unknown-linux-gnu' }}
     steps:
       - uses: actions/checkout@v3
 
       - uses: dtolnay/rust-toolchain@nightly
         with:
-          targets: ${{ env.CARGO_BUILD_TARGET }}
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
 
@@ -93,10 +96,8 @@ jobs:
 
       - run: opam install . --deps-only --with-doc --with-test
 
-      - run: sed -i "s/cargo build/cargo build --target $CARGO_BUILD_TARGET/" lib/dune
-      - run: sed -i 's/rust\/target/rust\/target\/'"$CARGO_BUILD_TARGET"'/' lib/dune
-      - run: opam exec -- dune build --profile release
-      - run: opam exec -- dune runtest --profile release
+      - run: opam exec -- dune build
+      - run: opam exec -- dune runtest
 
   format-ocaml:
     runs-on: ubuntu-latest
