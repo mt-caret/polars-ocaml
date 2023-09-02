@@ -380,6 +380,11 @@ fn rust_expr_median(
 }
 
 #[ocaml_interop_export]
+fn rust_expr_mode(cr: &mut &mut OCamlRuntime, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
+    expr_unary_op(cr, expr, |expr| expr.mode())
+}
+
+#[ocaml_interop_export]
 fn rust_expr_max(cr: &mut &mut OCamlRuntime, expr: OCamlRef<DynBox<Expr>>) -> OCaml<DynBox<Expr>> {
     expr_unary_op(cr, expr, |expr| expr.max())
 }

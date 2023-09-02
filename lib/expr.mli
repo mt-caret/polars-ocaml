@@ -7,6 +7,11 @@ open! Core
 
 type t
 
+(* TODO: Functions here should probably be grouped and reordered into rough
+   categories shown in
+   https://pola-rs.github.io/polars/py-polars/html/reference/expressions/index.html
+*)
+
 (** [col] return column(s) in a dataframe:
 
     {@ocaml[
@@ -732,22 +737,192 @@ val sample_n
     ]} *)
 val filter : t -> predicate:t -> t
 
+(** [ceil] and [floor] rounds up and down to the nearest integer value,
+    respectively. This function only works for floating point values.
+
+    {@ocaml[
+      # let df = Data_frame.create_exn Series.[ float "a" [ 0.3; 0.5; 1.0; 1.1 ] ] in
+        Data_frame.select_exn
+          df
+          ~exprs:
+            Expr.
+              [ col "a" |> ceil |> alias ~name:"a_ceil"
+              ; col "a" |> ceil |> alias ~name:"a_floor"
+              ]
+      - : Data_frame.t =
+      shape: (4, 2)
+      +--------+---------+
+      | a_ceil | a_floor |
+      | ---    | ---     |
+      | f64    | f64     |
+      +==================+
+      | 1.0    | 1.0     |
+      | 1.0    | 1.0     |
+      | 1.0    | 1.0     |
+      | 2.0    | 2.0     |
+      +--------+---------+
+    ]} *)
 val ceil : t -> t
+
 val floor : t -> t
+
+(** [clip_min_float], [clip_max_float], [clip_min_int], and [clip_max_int] clip
+    (limit) the values to a min/max boundary. This function only works for
+    numerical types.
+
+    {@ocaml[
+      # let df = Data_frame.create_exn Series.[ floato "foo" [ Some (-50.); Some (5.); None; Some (50.) ] ] in
+        Data_frame.select_exn
+          df
+          ~exprs:
+            Expr.
+              [ col "foo" |> clip_min_float ~min:(-10.) |> alias ~name:"clipped_min"
+              ; col "foo" |> clip_max_float ~max:10. |> alias ~name:"clipped_max"
+              ; col "foo" |> clip_min_int ~min:(-10) |> alias ~name:"clipped_min_int"
+              ; col "foo" |> clip_max_int ~max:10 |> alias ~name:"clipped_max_int"
+              ]
+      - : Data_frame.t =
+      shape: (4, 4)
+      +-------------+-------------+-----------------+-----------------+
+      | clipped_min | clipped_max | clipped_min_int | clipped_max_int |
+      | ---         | ---         | ---             | ---             |
+      | f64         | f64         | f64             | f64             |
+      +===============================================================+
+      | -10.0       | -50.0       | -10.0           | -50.0           |
+      | 5.0         | 5.0         | 5.0             | 5.0             |
+      | null        | null        | null            | null            |
+      | 50.0        | 10.0        | 50.0            | 10.0            |
+      +-------------+-------------+-----------------+-----------------+
+    ]} *)
 val clip_min_float : t -> min:float -> t
+
 val clip_max_float : t -> max:float -> t
 val clip_min_int : t -> min:int -> t
 val clip_max_int : t -> max:int -> t
 val pow : t -> t -> t
+
+(** [sum], [mean], [median], and [mode] calculate the sum, mean, median, and
+    mode respectively.
+
+    Show examples where each aggregation differs when calculated for a single series:
+    {@ocaml[
+      # let df = Data_frame.create_exn Series.[ int "a" [ 1; 2; 2; 2; 3; 4; 5; 6; 7 ] ] in
+        Data_frame.select_exn
+          df
+          ~exprs:
+            Expr.
+              [ col "a" |> sum |> alias ~name:"sum"
+              ; col "a" |> mean |> alias ~name:"mean"
+              ; col "a" |> median |> alias ~name:"median"
+              ; col "a" |> mode |> alias ~name:"mode"
+              ]
+      - : Data_frame.t =
+      shape: (1, 4)
+      +-----+----------+--------+------+
+      | sum | mean     | median | mode |
+      | --- | ---      | ---    | ---  |
+      | i64 | f64      | f64    | i64  |
+      +================================+
+      | 32  | 3.555556 | 3.0    | 2    |
+      +-----+----------+--------+------+
+    ]} *)
 val sum : t -> t
+
 val mean : t -> t
 val median : t -> t
+val mode : t -> t
+
+(** [max], [min], [arg_max], and [arg_min] calculate the max, min, and indices
+    associated with the max and min value, respectively.
+
+    {@ocaml[
+      # let df = Data_frame.create_exn Series.[ int "a" [ 1; 2; 2; 2; 3; 4; 5; 6; 7 ] ] in
+        Data_frame.select_exn
+          df
+          ~exprs:
+            Expr.
+              [ col "a" |> max |> alias ~name:"max"
+              ; col "a" |> min |> alias ~name:"min"
+              ; col "a" |> arg_max |> alias ~name:"arg_max"
+              ; col "a" |> arg_min |> alias ~name:"arg_min"
+              ]
+      - : Data_frame.t =
+      shape: (1, 4)
+      +-----+-----+---------+---------+
+      | max | min | arg_max | arg_min |
+      | --- | --- | ---     | ---     |
+      | i64 | i64 | u32     | u32     |
+      +===============================+
+      | 7   | 1   | 8       | 0       |
+      +-----+-----+---------+---------+
+    ]} *)
 val max : t -> t
+
 val min : t -> t
 val arg_max : t -> t
 val arg_min : t -> t
+
+(** [count] counts the nuber of values associated with an expression. Please
+    note that null values are also included in this count.
+
+    {@ocaml[
+      # let df =
+          Data_frame.create_exn
+            Series.
+              [ int "a" [ 1; 2; 3 ]
+              ; into "b" [ None; Some 4; Some 4 ]
+              ]
+        in
+        Data_frame.select_exn df ~exprs:Expr.[ all () |> count ]
+      - : Data_frame.t =
+      shape: (1, 2)
+      +-----+-----+
+      | a   | b   |
+      | --- | --- |
+      | u32 | u32 |
+      +===========+
+      | 3   | 3   |
+      +-----+-----+
+    ]} *)
 val count : t -> t
+
+(** [count_] counts the number of values in this column/context.
+
+    {@ocaml[
+      # let df =
+          Data_frame.create_exn
+            Series.
+              [ int "a" [ 1; 8; 3 ]
+              ; int "b" [ 4; 5; 2 ]
+              ; string "c" [ "foo"; "bar"; "foo" ]
+              ]
+      ...
+
+      # Data_frame.select_exn df ~exprs:Expr.[ count_ () ]
+      - : Data_frame.t =
+      shape: (1, 1)
+      +-------+
+      | count |
+      | ---   |
+      | u32   |
+      +=======+
+      | 3     |
+      +-------+
+
+      # Data_frame.groupby_exn df ~by:Expr.[ col "c" ] ~agg:Expr.[ count_ () ]
+      - : Data_frame.t =
+      shape: (2, 2)
+      +-----+-------+
+      | c   | count |
+      | --- | ---   |
+      | str | u32   |
+      +=============+
+      | foo | 2     |
+      | bar | 1     |
+      +-----+-------+
+    ]} *)
 val count_ : unit -> t
+
 val n_unique : t -> t
 val approx_unique : t -> t
 val explode : t -> t

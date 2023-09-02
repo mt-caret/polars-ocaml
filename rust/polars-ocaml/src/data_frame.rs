@@ -494,6 +494,8 @@ fn rust_data_frame_median(
     Abstract(data_frame.median()).to_ocaml(cr)
 }
 
+// TODO: mode is missing for dataframes
+
 #[ocaml_interop_export]
 fn rust_data_frame_null_count(
     cr: &mut &mut OCamlRuntime,

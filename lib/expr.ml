@@ -74,6 +74,7 @@ module T = struct
   external sum : t -> t = "rust_expr_sum"
   external mean : t -> t = "rust_expr_mean"
   external median : t -> t = "rust_expr_median"
+  external mode : t -> t = "rust_expr_mode"
   external max : t -> t = "rust_expr_max"
   external min : t -> t = "rust_expr_min"
   external arg_max : t -> t = "rust_expr_arg_max"
