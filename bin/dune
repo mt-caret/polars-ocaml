@@ -2,4 +2,4 @@
  (package polars)
  (public_name polars)
  (name main)
- (libraries polars))
+ (libraries polars core core_unix.time_ns_unix))

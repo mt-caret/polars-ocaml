@@ -30,6 +30,27 @@ pub unsafe fn ocaml_failwith(error_message: &str) -> ! {
 
 polars_ocaml_macros::ocaml_interop_backtrace_support!();
 
+pub struct OCamlInt63(pub i64);
+
+unsafe impl FromOCaml<OCamlInt63> for OCamlInt63 {
+    fn from_ocaml(v: OCaml<OCamlInt63>) -> Self {
+        if v.is_block() {
+            let int64 = {
+                let val = unsafe { ocaml_sys::field(v.raw(), 1) };
+                unsafe { *(val as *const i64) }
+            };
+
+            // Base's implementation of `Int63.t` on 32bit platforms is `Int64.t`
+            // (a block holding an i64) shifted left with lower bit 0 to match
+            // the semantics of `int` on 64bit platforms.
+            OCamlInt63(int64 >> 1)
+        } else {
+            // On 64bit platforms, `Int63.t` is just a regular old OCaml integer.
+            OCamlInt63(unsafe { ocaml_sys::int_val(v.raw()) as i64 })
+        }
+    }
+}
+
 pub struct PolarsTimeUnit(pub TimeUnit);
 
 unsafe impl FromOCaml<TimeUnit> for PolarsTimeUnit {
