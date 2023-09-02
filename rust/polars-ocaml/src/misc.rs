@@ -64,7 +64,7 @@ fn rust_time_ns_to_naive_datetime(
 ) -> OCaml<Option<DynBox<NaiveDateTime>>> {
     let OCamlInt63(ns_since_epoch) = time_ns.to_rust(cr);
 
-    // We use euclid division here instead of the usual div (/) and mod (/)
+    // We use Euclidean division here instead of the usual div (/) and mod (%)
     // operations since we need the remainder to be non-negative.
     NaiveDateTime::from_timestamp_opt(
         ns_since_epoch.div_euclid(1_000_000_000),
