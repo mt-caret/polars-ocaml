@@ -61,6 +61,12 @@ jobs:
         working-directory: ./rust
 
   build-ocaml:
+    strategy:
+      fail-fast: false
+      matrix:
+        ocaml-compiler:
+          - 4.14.x
+          - 4.14.x+32bit
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -75,10 +81,11 @@ jobs:
         uses: actions/cache@v3
         with:
           path: "~/.opam"
-          key: polars-ocaml-opam-4.14.x-ubuntu-latest
-      - uses: ocaml/setup-ocaml@v2
+          key: polars-ocaml-opam-${{ matrix.ocaml-compiler }}-ubuntu-latest
+      - name: Setup OCaml ${{ matrix.ocaml-compiler }}
+        uses: ocaml/setup-ocaml@v2
         with:
-          ocaml-compiler: 4.14.x
+          ocaml-compiler: ${{ matrix.ocaml-compiler }}
       - name: Set opam env
         run: opam env | tr '\n' ' ' >> $GITHUB_ENV
       - name: Add opam switch to PATH
