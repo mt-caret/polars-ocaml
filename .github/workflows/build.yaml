@@ -68,11 +68,14 @@ jobs:
           - 4.14.1
           - ocaml-variants.4.14.1+options,ocaml-option-32bit
     runs-on: ubuntu-latest
+    env:
+      CARGO_BUILD_TARGET: ${{ matrix.ocaml-compiler == '4.14.1' && 'x86_64-unknown-linux-gnu' || 'i686-unknown-linux-gnu' }}
     steps:
       - uses: actions/checkout@v3
 
       - uses: dtolnay/rust-toolchain@nightly
         with:
+          targets: ${{ env.CARGO_BUILD_TARGET }}
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
 
