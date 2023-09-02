@@ -65,8 +65,8 @@ jobs:
       fail-fast: false
       matrix:
         ocaml-compiler:
-          - 4.14.x
-          - 4.14.x+32bit
+          - 4.14.1
+          - ocaml-variants.4.14.1+options,ocaml-option-32bit
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
