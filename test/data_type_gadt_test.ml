@@ -57,11 +57,7 @@ let rec value_generator : type a. a Data_type.Typed.t -> a Quickcheck.Generator.
     |> (* Core.String doesn't have a [is_valid_utf_8] function :( *)
     Generator.filter ~f:Stdlib.String.is_valid_utf_8
   | Binary -> Generator.string
-  | List t ->
-    value_generator t
-    |> (* Polars currently doesn't support passing empty Vec<Series> to Series::new.
-          See test in rust/polars-ocaml/src/lib.rs. *)
-    Generator.list_non_empty
+  | List t -> value_generator t |> Generator.list
 ;;
 
 let rec value_shrinker : type a. a Data_type.Typed.t -> a Quickcheck.Shrinker.t =
@@ -145,7 +141,7 @@ module Series_create = struct
   let quickcheck_generator =
     let open Quickcheck.Generator.Let_syntax in
     let%bind (T data_type) = Data_type.Typed.quickcheck_generator_packed in
-    let%map values = Quickcheck.Generator.list_non_empty (value_generator data_type) in
+    let%map values = Quickcheck.Generator.list (value_generator data_type) in
     Args (data_type, values)
   ;;
 
@@ -178,8 +174,7 @@ let%expect_test "Series.create doesn't raise" =
       [%test_result: Series_create.t] ~expect:args' args;
       List.iteri values' ~f:(fun i value ->
         let value_equal = Comparable.equal (value_compare data_type) in
-        assert (value_equal value (Series.get_exn data_type series i))));
-  [%expect {||}]
+        assert (value_equal value (Series.get_exn data_type series i))))
 ;;
 
 (* TODO: there's a *lot* of duplication with the Series_create module; perhaps
@@ -206,7 +201,7 @@ module Series_createo = struct
     let open Quickcheck.Generator.Let_syntax in
     let%bind (T data_type) = Data_type.Typed.quickcheck_generator_packed in
     let%map values =
-      Quickcheck.Generator.list_non_empty
+      Quickcheck.Generator.list
         (Base_quickcheck.Generator.option (value_generator data_type))
     in
     Args (data_type, values)
@@ -239,6 +234,5 @@ let%expect_test "Series.createo doesn't raise" =
       [%test_result: Series_createo.t] ~expect:args' args;
       List.iteri values' ~f:(fun i value ->
         let value_equal = Option.equal (Comparable.equal (value_compare data_type)) in
-        assert (value_equal value (Series.get data_type series i))));
-  [%expect {||}]
+        assert (value_equal value (Series.get data_type series i))))
 ;;
