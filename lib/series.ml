@@ -14,6 +14,24 @@ module T = struct
     -> t
     = "rust_series_new_option"
 
+  (* TODO: the astute reader will realize that this is quite terrible when
+     trying to passing float arrays! Unfortunately it's not clear to me how
+     to pass regular arrays safely to Rust, whereas this is definitely safe
+     since [Uniform_array.t] guarantees elements are boxed. *)
+  external create'
+    :  'a Data_type.Typed.t
+    -> string
+    -> 'a Uniform_array.t
+    -> t
+    = "rust_series_new_array"
+
+  external createo'
+    :  'a Data_type.Typed.t
+    -> string
+    -> 'a option Uniform_array.t
+    -> t
+    = "rust_series_new_option_array"
+
   let int = create Int64
   let into = createo Int64
   let float = create Float64

@@ -163,11 +163,27 @@ module Series_create = struct
   ;;
 end
 
-let%expect_test "Series.create doesn't raise" =
+let%expect_test "Series.create and Series.create' doesn't raise" =
   Base_quickcheck.Test.run_exn
     (module Series_create)
     ~f:(fun (Series_create.Args (data_type, values) as args) ->
+      (* Test Series.create *)
       let series = Series.create data_type "series_name" values in
+      let values' = Series.to_list data_type series in
+      let args' = Series_create.Args (data_type, values') in
+      [%test_result: Series_create.t] ~expect:args' args;
+      let args' =
+        Series_create.Args
+          (data_type, Series.to_option_list data_type series |> List.filter_opt)
+      in
+      [%test_result: Series_create.t] ~expect:args' args;
+      List.iteri values' ~f:(fun i value ->
+        let value_equal = Comparable.equal (value_compare data_type) in
+        assert (value_equal value (Series.get_exn data_type series i)));
+      (* Test Series.create' *)
+      let series =
+        Series.create' data_type "series_name" (Uniform_array.of_list values)
+      in
       let values' = Series.to_list data_type series in
       let args' = Series_create.Args (data_type, values') in
       [%test_result: Series_create.t] ~expect:args' args;
@@ -229,11 +245,22 @@ module Series_createo = struct
   ;;
 end
 
-let%expect_test "Series.createo doesn't raise" =
+let%expect_test "Series.createo and Series.createo' doesn't raise" =
   Base_quickcheck.Test.run_exn
     (module Series_createo)
     ~f:(fun (Series_createo.Args (data_type, values) as args) ->
+      (* Test Series.createo *)
       let series = Series.createo data_type "series_name" values in
+      let values' = Series.to_option_list data_type series in
+      let args' = Series_createo.Args (data_type, values') in
+      [%test_result: Series_createo.t] ~expect:args' args;
+      List.iteri values' ~f:(fun i value ->
+        let value_equal = Option.equal (Comparable.equal (value_compare data_type)) in
+        assert (value_equal value (Series.get data_type series i)));
+      (* Test Series.createo' *)
+      let series =
+        Series.createo' data_type "series_name" (Uniform_array.of_list values)
+      in
       let values' = Series.to_option_list data_type series in
       let args' = Series_createo.Args (data_type, values') in
       [%test_result: Series_createo.t] ~expect:args' args;

@@ -30,6 +30,30 @@ pub unsafe fn ocaml_failwith(error_message: &str) -> ! {
 
 polars_ocaml_macros::ocaml_interop_backtrace_support!();
 
+// TODO: add this to ocaml-interop?
+pub struct OCamlUniformArray<A> {
+    _marker: PhantomData<A>,
+}
+
+unsafe impl<A, OCamlA> FromOCaml<OCamlUniformArray<OCamlA>> for Vec<A>
+where
+    A: FromOCaml<OCamlA>,
+{
+    fn from_ocaml(v: OCaml<OCamlUniformArray<OCamlA>>) -> Self {
+        let size = unsafe { ocaml_sys::wosize_val(v.raw()) };
+
+        // tuple/record/array tag, note that we do not expect a double array
+        // tag, since uniform array guarantee boxing.
+        assert_eq!(v.tag_value(), 0);
+
+        let mut vec = Vec::with_capacity(size);
+        for i in 0..size {
+            vec.push(OCaml::<_>::to_rust(&unsafe { v.field(i) }));
+        }
+        vec
+    }
+}
+
 pub struct PolarsTimeUnit(pub TimeUnit);
 
 unsafe impl FromOCaml<TimeUnit> for PolarsTimeUnit {
