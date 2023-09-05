@@ -455,6 +455,7 @@ dyn_box_op!(rust_data_frame_mean, DataFrame, |data_frame| {
 dyn_box_op!(rust_data_frame_median, DataFrame, |data_frame| {
     data_frame.median()
 });
+// TODO: mode is missing for dataframes
 dyn_box_op!(rust_data_frame_null_count, DataFrame, |data_frame| {
     data_frame.null_count()
 });

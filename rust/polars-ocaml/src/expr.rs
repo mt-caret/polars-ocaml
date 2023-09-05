@@ -57,9 +57,13 @@ fn rust_expr_all(cr: &mut &mut OCamlRuntime, unit: OCamlRef<()>) -> OCaml<DynBox
 }
 
 #[ocaml_interop_export]
-fn rust_expr_exclude(cr: &mut &mut OCamlRuntime, name: OCamlRef<String>) -> OCaml<DynBox<Expr>> {
-    let name: String = name.to_rust(cr);
-    OCaml::box_value(cr, all().exclude([name]))
+fn rust_expr_exclude(
+    cr: &mut &mut OCamlRuntime,
+    expr: OCamlRef<DynBox<Expr>>,
+    names: OCamlRef<OCamlList<String>>,
+) -> OCaml<DynBox<Expr>> {
+    let names: Vec<String> = names.to_rust(cr);
+    dyn_box!(cr, |expr| expr.exclude(names))
 }
 
 #[ocaml_interop_export]
@@ -281,6 +285,7 @@ expr_op!(rust_expr_pow, |base, exponent| base.pow(exponent));
 expr_op!(rust_expr_sum, |expr| expr.sum());
 expr_op!(rust_expr_mean, |expr| expr.mean());
 expr_op!(rust_expr_median, |expr| expr.median());
+expr_op!(rust_expr_mode, |expr| expr.mode());
 expr_op!(rust_expr_max, |expr| expr.max());
 expr_op!(rust_expr_min, |expr| expr.min());
 expr_op!(rust_expr_arg_max, |expr| expr.arg_max());

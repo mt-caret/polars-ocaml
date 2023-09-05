@@ -99,6 +99,14 @@ fn series_new(
         GADTDataType::Utf8 => create_series!(String, String),
         GADTDataType::Binary => create_series!(OCamlBytes, Vec<u8>),
         GADTDataType::List(data_type) => {
+            // Series creation doesn't work for empty lists and use of
+            // `Series::new_empty` is suggested instead.
+            // https://github.com/pola-rs/polars/pull/10558#issuecomment-1684923274
+            if values.is_empty() {
+                let data_type = DataType::List(Box::new(data_type.to_data_type()));
+                return Ok(Series::new_empty(&name, &data_type));
+            }
+
             if are_values_options {
                 let values: Vec<Option<Series>> = values
                     .into_iter()

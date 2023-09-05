@@ -87,7 +87,7 @@ external groupby
   -> t
   = "rust_lazy_frame_groupby"
 
-let groupby ?(is_stable = false) t ~by ~agg = groupby t ~is_stable ~by ~agg
+let groupby ?(is_stable = true) t ~by ~agg = groupby t ~is_stable ~by ~agg
 
 external groupby_dynamic
   :  t
