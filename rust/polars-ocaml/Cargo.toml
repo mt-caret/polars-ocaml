@@ -42,6 +42,7 @@ features = [
     "json",
     "lazy",
     "list_eval",
+    "mode",
     "parquet",
     "pivot",
     "random",

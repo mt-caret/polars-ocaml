@@ -47,10 +47,16 @@
  (name polars)
  (public_name polars)
  (foreign_archives polars_ocaml)
- (libraries core core_kernel.nonempty_list core_unix.time_ns_unix)
+ (libraries core core_kernel.nonempty_list core_unix core_unix.time_ns_unix)
  (inline_tests)
+ (library_flags -ccopt -fuse-ld=mold)
  (preprocess
-  (pps ppx_jane)))
+  (pps ppx_jane ppx_typed_fields)))
+
+(mdx
+ (files :standard - *.mli)
+ (libraries core core_kernel.nonempty_list polars)
+ (preludes mdx_prelude/mdx_prelude.txt))
 
 (env
  (utop

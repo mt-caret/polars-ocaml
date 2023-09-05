@@ -168,12 +168,14 @@ fn ocaml_interop_export_implementation(item_fn: syn::ItemFn, args: MacroArgs) ->
 
             #[no_mangle]
             pub extern "C" fn #bytecode_function_name(
-            argv: &[::ocaml_interop::RawOCaml],
+            argv: *const ::ocaml_interop::RawOCaml,
             argn: isize,
             ) -> ::ocaml_interop::RawOCaml {
                 if argn as usize != #number_of_arguments {
                     panic!("expected {} arguments, got {}", #number_of_arguments, argn);
                 }
+
+                let argv = unsafe { ::std::slice::from_raw_parts(argv, argn as usize) };
 
                 #native_function_name(#( #arguments ),*)
             }
@@ -432,28 +434,28 @@ mod tests {
     fn test_bytecode_generation() {
         let macro_output = apply_macro_and_pretty_print(
             quote! {
-            fn rust_expr_sample_n(
-                cr: &mut &mut OCamlRuntime,
-                expr: OCamlRef<DynBox<Expr>>,
-                n: OCamlRef<OCamlInt>,
-                with_replacement: OCamlRef<bool>,
-                shuffle: OCamlRef<bool>,
-                seed: OCamlRef<Option<OCamlInt>>,
-                fixed_seed: OCamlRef<bool>
-            ) -> OCaml<DynBox<Expr>> {
-                let Abstract(expr) = expr.to_rust(cr);
-                let n = n.to_rust::<Coerce<_, i64, usize>>(cr).get();
-                let with_replacement: bool = with_replacement.to_rust(cr);
-                let shuffle: bool = shuffle.to_rust(cr);
-                let seed = seed.to_rust::<Coerce<_, Option<i64>, Option<u64>>>(cr).get();
-                let fixed_seed = fixed_seed.to_rust(cr);
+                fn rust_expr_sample_n(
+                    cr: &mut &mut OCamlRuntime,
+                    expr: OCamlRef<DynBox<Expr>>,
+                    n: OCamlRef<OCamlInt>,
+                    with_replacement: OCamlRef<bool>,
+                    shuffle: OCamlRef<bool>,
+                    seed: OCamlRef<Option<OCamlInt>>,
+                    fixed_seed: OCamlRef<bool>,
+                ) -> OCaml<DynBox<Expr>> {
+                    let Abstract(expr) = expr.to_rust(cr);
+                    let n = n.to_rust::<Coerce<_, i64, usize>>(cr).get()?;
+                    let with_replacement: bool = with_replacement.to_rust(cr);
+                    let shuffle: bool = shuffle.to_rust(cr);
+                    let seed = seed
+                        .to_rust::<Coerce<_, Option<i64>, Option<u64>>>(cr)
+                        .get()?;
+                    let fixed_seed = fixed_seed.to_rust(cr);
 
-                Abstract(expr.sample_n(n, with_replacement, shuffle, seed, fixed_seed)).to_ocaml(cr)
-            }
+                    Abstract(expr.sample_n(n, with_replacement, shuffle, seed, fixed_seed)).to_ocaml(cr)
+                }
             },
-            MacroArgs {
-                raise_on_err: false,
-            },
+            MacroArgs { raise_on_err: true },
         );
 
         expect![[r##"
@@ -489,18 +491,24 @@ mod tests {
                     {
                         let return_value: OCaml<DynBox<Expr>> = {
                             let Abstract(expr) = expr.to_rust(cr);
-                            let n = n.to_rust::<Coerce<_, i64, usize>>(cr).get();
+                            let n = n.to_rust::<Coerce<_, i64, usize>>(cr).get()?;
                             let with_replacement: bool = with_replacement.to_rust(cr);
                             let shuffle: bool = shuffle.to_rust(cr);
-                            let seed = seed.to_rust::<Coerce<_, Option<i64>, Option<u64>>>(cr).get();
+                            let seed = seed
+                                .to_rust::<Coerce<_, Option<i64>, Option<u64>>>(cr)
+                                .get()?;
                             let fixed_seed = fixed_seed.to_rust(cr);
                             Abstract(expr.sample_n(n, with_replacement, shuffle, seed, fixed_seed))
                                 .to_ocaml(cr)
                         };
-                        unsafe { return_value.raw() }
+                        Ok(unsafe { return_value.raw() })
                     }
                 }) {
-                    Ok(value) => value,
+                    Ok(Ok(value)) => value,
+                    Ok(Err(error)) => {
+                        let cr = unsafe { &mut ::ocaml_interop::OCamlRuntime::recover_handle() };
+                        unsafe { raise_ocaml_exception(cr, error) }
+                    }
                     Err(cause) => {
                         let cr = unsafe { &mut ::ocaml_interop::OCamlRuntime::recover_handle() };
                         unsafe { raise_ocaml_exception_from_panic(cr, cause) }
@@ -509,12 +517,13 @@ mod tests {
             }
             #[no_mangle]
             pub extern "C" fn rust_expr_sample_n_bytecode(
-                argv: &[::ocaml_interop::RawOCaml],
+                argv: *const ::ocaml_interop::RawOCaml,
                 argn: isize,
             ) -> ::ocaml_interop::RawOCaml {
                 if argn as usize != 6usize {
                     panic!("expected {} arguments, got {}", 6usize, argn);
                 }
+                let argv = unsafe { ::std::slice::from_raw_parts(argv, argn as usize) };
                 rust_expr_sample_n(
                     argv[0usize],
                     argv[1usize],

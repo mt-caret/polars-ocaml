@@ -22,7 +22,7 @@ let%expect_test "test" =
      (* Only take first few lines which are stable across dev and release builds *)
   |> String.concat_lines
   |> String.filter ~f:(Fn.non Char.is_digit)
-     (* Remvoe all digits which may correspond to line/column numbers *)
+  (* Remvoe all digits which may correspond to line/column numbers *)
   |> print_endline;
   [%expect
     {|
