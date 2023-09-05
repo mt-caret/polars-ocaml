@@ -57,11 +57,7 @@ let rec value_generator : type a. a Data_type.Typed.t -> a Quickcheck.Generator.
     |> (* Core.String doesn't have a [is_valid_utf_8] function :( *)
     Generator.filter ~f:Stdlib.String.is_valid_utf_8
   | Binary -> Generator.string
-  | List t ->
-    value_generator t
-    |> (* Polars currently doesn't support passing empty Vec<Series> to Series::new.
-          See test in rust/polars-ocaml/src/lib.rs. *)
-    Generator.list_non_empty
+  | List t -> value_generator t |> Generator.list
   | Custom { data_type; f; f_inverse = _ } ->
     value_generator data_type |> Generator.map ~f
 ;;
@@ -152,7 +148,7 @@ module Series_create = struct
   let quickcheck_generator =
     let open Quickcheck.Generator.Let_syntax in
     let%bind (T data_type) = Data_type.Typed.quickcheck_generator_packed in
-    let%map values = Quickcheck.Generator.list_non_empty (value_generator data_type) in
+    let%map values = Quickcheck.Generator.list (value_generator data_type) in
     Args (data_type, values)
   ;;
 
@@ -212,7 +208,7 @@ module Series_createo = struct
     let open Quickcheck.Generator.Let_syntax in
     let%bind (T data_type) = Data_type.Typed.quickcheck_generator_packed in
     let%map values =
-      Quickcheck.Generator.list_non_empty
+      Quickcheck.Generator.list
         (Base_quickcheck.Generator.option (value_generator data_type))
     in
     Args (data_type, values)
