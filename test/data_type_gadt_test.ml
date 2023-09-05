@@ -57,11 +57,9 @@ let rec value_generator : type a. a Data_type.Typed.t -> a Quickcheck.Generator.
     |> (* Core.String doesn't have a [is_valid_utf_8] function :( *)
     Generator.filter ~f:Stdlib.String.is_valid_utf_8
   | Binary -> Generator.string
-  | List t ->
-    value_generator t
-    |> (* Polars currently doesn't support passing empty Vec<Series> to Series::new.
-          See test in rust/polars-ocaml/src/lib.rs. *)
-    Generator.list_non_empty
+  | List t -> value_generator t |> Generator.list
+  | Custom { data_type; f; f_inverse = _ } ->
+    value_generator data_type |> Generator.map ~f
 ;;
 
 let rec value_shrinker : type a. a Data_type.Typed.t -> a Quickcheck.Shrinker.t =
@@ -83,6 +81,8 @@ let rec value_shrinker : type a. a Data_type.Typed.t -> a Quickcheck.Shrinker.t 
   | Binary -> Shrinker.string
   | List t ->
     value_shrinker t |> Shrinker.list |> Shrinker.filter ~f:(Fn.non List.is_empty)
+  | Custom { data_type; f; f_inverse } ->
+    value_shrinker data_type |> Shrinker.map ~f ~f_inverse
 ;;
 
 let rec value_to_sexp : type a. a Data_type.Typed.t -> a -> Sexp.t =
@@ -104,6 +104,7 @@ let rec value_to_sexp : type a. a Data_type.Typed.t -> a -> Sexp.t =
   | List t ->
     let sexp_of_value = value_to_sexp t in
     [%sexp_of: value list] a
+  | Custom { data_type; f = _; f_inverse } -> value_to_sexp data_type (f_inverse a)
 ;;
 
 let rec value_compare : type a. a Data_type.Typed.t -> a -> a -> int =
@@ -123,6 +124,8 @@ let rec value_compare : type a. a Data_type.Typed.t -> a -> a -> int =
   | Utf8 -> [%compare: string] a b
   | Binary -> [%compare: string] a b
   | List t -> List.compare (value_compare t) a b
+  | Custom { data_type; f = _; f_inverse } ->
+    Comparable.lift (value_compare data_type) ~f:f_inverse a b
 ;;
 
 module Series_create = struct
@@ -145,7 +148,7 @@ module Series_create = struct
   let quickcheck_generator =
     let open Quickcheck.Generator.Let_syntax in
     let%bind (T data_type) = Data_type.Typed.quickcheck_generator_packed in
-    let%map values = Quickcheck.Generator.list_non_empty (value_generator data_type) in
+    let%map values = Quickcheck.Generator.list (value_generator data_type) in
     Args (data_type, values)
   ;;
 
@@ -178,8 +181,7 @@ let%expect_test "Series.create roundtrip" =
       [%test_result: Series_create.t] ~expect:args' args;
       List.iteri values' ~f:(fun i value ->
         let value_equal = Comparable.equal (value_compare data_type) in
-        assert (value_equal value (Series.get_exn data_type series i))));
-  [%expect {||}]
+        assert (value_equal value (Series.get_exn data_type series i))))
 ;;
 
 (* TODO: there's a *lot* of duplication with the Series_create module; perhaps
@@ -206,7 +208,7 @@ module Series_createo = struct
     let open Quickcheck.Generator.Let_syntax in
     let%bind (T data_type) = Data_type.Typed.quickcheck_generator_packed in
     let%map values =
-      Quickcheck.Generator.list_non_empty
+      Quickcheck.Generator.list
         (Base_quickcheck.Generator.option (value_generator data_type))
     in
     Args (data_type, values)
@@ -239,8 +241,7 @@ let%expect_test "Series.createo roundtrip" =
       [%test_result: Series_createo.t] ~expect:args' args;
       List.iteri values' ~f:(fun i value ->
         let value_equal = Option.equal (Comparable.equal (value_compare data_type)) in
-        assert (value_equal value (Series.get data_type series i))));
-  [%expect {||}]
+        assert (value_equal value (Series.get data_type series i))))
 ;;
 
 module Expr_lit = struct
@@ -285,8 +286,8 @@ let%expect_test "Expr.lit roundtrip" =
   Base_quickcheck.Test.run_exn
     (module Expr_lit)
     ~f:(fun (Expr_lit.Args (data_type, value) as args) ->
-      match data_type with
-      | List _ ->
+      match Data_type.Typed.flatten_custom data_type with
+      | List _ | Custom { data_type = List _; _ } ->
         (* Lists don't work for some reason:
 
            {[

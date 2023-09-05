@@ -6,7 +6,7 @@ module T = struct
   external col : string -> t = "rust_expr_col"
   external cols : string list -> t = "rust_expr_cols"
   external all : unit -> t = "rust_expr_all"
-  external exclude : string -> t = "rust_expr_exclude"
+  external exclude : t -> names:string list -> t = "rust_expr_exclude"
 
   let element () = col ""
 
@@ -15,6 +15,13 @@ module T = struct
   let cast ?(strict = true) t ~to_ = cast t ~to_ ~strict
 
   external lit : 'a Data_type.Typed.t -> 'a -> t = "rust_expr_lit"
+
+  let lit (type a) (data_type : a Data_type.Typed.t) value =
+    match Data_type.Typed.flatten_custom data_type with
+    | Custom { data_type; f = _; f_inverse } -> lit data_type (f_inverse value)
+    | data_type -> lit data_type value
+  ;;
+
   external null : unit -> t = "rust_expr_null"
 
   let int = lit Int64
@@ -77,6 +84,7 @@ module T = struct
   external sum : t -> t = "rust_expr_sum"
   external mean : t -> t = "rust_expr_mean"
   external median : t -> t = "rust_expr_median"
+  external mode : t -> t = "rust_expr_mode"
   external max : t -> t = "rust_expr_max"
   external min : t -> t = "rust_expr_min"
   external arg_max : t -> t = "rust_expr_arg_max"
