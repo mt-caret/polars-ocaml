@@ -8,35 +8,6 @@ use polars::prelude::prelude::*;
 use polars::prelude::*;
 use polars_ocaml_macros::ocaml_interop_export;
 
-// TODO: These helper fuctions should be replaced by a macro.
-fn series_binary_op<'a>(
-    cr: &'a mut &'a mut OCamlRuntime,
-    series: OCamlRef<'a, DynBox<Series>>,
-    other: OCamlRef<'a, DynBox<Series>>,
-    f: impl Fn(Series, Series) -> Series,
-) -> OCaml<'a, DynBox<Series>> {
-    let Abstract(series) = series.to_rust(cr);
-    let Abstract(other) = other.to_rust(cr);
-
-    OCaml::box_value(cr, f(series, other))
-}
-
-fn series_binary_op_result<'a>(
-    cr: &'a mut &'a mut OCamlRuntime,
-    series: OCamlRef<'a, DynBox<Series>>,
-    other: OCamlRef<'a, DynBox<Series>>,
-    f: impl Fn(Series, Series) -> Result<Series, PolarsError>,
-) -> OCaml<'a, Result<DynBox<Series>, String>> {
-    let Abstract(series) = series.to_rust(cr);
-    let Abstract(other) = other.to_rust(cr);
-
-    let series = f(series, other)
-        .map(Abstract)
-        .map_err(|err| err.to_string());
-
-    series.to_ocaml(cr)
-}
-
 // The rough idea of functions which take GADTDataType is that the argument or
 // the return type depends on the value of the GADTDataType, so we hide the
 // actual type of the argument or return value behind a DummyBoxRoot and
@@ -633,8 +604,7 @@ fn rust_series_to_data_frame(
     cr: &mut &mut OCamlRuntime,
     series: OCamlRef<DynBox<Series>>,
 ) -> OCaml<DynBox<DataFrame>> {
-    let Abstract(series) = series.to_rust(cr);
-    OCaml::box_value(cr, series.into_frame())
+    dyn_box!(cr, |series| series.into_frame())
 }
 
 #[ocaml_interop_export]
@@ -643,10 +613,9 @@ fn rust_series_sort(
     series: OCamlRef<DynBox<Series>>,
     descending: OCamlRef<bool>,
 ) -> OCaml<DynBox<Series>> {
-    let Abstract(series) = series.to_rust(cr);
     let descending: bool = descending.to_rust(cr);
 
-    OCaml::box_value(cr, series.sort(descending))
+    dyn_box!(cr, |series| series.sort(descending))
 }
 
 #[ocaml_interop_export(raise_on_err)]
@@ -655,12 +624,11 @@ fn rust_series_head(
     series: OCamlRef<DynBox<Series>>,
     length: OCamlRef<Option<OCamlInt>>,
 ) -> OCaml<DynBox<Series>> {
-    let Abstract(series) = series.to_rust(cr);
     let length = length
         .to_rust::<Coerce<_, Option<i64>, Option<usize>>>(cr)
         .get()?;
 
-    Abstract(series.head(length)).to_ocaml(cr)
+    dyn_box!(cr, |series| series.head(length))
 }
 
 #[ocaml_interop_export(raise_on_err)]
@@ -669,12 +637,11 @@ fn rust_series_tail(
     series: OCamlRef<DynBox<Series>>,
     length: OCamlRef<Option<OCamlInt>>,
 ) -> OCaml<DynBox<Series>> {
-    let Abstract(series) = series.to_rust(cr);
     let length = length
         .to_rust::<Coerce<_, Option<i64>, Option<usize>>>(cr)
         .get()?;
 
-    Abstract(series.tail(length)).to_ocaml(cr)
+    dyn_box!(cr, |series| series.tail(length))
 }
 
 #[ocaml_interop_export(raise_on_err)]
@@ -686,7 +653,6 @@ fn rust_series_sample_n(
     shuffle: OCamlRef<bool>,
     seed: OCamlRef<Option<OCamlInt>>,
 ) -> OCaml<Result<DynBox<Series>, String>> {
-    let Abstract(series) = series.to_rust(cr);
     let n = n.to_rust::<Coerce<_, i64, usize>>(cr).get()?;
     let with_replacement: bool = with_replacement.to_rust(cr);
     let shuffle: bool = shuffle.to_rust(cr);
@@ -694,11 +660,9 @@ fn rust_series_sample_n(
         .to_rust::<Coerce<_, Option<i64>, Option<u64>>>(cr)
         .get()?;
 
-    series
-        .sample_n(n, with_replacement, shuffle, seed)
-        .map(Abstract)
-        .map_err(|err| err.to_string())
-        .to_ocaml(cr)
+    dyn_box_result!(cr, |series| {
+        series.sample_n(n, with_replacement, shuffle, seed)
+    })
 }
 
 #[ocaml_interop_export]
@@ -707,14 +671,9 @@ fn rust_series_fill_null_with_strategy(
     series: OCamlRef<DynBox<Series>>,
     strategy: OCamlRef<FillNullStrategy>,
 ) -> OCaml<Result<DynBox<Series>, String>> {
-    let Abstract(series) = series.to_rust(cr);
     let PolarsFillNullStrategy(strategy) = strategy.to_rust(cr);
 
-    series
-        .fill_null(strategy)
-        .map(Abstract)
-        .map_err(|err| err.to_string())
-        .to_ocaml(cr)
+    dyn_box_result!(cr, |series| series.fill_null(strategy))
 }
 
 #[ocaml_interop_export]
@@ -723,113 +682,46 @@ fn rust_series_interpolate(
     series: OCamlRef<DynBox<Series>>,
     method: OCamlRef<InterpolationMethod>,
 ) -> OCaml<DynBox<Series>> {
-    let Abstract(series) = series.to_rust(cr);
     let PolarsInterpolationMethod(method) = method.to_rust(cr);
 
-    Abstract(interpolate(&series, method)).to_ocaml(cr)
+    dyn_box!(cr, |series| interpolate(&series, method))
 }
 
-#[ocaml_interop_export]
-fn rust_series_eq(
-    cr: &mut &mut OCamlRuntime,
-    series: OCamlRef<DynBox<Series>>,
-    other: OCamlRef<DynBox<Series>>,
-) -> OCaml<Result<DynBox<Series>, String>> {
-    series_binary_op_result(cr, series, other, |a, b| {
-        a.equal(&b).map(|series| series.into_series())
-    })
+macro_rules! series_op {
+    ($name:ident, |$($var:ident),+| $body:expr) => {
+        dyn_box_op!($name, Series, |$($var),+| $body);
+    }
 }
 
-#[ocaml_interop_export]
-fn rust_series_neq(
-    cr: &mut &mut OCamlRuntime,
-    series: OCamlRef<DynBox<Series>>,
-    other: OCamlRef<DynBox<Series>>,
-) -> OCaml<Result<DynBox<Series>, String>> {
-    series_binary_op_result(cr, series, other, |a, b| {
-        a.not_equal(&b).map(|series| series.into_series())
-    })
+macro_rules! series_op_result {
+    ($name:ident, |$($var:ident),+| $body:expr) => {
+        dyn_box_op_result!($name, Series, |$($var),+| $body);
+    }
 }
 
-#[ocaml_interop_export]
-fn rust_series_gt(
-    cr: &mut &mut OCamlRuntime,
-    series: OCamlRef<DynBox<Series>>,
-    other: OCamlRef<DynBox<Series>>,
-) -> OCaml<Result<DynBox<Series>, String>> {
-    series_binary_op_result(cr, series, other, |a, b| {
-        a.gt(&b).map(|series| series.into_series())
-    })
-}
+series_op_result!(rust_series_eq, |series, other| {
+    series.equal(&other).map(|series| series.into_series())
+});
+series_op_result!(rust_series_neq, |series, other| {
+    series.not_equal(&other).map(|series| series.into_series())
+});
+series_op_result!(rust_series_gt, |series, other| {
+    series.gt(&other).map(|series| series.into_series())
+});
+series_op_result!(rust_series_gt_eq, |series, other| {
+    series.gt_eq(&other).map(|series| series.into_series())
+});
+series_op_result!(rust_series_lt, |series, other| {
+    series.lt(&other).map(|series| series.into_series())
+});
+series_op_result!(rust_series_lt_eq, |series, other| {
+    series.lt_eq(&other).map(|series| series.into_series())
+});
 
-#[ocaml_interop_export]
-fn rust_series_gt_eq(
-    cr: &mut &mut OCamlRuntime,
-    series: OCamlRef<DynBox<Series>>,
-    other: OCamlRef<DynBox<Series>>,
-) -> OCaml<Result<DynBox<Series>, String>> {
-    series_binary_op_result(cr, series, other, |a, b| {
-        a.gt_eq(&b).map(|series| series.into_series())
-    })
-}
-
-#[ocaml_interop_export]
-fn rust_series_lt(
-    cr: &mut &mut OCamlRuntime,
-    series: OCamlRef<DynBox<Series>>,
-    other: OCamlRef<DynBox<Series>>,
-) -> OCaml<Result<DynBox<Series>, String>> {
-    series_binary_op_result(cr, series, other, |a, b| {
-        a.lt(&b).map(|series| series.into_series())
-    })
-}
-
-#[ocaml_interop_export]
-fn rust_series_lt_eq(
-    cr: &mut &mut OCamlRuntime,
-    series: OCamlRef<DynBox<Series>>,
-    other: OCamlRef<DynBox<Series>>,
-) -> OCaml<Result<DynBox<Series>, String>> {
-    series_binary_op_result(cr, series, other, |a, b| {
-        a.lt_eq(&b).map(|series| series.into_series())
-    })
-}
-
-#[ocaml_interop_export]
-fn rust_series_add(
-    cr: &mut &mut OCamlRuntime,
-    series: OCamlRef<DynBox<Series>>,
-    other: OCamlRef<DynBox<Series>>,
-) -> OCaml<DynBox<Series>> {
-    series_binary_op(cr, series, other, |a, b| a + b)
-}
-
-#[ocaml_interop_export]
-fn rust_series_sub(
-    cr: &mut &mut OCamlRuntime,
-    series: OCamlRef<DynBox<Series>>,
-    other: OCamlRef<DynBox<Series>>,
-) -> OCaml<DynBox<Series>> {
-    series_binary_op(cr, series, other, |a, b| a - b)
-}
-
-#[ocaml_interop_export]
-fn rust_series_mul(
-    cr: &mut &mut OCamlRuntime,
-    series: OCamlRef<DynBox<Series>>,
-    other: OCamlRef<DynBox<Series>>,
-) -> OCaml<DynBox<Series>> {
-    series_binary_op(cr, series, other, |a, b| a * b)
-}
-
-#[ocaml_interop_export]
-fn rust_series_div(
-    cr: &mut &mut OCamlRuntime,
-    series: OCamlRef<DynBox<Series>>,
-    other: OCamlRef<DynBox<Series>>,
-) -> OCaml<DynBox<Series>> {
-    series_binary_op(cr, series, other, |a, b| a / b)
-}
+series_op!(rust_series_add, |series, other| series + other);
+series_op!(rust_series_sub, |series, other| series - other);
+series_op!(rust_series_mul, |series, other| series * other);
+series_op!(rust_series_div, |series, other| series / other);
 
 #[ocaml_interop_export]
 fn rust_series_to_string_hum(
