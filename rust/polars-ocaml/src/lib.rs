@@ -19,6 +19,8 @@ mod tests {
 
     #[test]
     fn check_div() {
+        std::env::set_var("POLARS_TABLE_WIDTH", "100");
+
         let weather_by_day = DataFrame::new(vec![
             Series::new(
                 "station",

@@ -1,0 +1,15 @@
+(* This file is not technically syntactically correct OCaml, since it's meant
+  to be evaluated by the toplevel so also contains toplevel directives.
+  This seems to confuse ocamlformat which then formats this file in way that
+  breaks MDX. To avoid this, we use a ".txt" extension instead of the usual ".ml".
+*)
+
+open Core;;
+open Polars;;
+
+#install_printer Series.pp;;
+#install_printer Data_frame.pp;;
+
+(* The default value (Utf8_full_condensed) does not render well in the font
+  that odoc uses. *)
+Env.set Fmt_table_formatting ~value:Env.Table_formatting.Ascii_full_condensed;;
