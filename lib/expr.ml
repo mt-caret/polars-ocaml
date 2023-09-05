@@ -31,6 +31,9 @@ module T = struct
 
   external naive_date : Common.Naive_date.t -> t = "rust_expr_naive_date"
   external naive_datetime : Common.Naive_datetime.t -> t = "rust_expr_naive_datetime"
+
+  let time time = naive_datetime (Common.Naive_datetime.of_time_ns_exn time)
+
   external series : Series.t -> t = "rust_expr_series"
   external sort : t -> descending:bool -> t = "rust_expr_sort"
 

@@ -60,6 +60,16 @@ module T = struct
     datetime_option name (List.map dates ~f:(Option.map ~f:Common.Naive_datetime.of_date))
   ;;
 
+  let time string times =
+    datetime string (List.map times ~f:Common.Naive_datetime.of_time_ns_exn)
+  ;;
+
+  let time_option string times =
+    datetime_option
+      string
+      (List.map times ~f:(Option.map ~f:Common.Naive_datetime.of_time_ns_exn))
+  ;;
+
   external date : string -> Common.Naive_date.t list -> t = "rust_series_new_date"
 
   let date name dates = date name (List.map dates ~f:Common.Naive_date.of_date)

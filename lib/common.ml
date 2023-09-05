@@ -89,6 +89,24 @@ module Naive_datetime = struct
     parse_and_print "2023-01-02 03";
     [%expect {| 2023-01-02 03:00:00 |}]
   ;;
+
+  external of_time_ns : Time_ns.t -> t option = "rust_time_ns_to_naive_datetime"
+
+  let of_time_ns_exn time_ns =
+    of_time_ns time_ns
+    |> Option.value_or_thunk ~default:(fun () ->
+      raise_s [%message "Invalid time" (time_ns : Time_ns_unix.t)])
+  ;;
+
+  let%expect_test "of_time_ns" =
+    let time_ns = Time_ns_unix.of_string "2023-01-02 03:04:05.678" in
+    of_time_ns_exn time_ns |> to_string |> print_endline;
+    [%expect {| 2023-01-02 03:04:05.678 |}]
+  ;;
+
+  external to_timestamp_nanos : t -> int = "rust_naive_datetime_to_timestamp_nanos"
+
+  let to_time_ns t = to_timestamp_nanos t |> Time_ns.of_int_ns_since_epoch
 end
 
 external record_panic_backtraces : unit -> unit = "rust_record_panic_backtraces"
