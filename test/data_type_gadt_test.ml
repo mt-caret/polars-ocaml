@@ -58,6 +58,8 @@ let rec value_generator : type a. a Data_type.Typed.t -> a Quickcheck.Generator.
     Generator.filter ~f:Stdlib.String.is_valid_utf_8
   | Binary -> Generator.string
   | List t -> value_generator t |> Generator.list
+  | Custom { data_type; f; f_inverse = _ } ->
+    value_generator data_type |> Generator.map ~f
 ;;
 
 let rec value_shrinker : type a. a Data_type.Typed.t -> a Quickcheck.Shrinker.t =
@@ -79,6 +81,8 @@ let rec value_shrinker : type a. a Data_type.Typed.t -> a Quickcheck.Shrinker.t 
   | Binary -> Shrinker.string
   | List t ->
     value_shrinker t |> Shrinker.list |> Shrinker.filter ~f:(Fn.non List.is_empty)
+  | Custom { data_type; f; f_inverse } ->
+    value_shrinker data_type |> Shrinker.map ~f ~f_inverse
 ;;
 
 let rec value_to_sexp : type a. a Data_type.Typed.t -> a -> Sexp.t =
@@ -100,6 +104,7 @@ let rec value_to_sexp : type a. a Data_type.Typed.t -> a -> Sexp.t =
   | List t ->
     let sexp_of_value = value_to_sexp t in
     [%sexp_of: value list] a
+  | Custom { data_type; f = _; f_inverse } -> value_to_sexp data_type (f_inverse a)
 ;;
 
 let rec value_compare : type a. a Data_type.Typed.t -> a -> a -> int =
@@ -119,6 +124,8 @@ let rec value_compare : type a. a Data_type.Typed.t -> a -> a -> int =
   | Utf8 -> [%compare: string] a b
   | Binary -> [%compare: string] a b
   | List t -> List.compare (value_compare t) a b
+  | Custom { data_type; f = _; f_inverse } ->
+    Comparable.lift (value_compare data_type) ~f:f_inverse a b
 ;;
 
 module Series_create = struct
