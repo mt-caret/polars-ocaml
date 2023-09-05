@@ -93,7 +93,7 @@ jobs:
         run: opam var bin >> $GITHUB_PATH
 
       - run: rm ./rust/.cargo/config.toml
-      - run: sed -i '/.*mold.*/d' test/dune guide/dune
+      - run: sed -i '/.*mold.*/d' lib/dune test/dune guide/dune
 
       - run: opam install . --deps-only --with-doc --with-test
 
