@@ -196,6 +196,27 @@ impl_from_ocaml_variant! {
     }
 }
 
+impl GADTDataType {
+    pub fn to_data_type(&self) -> DataType {
+        match self {
+            GADTDataType::Boolean => DataType::Boolean,
+            GADTDataType::UInt8 => DataType::UInt8,
+            GADTDataType::UInt16 => DataType::UInt16,
+            GADTDataType::UInt32 => DataType::UInt32,
+            GADTDataType::UInt64 => DataType::UInt64,
+            GADTDataType::Int8 => DataType::Int8,
+            GADTDataType::Int16 => DataType::Int16,
+            GADTDataType::Int32 => DataType::Int32,
+            GADTDataType::Int64 => DataType::Int64,
+            GADTDataType::Float32 => DataType::Float32,
+            GADTDataType::Float64 => DataType::Float64,
+            GADTDataType::Utf8 => DataType::Utf8,
+            GADTDataType::Binary => DataType::Binary,
+            GADTDataType::List(data_type) => DataType::List(Box::new(data_type.to_data_type())),
+        }
+    }
+}
+
 pub struct PolarsFillNullStrategy(pub FillNullStrategy);
 
 unsafe impl FromOCaml<FillNullStrategy> for PolarsFillNullStrategy {
