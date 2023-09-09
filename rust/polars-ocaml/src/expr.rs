@@ -104,10 +104,15 @@ fn rust_expr_lit(
         GADTDataType::Utf8 => lit(value.interpret::<String>(cr).to_rust::<String>()),
         GADTDataType::Binary => lit(value.interpret::<OCamlBytes>(cr).to_rust::<Vec<u8>>()),
         GADTDataType::List(data_type) => {
-            let values = value
-                .interpret::<OCamlList<DummyBoxRoot>>(cr)
-                .to_rust::<Vec<DummyBoxRoot>>();
-            let series = crate::series::series_new(cr, &data_type, "series", values, false)?;
+            // Since there is no direct way to create a List-based literal, we
+            // create a one-element series instead, and use that.
+            let series = crate::series::series_new(
+                cr,
+                &GADTDataType::List(data_type),
+                "series",
+                vec![value],
+                false,
+            )?;
             lit(series)
         }
     };

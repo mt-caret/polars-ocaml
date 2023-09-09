@@ -286,27 +286,13 @@ let%expect_test "Expr.lit roundtrip" =
   Base_quickcheck.Test.run_exn
     (module Expr_lit)
     ~f:(fun (Expr_lit.Args (data_type, value) as args) ->
-      match Data_type.Typed.flatten_custom data_type with
-      | List _ | Custom { data_type = List _; _ } ->
-        (* Lists don't work for some reason:
-
-           {[
-             "Base_quickcheck.Test.run: test failed" (input ((List Int8) (-113)))
-             (error
-             ((Failure
-             "Polars panicked: data types don't match: invalid series dtype: expected `List`, got `i8`\
-             \nbacktrace not captured")
-           ]} *)
-        ()
-      | _ ->
-        let value' =
-          Data_frame.create_exn []
-          |> Data_frame.select_exn
-               ~exprs:Expr.[ lit data_type value |> alias ~name:"col" ]
-          |> Data_frame.column_exn ~name:"col"
-          |> Series.to_list data_type
-        in
-        assert (List.length value' = 1);
-        let args' = Expr_lit.Args (data_type, List.hd_exn value') in
-        [%test_result: Expr_lit.t] ~expect:args' args)
+      let value' =
+        Data_frame.create_exn []
+        |> Data_frame.select_exn ~exprs:Expr.[ lit data_type value |> alias ~name:"col" ]
+        |> Data_frame.column_exn ~name:"col"
+        |> Series.to_list data_type
+      in
+      assert (List.length value' = 1);
+      let args' = Expr_lit.Args (data_type, List.hd_exn value') in
+      [%test_result: Expr_lit.t] ~expect:args' args)
 ;;
