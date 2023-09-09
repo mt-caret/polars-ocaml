@@ -69,22 +69,6 @@ pub(crate) use dyn_box_op;
 pub(crate) use dyn_box_op_result;
 pub(crate) use dyn_box_result;
 
-// This function is actually quite unsafe; as a general rule, additional use of
-// this is strongly discouraged. See comment for `raise_ocaml_exception` in the
-// implementation of `ocaml_interop_backtrace_support` for more details.
-//
-// TODO: we unfortunately can't use `ocaml_sys::caml_failwith_value` which would
-// prevent us from leaking memory since `cr` isn't accessible in `from_ocaml`
-// calls which are where this function is being used (and I'm not sure
-// recovering the runtime in these place is safe).
-pub unsafe fn ocaml_failwith(error_message: &str) -> ! {
-    let error_message = std::ffi::CString::new(error_message).expect("CString::new failed");
-    unsafe {
-        ocaml_sys::caml_failwith(error_message.as_ptr());
-    }
-    unreachable!("caml_failwith should never return")
-}
-
 polars_ocaml_macros::ocaml_interop_backtrace_support!();
 
 pub struct OCamlInt63(pub i64);
@@ -302,22 +286,12 @@ unsafe impl FromOCaml<FillNullStrategy> for PolarsFillNullStrategy {
         let result = ocaml_unpack_variant! {
             v => {
                 FillNullStrategy::Backward(upto: Option<OCamlInt>) => {
-                    let upto_: Option<i64> = upto;
-                    let upto: Option<Option<u32>> = upto_.map(|upto| TryInto::<u32>::try_into(upto).ok());
-                    match upto {
-                        None => FillNullStrategy::Backward(None),
-                        Some(None) => unsafe { ocaml_failwith(&format!("Failed conversion to u32 {:?}", upto_)) },
-                        Some(upto) => FillNullStrategy::Backward(upto),
-                    }
+                    let upto: Coerce<OCamlInt, Option<i64>, Option<u32>> = upto;
+                    FillNullStrategy::Backward(upto.get().expect("Failure when deserializing FillNullStrategy::Backward"))
                 },
                 FillNullStrategy::Forward(upto: Option<OCamlInt>) => {
-                    let upto_: Option<i64> = upto;
-                    let upto: Option<Option<u32>> = upto_.map(|upto| TryInto::<u32>::try_into(upto).ok());
-                    match upto {
-                        None => FillNullStrategy::Forward(None),
-                        Some(None) => unsafe { ocaml_failwith(&format!("Failed conversion to u32 {:?}", upto_)) },
-                        Some(upto) => FillNullStrategy::Forward(upto),
-                    }
+                    let upto: Coerce<OCamlInt, Option<i64>, Option<u32>> = upto;
+                    FillNullStrategy::Forward(upto.get().expect("Failure when deserializing FillNullStrategy::Forward"))
                 },
                 FillNullStrategy::Mean,
                 FillNullStrategy::Min,
