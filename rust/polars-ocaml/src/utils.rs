@@ -12,6 +12,63 @@ use std::borrow::Borrow;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 
+macro_rules! dyn_box {
+    ($cr:ident, |$($var:ident),+| $body:expr) => {
+        {
+            $(
+                let Abstract($var) = $var.to_rust($cr);
+            )+
+
+            OCaml::box_value($cr, $body)
+        }
+    };
+}
+
+macro_rules! dyn_box_result {
+    ($cr:ident, |$($var:ident),+| $body:expr) => {
+        {
+            $(
+                let Abstract($var) = $var.to_rust($cr);
+            )+
+
+            $body.map(Abstract).map_err(|err| err.to_string()).to_ocaml($cr)
+        }
+    };
+}
+
+macro_rules! dyn_box_op {
+    ($name:ident, $type:ty, |$($var:ident),+| $body:expr) => {
+        #[ocaml_interop_export]
+        fn $name(
+            cr: &mut &mut OCamlRuntime,
+            $(
+                $var: OCamlRef<DynBox<$type>>,
+            )+
+        ) -> OCaml<DynBox<$type>> {
+            dyn_box!(cr, |$($var),+| $body)
+        }
+    }
+}
+
+macro_rules! dyn_box_op_result {
+    ($name:ident, $type:ty, |$($var:ident),+| $body:expr) => {
+        #[ocaml_interop_export]
+        fn $name(
+            cr: &mut &mut OCamlRuntime,
+            $(
+                $var: OCamlRef<DynBox<$type>>,
+            )+
+        ) -> OCaml<Result<DynBox<$type>, String>> {
+            dyn_box_result!(cr, |$($var),+| $body)
+        }
+    }
+}
+
+pub(crate) use dyn_box;
+pub(crate) use dyn_box_op;
+pub(crate) use dyn_box_op_result;
+pub(crate) use dyn_box_result;
+
 // This function is actually quite unsafe; as a general rule, additional use of
 // this is strongly discouraged. See comment for `raise_ocaml_exception` in the
 // implementation of `ocaml_interop_backtrace_support` for more details.
@@ -51,6 +108,27 @@ where
             vec.push(OCaml::<_>::to_rust(&unsafe { v.field(i) }));
         }
         vec
+    }
+}
+
+pub struct OCamlInt63(pub i64);
+
+unsafe impl FromOCaml<OCamlInt63> for OCamlInt63 {
+    fn from_ocaml(v: OCaml<OCamlInt63>) -> Self {
+        if v.is_block() {
+            let int64 = {
+                let val = unsafe { ocaml_sys::field(v.raw(), 1) };
+                unsafe { *(val as *const i64) }
+            };
+
+            // Base's implementation of `Int63.t` on 32bit platforms is `Int64.t`
+            // (a block holding an i64) shifted left with lower bit 0 to match
+            // the semantics of `int` on 64bit platforms.
+            OCamlInt63(int64 >> 1)
+        } else {
+            // On 64bit platforms, `Int63.t` is just a regular old OCaml integer.
+            OCamlInt63(unsafe { ocaml_sys::int_val(v.raw()) as i64 })
+        }
     }
 }
 
@@ -217,6 +295,27 @@ impl_from_ocaml_variant! {
         GADTDataType::Utf8,
         GADTDataType::Binary,
         GADTDataType::List(data_type: GADTDataType),
+    }
+}
+
+impl GADTDataType {
+    pub fn to_data_type(&self) -> DataType {
+        match self {
+            GADTDataType::Boolean => DataType::Boolean,
+            GADTDataType::UInt8 => DataType::UInt8,
+            GADTDataType::UInt16 => DataType::UInt16,
+            GADTDataType::UInt32 => DataType::UInt32,
+            GADTDataType::UInt64 => DataType::UInt64,
+            GADTDataType::Int8 => DataType::Int8,
+            GADTDataType::Int16 => DataType::Int16,
+            GADTDataType::Int32 => DataType::Int32,
+            GADTDataType::Int64 => DataType::Int64,
+            GADTDataType::Float32 => DataType::Float32,
+            GADTDataType::Float64 => DataType::Float64,
+            GADTDataType::Utf8 => DataType::Utf8,
+            GADTDataType::Binary => DataType::Binary,
+            GADTDataType::List(data_type) => DataType::List(Box::new(data_type.to_data_type())),
+        }
     }
 }
 

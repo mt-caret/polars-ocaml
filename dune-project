@@ -1,4 +1,4 @@
-(lang dune 3.7)
+(lang dune 3.8)
 
 (name polars)
 
@@ -18,12 +18,15 @@
 
 (documentation https://github.com/mt-caret/polars-ocaml)
 
+(using mdx 0.4)
+
 (package
  (name polars)
  (synopsis "OCaml bindings to the Polars dataframe library")
  (description "OCaml bindings to the Polars dataframe library")
  (depends
   (expect_test_helpers_core :with-test)
+  (mdx :with-test)
   (ocamlformat :dev)
   (odoc :with-doc)
   (shell :with-test)
@@ -31,7 +34,8 @@
   core_kernel
   dune
   ocaml
-  ppx_jane)
+  ppx_jane
+  ppx_typed_fields)
  (tags
   (data-science polars rust)))
 

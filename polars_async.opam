@@ -10,7 +10,7 @@ homepage: "https://github.com/mt-caret/polars-ocaml"
 doc: "https://github.com/mt-caret/polars-ocaml"
 bug-reports: "https://github.com/mt-caret/polars-ocaml/issues"
 depends: [
-  "dune" {>= "3.7"}
+  "dune" {>= "3.8"}
   "polars"
   "async"
   "core"

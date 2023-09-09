@@ -7,12 +7,26 @@ module T = struct
      OCaml heap and skip a copy. *)
   external create : 'a Data_type.Typed.t -> string -> 'a list -> t = "rust_series_new"
 
+  let create (type a) (data_type : a Data_type.Typed.t) name values =
+    match Data_type.Typed.flatten_custom data_type with
+    | Custom { data_type; f = _; f_inverse } ->
+      create data_type name (List.map values ~f:f_inverse)
+    | data_type -> create data_type name values
+  ;;
+
   external createo
     :  'a Data_type.Typed.t
     -> string
     -> 'a option list
     -> t
     = "rust_series_new_option"
+
+  let createo (type a) (data_type : a Data_type.Typed.t) name values =
+    match Data_type.Typed.flatten_custom data_type with
+    | Custom { data_type; f = _; f_inverse } ->
+      createo data_type name (List.map values ~f:(Option.map ~f:f_inverse))
+    | data_type -> createo data_type name values
+  ;;
 
   (* TODO: the astute reader will realize that this is quite terrible when
      trying to passing float arrays! Unfortunately it's not clear to me how
@@ -25,12 +39,26 @@ module T = struct
     -> t
     = "rust_series_new_array"
 
+  let create' (type a) (data_type : a Data_type.Typed.t) name values =
+    match Data_type.Typed.flatten_custom data_type with
+    | Custom { data_type; f = _; f_inverse } ->
+      create' data_type name (Uniform_array.map values ~f:f_inverse)
+    | data_type -> create' data_type name values
+  ;;
+
   external createo'
     :  'a Data_type.Typed.t
     -> string
     -> 'a option Uniform_array.t
     -> t
     = "rust_series_new_option_array"
+
+  let createo' (type a) (data_type : a Data_type.Typed.t) name values =
+    match Data_type.Typed.flatten_custom data_type with
+    | Custom { data_type; f = _; f_inverse } ->
+      createo' data_type name (Uniform_array.map values ~f:(Option.map ~f:f_inverse))
+    | data_type -> createo' data_type name values
+  ;;
 
   let int = create Int64
   let into = createo Int64
@@ -62,6 +90,16 @@ module T = struct
 
   let datetime_option' name dates =
     datetime_option name (List.map dates ~f:(Option.map ~f:Common.Naive_datetime.of_date))
+  ;;
+
+  let time string times =
+    datetime string (List.map times ~f:Common.Naive_datetime.of_time_ns_exn)
+  ;;
+
+  let time_option string times =
+    datetime_option
+      string
+      (List.map times ~f:(Option.map ~f:Common.Naive_datetime.of_time_ns_exn))
   ;;
 
   external date : string -> Common.Naive_date.t list -> t = "rust_series_new_date"
@@ -127,13 +165,32 @@ module T = struct
 
   external to_list : 'a Data_type.Typed.t -> t -> 'a list = "rust_series_to_list"
 
+  let to_list (type a) (data_type : a Data_type.Typed.t) t =
+    match Data_type.Typed.flatten_custom data_type with
+    | Custom { data_type; f; f_inverse = _ } -> to_list data_type t |> List.map ~f
+    | data_type -> to_list data_type t
+  ;;
+
   external to_option_list
     :  'a Data_type.Typed.t
     -> t
     -> 'a option list
     = "rust_series_to_option_list"
 
+  let to_option_list (type a) (data_type : a Data_type.Typed.t) t =
+    match Data_type.Typed.flatten_custom data_type with
+    | Custom { data_type; f; f_inverse = _ } ->
+      to_option_list data_type t |> List.map ~f:(Option.map ~f)
+    | data_type -> to_option_list data_type t
+  ;;
+
   external get : 'a Data_type.Typed.t -> t -> int -> 'a option = "rust_series_get"
+
+  let get (type a) (data_type : a Data_type.Typed.t) t i =
+    match Data_type.Typed.flatten_custom data_type with
+    | Custom { data_type; f; f_inverse = _ } -> get data_type t i |> Option.map ~f
+    | data_type -> get data_type t i
+  ;;
 
   let get_exn data_type t i = get data_type t i |> Option.value_exn ~here:[%here]
 

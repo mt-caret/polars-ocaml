@@ -20,6 +20,8 @@ val datetime : string -> Common.Naive_datetime.t list -> t
 val datetime_option : string -> Common.Naive_datetime.t option list -> t
 val datetime' : string -> Date.t list -> t
 val datetime_option' : string -> Date.t option list -> t
+val time : string -> Time_ns.t list -> t
+val time_option : string -> Time_ns.t option list -> t
 
 val date_range
   :  ?every:string

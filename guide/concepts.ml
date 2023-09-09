@@ -199,11 +199,6 @@ let%expect_test "Contexts" =
   let out =
     Data_frame.groupby_exn
       df
-      (* TODO: the default is false, which originally caused this test to be
-         nondeterministic (I assumed that this was unstable in the sense of an
-         unstable sort, not nondeterminism). Perhaps the default should be
-         is_stable=true? *)
-      ~is_stable:true
       ~by:Expr.[ col "groups" ]
       ~agg:
         Expr.
@@ -243,7 +238,6 @@ let%expect_test "Lazy / Eager API" =
   Lazy_frame.scan_csv_exn "./data/iris.csv"
   |> Lazy_frame.filter ~predicate:Expr.(col "sepal_length" > int 5)
   |> Lazy_frame.groupby
-       ~is_stable:true
        ~by:Expr.[ col "species" ]
        ~agg:Expr.[ col "sepal_width" |> Expr.mean ]
   |> Lazy_frame.collect_exn
@@ -267,7 +261,6 @@ let%expect_test "Streaming" =
   Lazy_frame.scan_csv_exn "./data/iris.csv"
   |> Lazy_frame.filter ~predicate:Expr.(col "sepal_length" > int 5)
   |> Lazy_frame.groupby
-       ~is_stable:true
        ~by:Expr.[ col "species" ]
        ~agg:Expr.[ col "sepal_width" |> Expr.mean ]
   |> Lazy_frame.with_streaming ~toggle:true
