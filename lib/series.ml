@@ -31,7 +31,10 @@ module T = struct
   (* TODO: the astute reader will realize that this is quite terrible when
      trying to passing float arrays! Unfortunately it's not clear to me how
      to pass regular arrays safely to Rust, whereas this is definitely safe
-     since [Uniform_array.t] guarantees elements are boxed. *)
+     since [Uniform_array.t] guarantees elements are boxed.
+
+     See https://github.com/mt-caret/polars-ocaml/pull/67 for how naively trying to
+     transmute on the Rust side doesn't work. *)
   external create'
     :  'a Data_type.Typed.t
     -> string
