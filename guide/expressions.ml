@@ -141,7 +141,7 @@ let%expect_test "Functions" =
       ~exprs:
         Expr.
           [ col "names" |> n_unique |> alias ~name:"unique"
-          ; col "names" |> approx_unique |> alias ~name:"approx_unique"
+          ; col "names" |> approx_n_unique |> alias ~name:"approx_unique"
           ]
   in
   Data_frame.print df_alias;

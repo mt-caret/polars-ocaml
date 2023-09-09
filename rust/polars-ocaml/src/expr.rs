@@ -29,12 +29,6 @@ fn expr_series_map<'a>(
     OCaml::box_value(cr, expr.map(f, output_type))
 }
 
-enum WhenThenClause {
-    Empty,
-    WhenThen(WhenThen),
-    WhenThenThen(WhenThenThen),
-}
-
 #[ocaml_interop_export]
 fn rust_expr_col(cr: &mut &mut OCamlRuntime, name: OCamlRef<String>) -> OCaml<DynBox<Expr>> {
     let name: String = name.to_rust(cr);
@@ -299,7 +293,7 @@ fn rust_expr_count_(cr: &mut &mut OCamlRuntime, unit: OCamlRef<()>) -> OCaml<Dyn
 }
 
 expr_op!(rust_expr_n_unique, |expr| expr.n_unique());
-expr_op!(rust_expr_approx_unique, |expr| expr.approx_unique());
+expr_op!(rust_expr_approx_n_unique, |expr| expr.approx_n_unique());
 expr_op!(rust_expr_explode, |expr| expr.explode());
 
 #[ocaml_interop_export]
@@ -384,6 +378,24 @@ fn rust_expr_rank(
     })
 }
 
+// Diagram of when/then/otherwise chaining:
+// ┌────┐           ┌────┐                ┌───────────┐
+// │When├─.then()──►│Then├────.when()────►│ChainedWhen│◄──┐
+// └────┘           └─┬──┘                └─────┬─────┘   │
+//   ▲                │                         │         │
+//   │                │                         │         │
+//   │           .otherwise()                .then()   .when()
+//   │                │                         │         │
+//   │                ▼                         ▼         │
+// when()           ┌────┐                ┌───────────┐   │
+//                  │Expr│◄──.otherwise()─┤ChainedThen├───┘
+//                  └────┘                └───────────┘
+enum WhenThenClause {
+    Empty,
+    Then(Then),
+    ChainedThen(ChainedThen),
+}
+
 #[ocaml_interop_export]
 fn rust_expr_when_then(
     cr: &mut &mut OCamlRuntime,
@@ -395,31 +407,29 @@ fn rust_expr_when_then(
         .into_iter()
         .map(|(Abstract(when), Abstract(then))| (when, then))
         .collect();
-    let Abstract(otherwise) = otherwise.to_rust(cr);
+    dyn_box!(cr, |otherwise| {
+        let mut ret = WhenThenClause::Empty;
 
-    let mut ret = WhenThenClause::Empty;
+        for (when_expr, then_expr) in when_then_clauses {
+            match ret {
+                WhenThenClause::Empty => {
+                    ret = WhenThenClause::Then(when(when_expr).then(then_expr))
+                }
+                WhenThenClause::Then(then) => {
+                    ret = WhenThenClause::ChainedThen(then.when(when_expr).then(then_expr))
+                }
+                WhenThenClause::ChainedThen(chained_then) => {
+                    ret = WhenThenClause::ChainedThen(chained_then.when(when_expr).then(then_expr))
+                }
+            }
+        }
 
-    for (when_expr, then_expr) in when_then_clauses {
         match ret {
-            WhenThenClause::Empty => {
-                ret = WhenThenClause::WhenThen(when(when_expr).then(then_expr))
-            }
-            WhenThenClause::WhenThen(when_then) => {
-                ret = WhenThenClause::WhenThenThen(when_then.when(when_expr).then(then_expr))
-            }
-            WhenThenClause::WhenThenThen(when_then_then) => {
-                ret = WhenThenClause::WhenThenThen(when_then_then.when(when_expr).then(then_expr))
-            }
+            WhenThenClause::Empty => otherwise,
+            WhenThenClause::Then(then) => then.otherwise(otherwise),
+            WhenThenClause::ChainedThen(chained_then) => chained_then.otherwise(otherwise),
         }
-    }
-
-    match ret {
-        WhenThenClause::Empty => OCaml::box_value(cr, otherwise),
-        WhenThenClause::WhenThen(when_then) => OCaml::box_value(cr, when_then.otherwise(otherwise)),
-        WhenThenClause::WhenThenThen(when_then_then) => {
-            OCaml::box_value(cr, when_then_then.otherwise(otherwise))
-        }
-    }
+    })
 }
 
 #[ocaml_interop_export]
@@ -705,11 +715,13 @@ fn rust_expr_str_strptime(
     let format: String = format.to_rust(cr);
 
     dyn_box!(cr, |expr| {
+        // TODO: make other options configurable
         let options = StrptimeOptions {
             format: Some(format.clone()),
             strict: true,
             exact: true,
             cache: false,
+            use_earliest: None,
         };
         expr.str().strptime(data_type.clone(), options)
     })
