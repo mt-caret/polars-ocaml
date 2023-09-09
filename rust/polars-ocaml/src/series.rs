@@ -209,7 +209,7 @@ fn rust_series_new_array(
     cr: &mut &mut OCamlRuntime,
     data_type: OCamlRef<GADTDataType>,
     name: OCamlRef<String>,
-    values: OCamlRef<OCamlUniformArray<DummyBoxRoot>>,
+    values: OCamlRef<OCamlArray<DummyBoxRoot>>,
 ) -> OCaml<DynBox<Series>> {
     let name: String = name.to_rust(cr);
     let data_type: GADTDataType = data_type.to_rust(cr);
@@ -225,7 +225,7 @@ fn rust_series_new_option_array(
     cr: &mut &mut OCamlRuntime,
     data_type: OCamlRef<GADTDataType>,
     name: OCamlRef<String>,
-    values: OCamlRef<OCamlUniformArray<DummyBoxRoot>>,
+    values: OCamlRef<OCamlArray<DummyBoxRoot>>,
 ) -> OCaml<DynBox<Series>> {
     let name: String = name.to_rust(cr);
     let data_type: GADTDataType = data_type.to_rust(cr);

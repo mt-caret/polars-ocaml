@@ -1,13 +1,14 @@
 use ocaml_interop::{
     impl_from_ocaml_variant, ocaml_alloc_polymorphic_variant, ocaml_alloc_tagged_block,
     ocaml_alloc_variant, ocaml_unpack_polymorphic_variant, ocaml_unpack_variant,
-    polymorphic_variant_tag_hash, BoxRoot, DynBox, FromOCaml, OCaml, OCamlInt, OCamlList,
-    OCamlRuntime, ToOCaml,
+    polymorphic_variant_tag_hash, BoxRoot, DynBox, FromOCaml, OCaml, OCamlFloat, OCamlInt,
+    OCamlList, OCamlRuntime, ToOCaml,
 };
 use polars::series::IsSorted;
 use polars::{lazy::dsl::WindowMapping, prelude::*};
 use smartstring::{LazyCompact, SmartString};
 use std::any::type_name;
+use std::any::TypeId;
 use std::borrow::Borrow;
 use std::fmt::Debug;
 use std::marker::PhantomData;
@@ -31,26 +32,48 @@ pub unsafe fn ocaml_failwith(error_message: &str) -> ! {
 polars_ocaml_macros::ocaml_interop_backtrace_support!();
 
 // TODO: add this to ocaml-interop?
-pub struct OCamlUniformArray<A> {
+pub struct OCamlArray<A> {
     _marker: PhantomData<A>,
 }
 
-unsafe impl<A, OCamlA> FromOCaml<OCamlUniformArray<OCamlA>> for Vec<A>
+trait PotentiallyUnboxed {}
+impl PotentiallyUnboxed for OCamlArray<OCamlFloat> {}
+
+unsafe impl<A, OCamlA> FromOCaml<OCamlArray<OCamlA>> for Vec<A>
 where
-    A: FromOCaml<OCamlA>,
+    A: FromOCaml<OCamlA> + 'static,
 {
-    fn from_ocaml(v: OCaml<OCamlUniformArray<OCamlA>>) -> Self {
+    fn from_ocaml(v: OCaml<OCamlArray<OCamlA>>) -> Self {
         let size = unsafe { ocaml_sys::wosize_val(v.raw()) };
 
-        // tuple/record/array tag, note that we do not expect a double array
-        // tag, since uniform array guarantee boxing.
-        assert_eq!(v.tag_value(), 0);
+        if v.tag_value() == ocaml_sys::DOUBLE_ARRAY {
+            if TypeId::of::<A>() != TypeId::of::<f64>() {
+                panic!(
+                    "Expected OCamlArray<OCamlFloat> but found OCamlArray<{}>",
+                    type_name::<OCamlA>()
+                );
+            }
 
-        let mut vec = Vec::with_capacity(size);
-        for i in 0..size {
-            vec.push(OCaml::<_>::to_rust(&unsafe { v.field(i) }));
+            let mut vec = Vec::with_capacity(size);
+            for i in 0..size {
+                let double_value = unsafe { ocaml_sys::caml_sys_double_field(v.raw(), i) };
+
+                // we need a transmute_copy instead of a transmute since Rust doesn't know anything
+                // about the size of A here, while it does for f64 (64-bits).
+                let a_value: A = unsafe { std::mem::transmute_copy::<f64, A>(&double_value) };
+                vec.push(a_value);
+            }
+            vec
+        } else {
+            // tuple/record/array tag
+            assert_eq!(v.tag_value(), 0);
+
+            let mut vec = Vec::with_capacity(size);
+            for i in 0..size {
+                vec.push(OCaml::<_>::to_rust(&unsafe { v.field(i) }));
+            }
+            vec
         }
-        vec
     }
 }
 
