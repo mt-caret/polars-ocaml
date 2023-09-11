@@ -6,7 +6,7 @@ module T = struct
   external col : string -> t = "rust_expr_col"
   external cols : string list -> t = "rust_expr_cols"
   external all : unit -> t = "rust_expr_all"
-  external exclude : string -> t = "rust_expr_exclude"
+  external exclude : t -> names:string list -> t = "rust_expr_exclude"
 
   let element () = col ""
 
@@ -21,6 +21,9 @@ module T = struct
   external string : string -> t = "rust_expr_string"
   external naive_date : Common.Naive_date.t -> t = "rust_expr_naive_date"
   external naive_datetime : Common.Naive_datetime.t -> t = "rust_expr_naive_datetime"
+
+  let time time = naive_datetime (Common.Naive_datetime.of_time_ns_exn time)
+
   external series : Series.t -> t = "rust_expr_series"
   external sort : t -> descending:bool -> t = "rust_expr_sort"
 
@@ -70,9 +73,11 @@ module T = struct
   external clip_max_float : t -> max:float -> t = "rust_expr_clip_max_float"
   external clip_min_int : t -> min:int -> t = "rust_expr_clip_min_int"
   external clip_max_int : t -> max:int -> t = "rust_expr_clip_max_int"
+  external pow : t -> t -> t = "rust_expr_pow"
   external sum : t -> t = "rust_expr_sum"
   external mean : t -> t = "rust_expr_mean"
   external median : t -> t = "rust_expr_median"
+  external mode : t -> t = "rust_expr_mode"
   external max : t -> t = "rust_expr_max"
   external min : t -> t = "rust_expr_min"
   external arg_max : t -> t = "rust_expr_arg_max"

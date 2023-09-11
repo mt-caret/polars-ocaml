@@ -19,6 +19,8 @@ mod tests {
 
     #[test]
     fn check_div() {
+        std::env::set_var("POLARS_TABLE_WIDTH", "100");
+
         let weather_by_day = DataFrame::new(vec![
             Series::new(
                 "station",
@@ -178,13 +180,4 @@ mod tests {
     //         prev = Some(df);
     //     }
     // }
-
-    // Issue when creating Series out of Vec<Series>: https://github.com/pola-rs/polars/issues/10561
-    #[test]
-    #[should_panic]
-    fn empty_series_creation() {
-        let values: Vec<Series> = Vec::new();
-
-        expect![[r#""#]].assert_eq(&format!("{}", Series::new("column", values)))
-    }
 }

@@ -14,7 +14,8 @@ can do with polars-ocaml!
 
 Currently very much WIP. Please expect breakages and large changes in API.
 
-Note that the current code assumes that the OCaml version is 4.14.1.
+Note that the current code assumes that the OCaml version is 4.14.1;
+see [HACKING.md](./HACKING.md) for notes on how to build polars-ocaml.
 
 ## utop
 

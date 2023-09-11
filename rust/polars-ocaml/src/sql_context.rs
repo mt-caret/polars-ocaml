@@ -63,13 +63,10 @@ fn rust_sql_context_execute(
     sql_context: OCamlRef<DynBox<PolarsSQLContext>>,
     query: OCamlRef<String>,
 ) -> OCaml<Result<DynBox<LazyFrame>, String>> {
-    let Abstract(sql_context) = sql_context.to_rust(cr);
     let query: String = query.to_rust(cr);
 
-    let result = sql_context.borrow_mut().execute(&query);
-
-    result
-        .map(Abstract)
-        .map_err(|err| err.to_string())
-        .to_ocaml(cr)
+    dyn_box_result!(cr, |sql_context| {
+        let result = sql_context.borrow_mut().execute(&query);
+        result
+    })
 }
