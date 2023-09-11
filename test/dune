@@ -20,6 +20,6 @@
   ; (modes native byte)
   (deps
    (glob_files ../guide/data/*.csv)))
- ; (library_flags -ccopt -fuse-ld=mold)
+ (library_flags -ccopt -fuse-ld=mold)
  (preprocess
   (pps ppx_jane)))
