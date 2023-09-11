@@ -301,8 +301,8 @@ fn rust_series_date_range(
     series.to_ocaml(cr)
 }
 
-fn series_to_boxrooted_ocaml_list<'a>(
-    cr: &mut &'a mut OCamlRuntime,
+fn series_to_boxrooted_ocaml_list(
+    cr: &mut &mut OCamlRuntime,
     data_type: &GADTDataType,
     series: Series,
     allow_nulls: bool,
@@ -497,8 +497,8 @@ fn rust_series_to_option_list(
     series_to_boxrooted_ocaml_list(cr, &data_type, series, true)?.to_ocaml(cr)
 }
 
-fn series_get<'a>(
-    cr: &mut &'a mut OCamlRuntime,
+fn series_get(
+    cr: &mut &mut OCamlRuntime,
     data_type: &GADTDataType,
     series: Series,
     index: usize,

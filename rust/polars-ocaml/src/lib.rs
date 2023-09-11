@@ -23,7 +23,6 @@ mod tests {
             Series::new(
                 "station",
                 (1..11)
-                    .into_iter()
                     .map(|i| format!("Station_{}", i))
                     .collect::<Vec<_>>(),
             ),
