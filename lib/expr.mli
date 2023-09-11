@@ -940,6 +940,8 @@ val is_null : t -> t
 val is_not_null : t -> t
 val is_nan : t -> t
 val is_not_nan : t -> t
+val is_finite : t -> t
+val is_infinite : t -> t
 val fill_null : t -> with_:t -> t
 val fill_null' : t -> strategy:Fill_null_strategy.t -> t
 val interpolate : ?method_:[ `Linear | `Nearest ] -> t -> t
