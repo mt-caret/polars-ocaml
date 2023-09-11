@@ -65,7 +65,6 @@ let describe ?percentiles t = describe t ~percentiles
 let describe_exn ?percentiles t = describe ?percentiles t |> Utils.string_result_ok_exn
 
 external height : t -> int = "rust_data_frame_height"
-
 external lazy_ : t -> Lazy_frame.t = "rust_data_frame_lazy"
 
 let in_lazy t ~f = lazy_ t |> f |> Lazy_frame.collect
