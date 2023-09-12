@@ -199,6 +199,16 @@ fn rust_data_frame_describe(
 }
 
 #[ocaml_interop_export]
+fn rust_data_frame_height(
+    cr: &mut &mut OCamlRuntime,
+    data_frame: OCamlRef<DynBox<DataFrame>>,
+) -> OCaml<OCamlInt> {
+    let Abstract(data_frame) = data_frame.to_rust(cr);
+    let height = data_frame.height() as i64;
+    height.to_ocaml(cr)
+}
+
+#[ocaml_interop_export]
 fn rust_data_frame_lazy(
     cr: &mut &mut OCamlRuntime,
     data_frame: OCamlRef<DynBox<DataFrame>>,

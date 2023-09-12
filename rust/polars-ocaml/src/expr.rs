@@ -355,6 +355,8 @@ expr_op!(rust_expr_null_count, |expr| expr.null_count());
 expr_op!(rust_expr_is_null, |expr| expr.is_null());
 expr_op!(rust_expr_is_not_null, |expr| expr.is_not_null());
 expr_op!(rust_expr_is_nan, |expr| expr.is_nan());
+expr_op!(rust_expr_is_finite, |expr| expr.is_finite());
+expr_op!(rust_expr_is_infinite, |expr| expr.is_infinite());
 expr_op!(rust_expr_is_not_nan, |expr| expr.is_not_nan());
 expr_op!(rust_expr_fill_null, |expr, with| expr.fill_null(with));
 expr_op!(rust_expr_fill_nan, |expr, with| expr.fill_nan(with));

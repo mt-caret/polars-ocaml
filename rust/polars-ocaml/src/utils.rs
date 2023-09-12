@@ -685,7 +685,7 @@ unsafe impl ToOCaml<DummyBoxRoot> for DummyBoxRoot {
 }
 
 impl DummyBoxRoot {
-    pub unsafe fn new<'a, T>(boxroot: BoxRoot<T>) -> Self {
+    pub unsafe fn new<T>(boxroot: BoxRoot<T>) -> Self {
         // It's quite unfortunate that we have to transmute here. Ideally we
         // would coerce the type like we do in `interpret` below, but there is
         // no such interface for BoxRoots so we can't do that.

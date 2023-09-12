@@ -124,6 +124,8 @@ module T = struct
   external is_not_null : t -> t = "rust_expr_is_not_null"
   external is_nan : t -> t = "rust_expr_is_nan"
   external is_not_nan : t -> t = "rust_expr_is_not_nan"
+  external is_finite : t -> t = "rust_expr_is_finite"
+  external is_infinite : t -> t = "rust_expr_is_infinite"
   external fill_null : t -> with_:t -> t = "rust_expr_fill_null"
 
   external fill_null'

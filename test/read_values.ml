@@ -17,9 +17,11 @@ let%expect_test "read values from dataframe" =
             Int.(init_num_list (fun i -> List.init (i / 2) ~f:(fun j -> (i + j) % 2 = 0)))
         ]
   in
+  print_s [%message (Data_frame.height df : int)];
   Data_frame.print df;
   [%expect
     {|
+      ("Data_frame.height df" 20)
       shape: (20, 4)
       ┌──────────┬────────┬─────────┬────────────────────────┐
       │ integers ┆ floats ┆ strings ┆ boolean_lists          │
