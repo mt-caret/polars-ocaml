@@ -940,7 +940,7 @@ val count : t -> t
 val count_ : unit -> t
 
 val n_unique : t -> t
-val approx_unique : t -> t
+val approx_n_unique : t -> t
 val explode : t -> t
 
 val over

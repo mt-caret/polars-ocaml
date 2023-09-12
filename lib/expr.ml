@@ -95,7 +95,7 @@ module T = struct
   external count : t -> t = "rust_expr_count"
   external count_ : unit -> t = "rust_expr_count_"
   external n_unique : t -> t = "rust_expr_n_unique"
-  external approx_unique : t -> t = "rust_expr_approx_unique"
+  external approx_n_unique : t -> t = "rust_expr_approx_n_unique"
   external explode : t -> t = "rust_expr_explode"
 
   external over

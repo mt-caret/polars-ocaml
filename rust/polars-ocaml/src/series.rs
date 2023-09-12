@@ -176,6 +176,38 @@ fn rust_series_new_option(
     OCaml::box_value(cr, series)
 }
 
+#[ocaml_interop_export(raise_on_err)]
+fn rust_series_new_array(
+    cr: &mut &mut OCamlRuntime,
+    data_type: OCamlRef<GADTDataType>,
+    name: OCamlRef<String>,
+    values: OCamlRef<OCamlUniformArray<DummyBoxRoot>>,
+) -> OCaml<DynBox<Series>> {
+    let name: String = name.to_rust(cr);
+    let data_type: GADTDataType = data_type.to_rust(cr);
+    let values: Vec<DummyBoxRoot> = values.to_rust(cr);
+
+    let series = series_new(cr, &data_type, &name, values, false)?;
+
+    OCaml::box_value(cr, series)
+}
+
+#[ocaml_interop_export(raise_on_err)]
+fn rust_series_new_option_array(
+    cr: &mut &mut OCamlRuntime,
+    data_type: OCamlRef<GADTDataType>,
+    name: OCamlRef<String>,
+    values: OCamlRef<OCamlUniformArray<DummyBoxRoot>>,
+) -> OCaml<DynBox<Series>> {
+    let name: String = name.to_rust(cr);
+    let data_type: GADTDataType = data_type.to_rust(cr);
+    let values: Vec<DummyBoxRoot> = values.to_rust(cr);
+
+    let series = series_new(cr, &data_type, &name, values, true)?;
+
+    OCaml::box_value(cr, series)
+}
+
 #[ocaml_interop_export]
 fn rust_series_new_datetime(
     cr: &mut &mut OCamlRuntime,
