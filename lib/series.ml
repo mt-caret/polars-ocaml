@@ -28,6 +28,41 @@ module T = struct
     | data_type -> createo data_type name values
   ;;
 
+  (* TODO: the astute reader will realize that this is quite terrible when
+     trying to passing float arrays! Unfortunately it's not clear to me how
+     to pass regular arrays safely to Rust, whereas this is definitely safe
+     since [Uniform_array.t] guarantees elements are boxed.
+
+     See https://github.com/mt-caret/polars-ocaml/pull/67 for how naively trying to
+     transmute on the Rust side doesn't work. *)
+  external create'
+    :  'a Data_type.Typed.t
+    -> string
+    -> 'a Uniform_array.t
+    -> t
+    = "rust_series_new_array"
+
+  let create' (type a) (data_type : a Data_type.Typed.t) name values =
+    match Data_type.Typed.flatten_custom data_type with
+    | Custom { data_type; f = _; f_inverse } ->
+      create' data_type name (Uniform_array.map values ~f:f_inverse)
+    | data_type -> create' data_type name values
+  ;;
+
+  external createo'
+    :  'a Data_type.Typed.t
+    -> string
+    -> 'a option Uniform_array.t
+    -> t
+    = "rust_series_new_option_array"
+
+  let createo' (type a) (data_type : a Data_type.Typed.t) name values =
+    match Data_type.Typed.flatten_custom data_type with
+    | Custom { data_type; f = _; f_inverse } ->
+      createo' data_type name (Uniform_array.map values ~f:(Option.map ~f:f_inverse))
+    | data_type -> createo' data_type name values
+  ;;
+
   let int = create Int64
   let into = createo Int64
   let float = create Float64

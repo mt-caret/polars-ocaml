@@ -274,8 +274,8 @@ val element : unit -> t
     ]} *)
 val cast : ?strict:bool -> t -> to_:Data_type.t -> t
 
-(** [null], [int], [float], [bool], [string], [naive_date], [naive_datetime], and
-    [series] are expressions representing literal values.
+(** [null], [lit], [int], [float], [bool], [string], [naive_date], [naive_datetime],
+    and [series] are expressions representing literal values.
 
     {@ocaml[
       # let df = Data_frame.create_exn Series.[ int "a" [ 1; 2; 3 ] ] in
@@ -307,6 +307,20 @@ val cast : ?strict:bool -> t -> to_:Data_type.t -> t
       +-----+
 
       # let df = Data_frame.create_exn Series.[ int "a" [ 1; 2; 3 ] ] in
+        Data_frame.select_exn df ~exprs:Expr.[ col "a" + lit Int32 1 ]
+      - : Data_frame.t =
+      shape: (3, 1)
+      +-----+
+      | a   |
+      | --- |
+      | i64 |
+      +=====+
+      | 2   |
+      | 3   |
+      | 4   |
+      +-----+
+
+      # let df = Data_frame.create_exn Series.[ int "a" [ 1; 2; 3 ] ] in
         Data_frame.select_exn df ~exprs:Expr.[ col "a" + series (Series.int "b" [ 1; 1; 1 ]) ]
       - : Data_frame.t =
       shape: (3, 1)
@@ -322,6 +336,7 @@ val cast : ?strict:bool -> t -> to_:Data_type.t -> t
     ]} *)
 val null : unit -> t
 
+val lit : 'a Data_type.Typed.t -> 'a -> t
 val int : int -> t
 val float : float -> t
 val bool : bool -> t
@@ -925,7 +940,7 @@ val count : t -> t
 val count_ : unit -> t
 
 val n_unique : t -> t
-val approx_unique : t -> t
+val approx_n_unique : t -> t
 val explode : t -> t
 
 val over

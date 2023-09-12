@@ -29,6 +29,7 @@
   (mdx :with-test)
   (ocamlformat :dev)
   (odoc :with-doc)
+  (re2 :with-test)
   (shell :with-test)
   core
   core_kernel
@@ -39,14 +40,10 @@
  (tags
   (data-science polars rust)))
 
-
 (package
  (name polars_async)
  (synopsis "Async OCaml bindings to the Polars dataframe library")
  (description "Async OCaml bindings to the Polars dataframe library")
- (depends
-  polars
-  async
-  core)
+ (depends polars async core)
  (tags
   (data-science polars rust)))
