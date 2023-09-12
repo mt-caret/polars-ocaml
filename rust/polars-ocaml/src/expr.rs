@@ -1,6 +1,6 @@
 use chrono::{NaiveDate, NaiveDateTime};
 use ocaml_interop::{
-    DynBox, OCaml, OCamlFloat, OCamlInt, OCamlList, OCamlRef, OCamlRuntime, ToOCaml,
+    DynBox, OCaml, OCamlBytes, OCamlFloat, OCamlInt, OCamlList, OCamlRef, OCamlRuntime, ToOCaml,
 };
 use polars::lazy::dsl::GetOutput;
 use polars::prelude::*;
@@ -66,28 +66,52 @@ fn rust_expr_null(cr: &mut &mut OCamlRuntime, unit: OCamlRef<()>) -> OCaml<DynBo
     OCaml::box_value(cr, lit(NULL))
 }
 
-#[ocaml_interop_export]
-fn rust_expr_int(cr: &mut &mut OCamlRuntime, value: OCamlRef<OCamlInt>) -> OCaml<DynBox<Expr>> {
-    let value: i64 = value.to_rust(cr);
-    OCaml::box_value(cr, lit(value))
-}
+#[ocaml_interop_export(raise_on_err)]
+fn rust_expr_lit(
+    cr: &mut &mut OCamlRuntime,
+    data_type: OCamlRef<GADTDataType>,
+    value: OCamlRef<DummyBoxRoot>,
+) -> OCaml<DynBox<Expr>> {
+    let data_type: GADTDataType = data_type.to_rust(cr);
+    let value: DummyBoxRoot = value.to_rust(cr);
 
-#[ocaml_interop_export]
-fn rust_expr_float(cr: &mut &mut OCamlRuntime, value: OCamlRef<OCamlFloat>) -> OCaml<DynBox<Expr>> {
-    let value: f64 = value.to_rust(cr);
-    OCaml::box_value(cr, lit(value))
-}
+    macro_rules! expr_lit_int {
+        ($rust_type:ty) => {{
+            let value = value.interpret::<OCamlInt>(cr).to_rust::<i64>();
+            let value = TryInto::<$rust_type>::try_into(value).map_err(|err| err.to_string())?;
+            lit(value)
+        }};
+    }
 
-#[ocaml_interop_export]
-fn rust_expr_bool(cr: &mut &mut OCamlRuntime, value: OCamlRef<bool>) -> OCaml<DynBox<Expr>> {
-    let value: bool = value.to_rust(cr);
-    OCaml::box_value(cr, lit(value))
-}
+    let lit = match data_type {
+        GADTDataType::Boolean => lit(value.interpret::<bool>(cr).to_rust::<bool>()),
+        GADTDataType::UInt8 => expr_lit_int!(u8),
+        GADTDataType::UInt16 => expr_lit_int!(u16),
+        GADTDataType::UInt32 => expr_lit_int!(u32),
+        GADTDataType::UInt64 => expr_lit_int!(u64),
+        GADTDataType::Int8 => expr_lit_int!(i8),
+        GADTDataType::Int16 => expr_lit_int!(i16),
+        GADTDataType::Int32 => expr_lit_int!(i32),
+        GADTDataType::Int64 => expr_lit_int!(i64),
+        GADTDataType::Float32 => lit(value.interpret::<OCamlFloat>(cr).to_rust::<f64>() as f32),
+        GADTDataType::Float64 => lit(value.interpret::<OCamlFloat>(cr).to_rust::<f64>()),
+        GADTDataType::Utf8 => lit(value.interpret::<String>(cr).to_rust::<String>()),
+        GADTDataType::Binary => lit(value.interpret::<OCamlBytes>(cr).to_rust::<Vec<u8>>()),
+        GADTDataType::List(data_type) => {
+            // Since there is no direct way to create a List-based literal, we
+            // create a one-element series instead, and use that.
+            let series = crate::series::series_new(
+                cr,
+                &GADTDataType::List(data_type),
+                "series",
+                vec![value],
+                false,
+            )?;
+            lit(series)
+        }
+    };
 
-#[ocaml_interop_export]
-fn rust_expr_string(cr: &mut &mut OCamlRuntime, value: OCamlRef<String>) -> OCaml<DynBox<Expr>> {
-    let value: String = value.to_rust(cr);
-    OCaml::box_value(cr, lit(value))
+    OCaml::box_value(cr, lit)
 }
 
 #[ocaml_interop_export]
