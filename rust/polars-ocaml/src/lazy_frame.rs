@@ -8,7 +8,8 @@ use ocaml_interop::{DynBox, OCaml, OCamlInt, OCamlList, OCamlRef, ToOCaml};
 use polars::prelude::*;
 use polars_ocaml_macros::ocaml_interop_export;
 use smartstring::{LazyCompact, SmartString};
-use std::path::Path;
+use std::rc::Rc;
+use std::{cell::RefCell, path::Path};
 
 #[ocaml_interop_export]
 fn rust_lazy_frame_scan_csv(
@@ -100,11 +101,16 @@ fn rust_lazy_frame_collect(
     cr: &mut &mut OCamlRuntime,
     lazy_frame: OCamlRef<DynBox<LazyFrame>>,
     streaming: OCamlRef<bool>,
-) -> OCaml<Result<DynBox<DataFrame>, String>> {
+) -> OCaml<Result<DynBox<crate::data_frame::PolarsDataFrame>, String>> {
     let streaming = streaming.to_rust(cr);
 
     dyn_box_result!(cr, |lazy_frame| {
-        cr.releasing_runtime(|| lazy_frame.with_streaming(streaming).collect())
+        cr.releasing_runtime(|| {
+            lazy_frame
+                .with_streaming(streaming)
+                .collect()
+                .map(|df| Rc::new(RefCell::new(df)))
+        })
     })
 }
 
@@ -112,12 +118,17 @@ fn rust_lazy_frame_collect(
 fn rust_lazy_frame_collect_all(
     cr: &mut &mut OCamlRuntime,
     lazy_frames: OCamlRef<OCamlList<DynBox<LazyFrame>>>,
-) -> OCaml<Result<OCamlList<DynBox<DataFrame>>, String>> {
+) -> OCaml<Result<OCamlList<DynBox<crate::data_frame::PolarsDataFrame>>, String>> {
     let lazy_frames = unwrap_abstract_vec(lazy_frames.to_rust(cr));
 
     cr.releasing_runtime(|| {
         collect_all(lazy_frames)
-            .map(|data_frames| data_frames.into_iter().map(Abstract).collect::<Vec<_>>())
+            .map(|data_frames| {
+                data_frames
+                    .into_iter()
+                    .map(|df| Abstract(Rc::new(RefCell::new(df))))
+                    .collect::<Vec<_>>()
+            })
             .map_err(|err| err.to_string())
     })
     .to_ocaml(cr)
@@ -127,13 +138,26 @@ fn rust_lazy_frame_collect_all(
 fn rust_lazy_frame_profile(
     cr: &mut &mut OCamlRuntime,
     lazy_frame: OCamlRef<DynBox<LazyFrame>>,
-) -> OCaml<Result<(DynBox<DataFrame>, DynBox<DataFrame>), String>> {
+) -> OCaml<
+    Result<
+        (
+            DynBox<crate::data_frame::PolarsDataFrame>,
+            DynBox<crate::data_frame::PolarsDataFrame>,
+        ),
+        String,
+    >,
+> {
     let Abstract(lazy_frame) = lazy_frame.to_rust(cr);
 
     cr.releasing_runtime(|| {
         lazy_frame
             .profile()
-            .map(|(materialized, profile)| (Abstract(materialized), Abstract(profile)))
+            .map(|(materialized, profile)| {
+                (
+                    Abstract(Rc::new(RefCell::new(materialized))),
+                    Abstract(Rc::new(RefCell::new(profile))),
+                )
+            })
             .map_err(|err| err.to_string())
     })
     .to_ocaml(cr)
@@ -144,11 +168,11 @@ fn rust_lazy_frame_fetch(
     cr: &mut &mut OCamlRuntime,
     lazy_frame: OCamlRef<DynBox<LazyFrame>>,
     n_rows: OCamlRef<OCamlInt>,
-) -> OCaml<Result<DynBox<DataFrame>, String>> {
+) -> OCaml<Result<DynBox<crate::data_frame::PolarsDataFrame>, String>> {
     let n_rows = n_rows.to_rust::<Coerce<_, i64, usize>>(cr).get()?;
 
     dyn_box_result!(cr, |lazy_frame| {
-        cr.releasing_runtime(|| lazy_frame.fetch(n_rows))
+        cr.releasing_runtime(|| lazy_frame.fetch(n_rows).map(|df| Rc::new(RefCell::new(df))))
     })
 }
 

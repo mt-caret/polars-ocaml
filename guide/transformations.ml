@@ -934,10 +934,8 @@ let%expect_test "Time zones" =
               ~type_:(Datetime (Milliseconds, None))
               ~format:"%Y-%m-%d %H:%M")
   in
-  let tz_aware =
-    map_expr tz_naive ~f:(Expr.Dt.replace_time_zone ~to_:(Some "UTC"))
-    |> Series.rename ~name:"tz_aware"
-  in
+  let tz_aware = map_expr tz_naive ~f:(Expr.Dt.replace_time_zone ~to_:(Some "UTC")) in
+  Series.rename tz_aware ~name:"tz_aware";
   let time_zones_df = Data_frame.create_exn [ tz_naive; tz_aware ] in
   Data_frame.print time_zones_df;
   [%expect

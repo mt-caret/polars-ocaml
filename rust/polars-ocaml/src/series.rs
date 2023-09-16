@@ -7,6 +7,11 @@ use ocaml_interop::{
 use polars::prelude::prelude::*;
 use polars::prelude::*;
 use polars_ocaml_macros::ocaml_interop_export;
+use std::cell::RefCell;
+use std::ops::Deref;
+use std::rc::Rc;
+
+pub type PolarsSeries = Rc<RefCell<Series>>;
 
 // The rough idea of functions which take GADTDataType is that the argument or
 // the return type depends on the value of the GADTDataType, so we hide the
@@ -86,13 +91,13 @@ pub fn series_new(
                             .map(|f64| f64 as f32)
                     })
                     .collect();
-                Ok(Series::new(&name, values))
+                Ok(Series::new(name, values))
             } else {
                 let values: Vec<f32> = values
                     .into_iter()
                     .map(|v| v.interpret::<OCamlFloat>(cr).to_rust::<f64>() as f32)
                     .collect();
-                Ok(Series::new(&name, values))
+                Ok(Series::new(name, values))
             }
         }
         GADTDataType::Float64 => create_series!(OCamlFloat, f64),
@@ -104,7 +109,7 @@ pub fn series_new(
             // https://github.com/pola-rs/polars/pull/10558#issuecomment-1684923274
             if values.is_empty() {
                 let data_type = DataType::List(Box::new(data_type.to_data_type()));
-                return Ok(Series::new_empty(&name, &data_type));
+                return Ok(Series::new_empty(name, &data_type));
             }
 
             if are_values_options {
@@ -125,7 +130,7 @@ pub fn series_new(
                         }
                     })
                     .collect::<Result<Vec<Option<Series>>, _>>()?;
-                Ok(Series::new(&name, values))
+                Ok(Series::new(name, values))
             } else {
                 let values: Vec<Series> = values
                     .into_iter()
@@ -138,7 +143,7 @@ pub fn series_new(
                     })
                     .collect::<Result<Vec<Series>, _>>()?;
 
-                Ok(Series::new(&name, values))
+                Ok(Series::new(name, values))
             }
         }
     }
@@ -150,14 +155,14 @@ fn rust_series_new(
     data_type: OCamlRef<GADTDataType>,
     name: OCamlRef<String>,
     values: OCamlRef<OCamlList<DummyBoxRoot>>,
-) -> OCaml<DynBox<Series>> {
+) -> OCaml<DynBox<PolarsSeries>> {
     let name: String = name.to_rust(cr);
     let data_type: GADTDataType = data_type.to_rust(cr);
     let values: Vec<DummyBoxRoot> = values.to_rust(cr);
 
     let series = series_new(cr, &data_type, &name, values, false)?;
 
-    OCaml::box_value(cr, series)
+    OCaml::box_value(cr, Rc::new(RefCell::new(series)))
 }
 
 #[ocaml_interop_export(raise_on_err)]
@@ -166,14 +171,14 @@ fn rust_series_new_option(
     data_type: OCamlRef<GADTDataType>,
     name: OCamlRef<String>,
     values: OCamlRef<OCamlList<DummyBoxRoot>>,
-) -> OCaml<DynBox<Series>> {
+) -> OCaml<DynBox<PolarsSeries>> {
     let name: String = name.to_rust(cr);
     let data_type: GADTDataType = data_type.to_rust(cr);
     let values: Vec<DummyBoxRoot> = values.to_rust(cr);
 
     let series = series_new(cr, &data_type, &name, values, true)?;
 
-    OCaml::box_value(cr, series)
+    OCaml::box_value(cr, Rc::new(RefCell::new(series)))
 }
 
 #[ocaml_interop_export(raise_on_err)]
@@ -182,14 +187,14 @@ fn rust_series_new_array(
     data_type: OCamlRef<GADTDataType>,
     name: OCamlRef<String>,
     values: OCamlRef<OCamlUniformArray<DummyBoxRoot>>,
-) -> OCaml<DynBox<Series>> {
+) -> OCaml<DynBox<PolarsSeries>> {
     let name: String = name.to_rust(cr);
     let data_type: GADTDataType = data_type.to_rust(cr);
     let values: Vec<DummyBoxRoot> = values.to_rust(cr);
 
     let series = series_new(cr, &data_type, &name, values, false)?;
 
-    OCaml::box_value(cr, series)
+    OCaml::box_value(cr, Rc::new(RefCell::new(series)))
 }
 
 #[ocaml_interop_export(raise_on_err)]
@@ -198,14 +203,14 @@ fn rust_series_new_option_array(
     data_type: OCamlRef<GADTDataType>,
     name: OCamlRef<String>,
     values: OCamlRef<OCamlUniformArray<DummyBoxRoot>>,
-) -> OCaml<DynBox<Series>> {
+) -> OCaml<DynBox<PolarsSeries>> {
     let name: String = name.to_rust(cr);
     let data_type: GADTDataType = data_type.to_rust(cr);
     let values: Vec<DummyBoxRoot> = values.to_rust(cr);
 
     let series = series_new(cr, &data_type, &name, values, true)?;
 
-    OCaml::box_value(cr, series)
+    OCaml::box_value(cr, Rc::new(RefCell::new(series)))
 }
 
 #[ocaml_interop_export]
@@ -213,10 +218,10 @@ fn rust_series_new_datetime(
     cr: &mut &mut OCamlRuntime,
     name: OCamlRef<String>,
     values: OCamlRef<OCamlList<DynBox<NaiveDateTime>>>,
-) -> OCaml<DynBox<Series>> {
+) -> OCaml<DynBox<PolarsSeries>> {
     let name: String = name.to_rust(cr);
     let values = unwrap_abstract_vec(values.to_rust(cr));
-    OCaml::box_value(cr, Series::new(&name, values))
+    OCaml::box_value(cr, Rc::new(RefCell::new(Series::new(&name, values))))
 }
 
 #[ocaml_interop_export]
@@ -224,7 +229,7 @@ fn rust_series_new_datetime_option(
     cr: &mut &mut OCamlRuntime,
     name: OCamlRef<String>,
     values: OCamlRef<OCamlList<Option<DynBox<NaiveDateTime>>>>,
-) -> OCaml<DynBox<Series>> {
+) -> OCaml<DynBox<PolarsSeries>> {
     let name: String = name.to_rust(cr);
     let values: Vec<Option<NaiveDateTime>> = values
         .to_rust::<Vec<Option<_>>>(cr)
@@ -232,7 +237,7 @@ fn rust_series_new_datetime_option(
         .map(|o| o.map(|Abstract(v)| v))
         .collect();
 
-    OCaml::box_value(cr, Series::new(&name, values))
+    OCaml::box_value(cr, Rc::new(RefCell::new(Series::new(&name, values))))
 }
 
 #[ocaml_interop_export]
@@ -240,10 +245,10 @@ fn rust_series_new_date(
     cr: &mut &mut OCamlRuntime,
     name: OCamlRef<String>,
     values: OCamlRef<OCamlList<DynBox<NaiveDate>>>,
-) -> OCaml<DynBox<Series>> {
+) -> OCaml<DynBox<PolarsSeries>> {
     let name: String = name.to_rust(cr);
     let values = unwrap_abstract_vec(values.to_rust(cr));
-    OCaml::box_value(cr, Series::new(&name, values))
+    OCaml::box_value(cr, Rc::new(RefCell::new(Series::new(&name, values))))
 }
 
 #[ocaml_interop_export]
@@ -251,7 +256,7 @@ fn rust_series_new_date_option(
     cr: &mut &mut OCamlRuntime,
     name: OCamlRef<String>,
     values: OCamlRef<OCamlList<Option<DynBox<NaiveDate>>>>,
-) -> OCaml<DynBox<Series>> {
+) -> OCaml<DynBox<PolarsSeries>> {
     let name: String = name.to_rust(cr);
     let values: Vec<Option<NaiveDate>> = values
         .to_rust::<Vec<Option<_>>>(cr)
@@ -259,7 +264,7 @@ fn rust_series_new_date_option(
         .map(|o| o.map(|Abstract(v)| v))
         .collect();
 
-    OCaml::box_value(cr, Series::new(&name, values))
+    OCaml::box_value(cr, Rc::new(RefCell::new(Series::new(&name, values))))
 }
 
 #[ocaml_interop_export]
@@ -270,7 +275,7 @@ fn rust_series_date_range(
     stop: OCamlRef<DynBox<NaiveDateTime>>,
     every: OCamlRef<Option<String>>,
     cast_to_date: OCamlRef<bool>,
-) -> OCaml<Result<DynBox<Series>, String>> {
+) -> OCaml<Result<DynBox<PolarsSeries>, String>> {
     let name: String = name.to_rust(cr);
 
     let Abstract(start) = start.to_rust(cr);
@@ -299,7 +304,7 @@ fn rust_series_date_range(
             Ok(series)
         }
     })
-    .map(Abstract)
+    .map(|s| Abstract(Rc::new(RefCell::new(s))))
     .map_err(|err| err.to_string());
 
     series.to_ocaml(cr)
@@ -308,15 +313,14 @@ fn rust_series_date_range(
 fn series_to_boxrooted_ocaml_list(
     cr: &mut &mut OCamlRuntime,
     data_type: &GADTDataType,
-    series: Series,
+    series: &Series,
     allow_nulls: bool,
 ) -> Result<DummyBoxRoot, String> {
     if !allow_nulls && series.null_count() > 0 {
         return Err(format!(
             "Series contains {} null values, expected none",
             series.null_count()
-        )
-        .to_string());
+        ));
     }
 
     macro_rules! create_boxrooted_ocaml_list {
@@ -443,7 +447,7 @@ fn series_to_boxrooted_ocaml_list(
                         None => Ok(None),
                         Some(series) => {
                             // See comment on similar recursive call in series_new on why allow_nulls=false
-                            series_to_boxrooted_ocaml_list(cr, data_type, series, false).map(Some)
+                            series_to_boxrooted_ocaml_list(cr, data_type, &series, false).map(Some)
                         }
                     })
                     .collect::<Result<_, _>>()?,
@@ -466,7 +470,7 @@ fn series_to_boxrooted_ocaml_list(
                         };
                         // See comment on similar recursive call in series_new on why allow_nulls=false
                         buf.push(series_to_boxrooted_ocaml_list(
-                            cr, data_type, series, false,
+                            cr, data_type, &series, false,
                         )?)
                     }
 
@@ -481,30 +485,32 @@ fn series_to_boxrooted_ocaml_list(
 fn rust_series_to_list(
     cr: &mut &mut OCamlRuntime,
     data_type: OCamlRef<GADTDataType>,
-    series: OCamlRef<DynBox<Series>>,
+    series: OCamlRef<DynBox<PolarsSeries>>,
 ) -> OCaml<DummyBoxRoot> {
     let data_type: GADTDataType = data_type.to_rust(cr);
     let Abstract(series) = series.to_rust(cr);
+    let series = series.borrow();
 
-    series_to_boxrooted_ocaml_list(cr, &data_type, series, false)?.to_ocaml(cr)
+    series_to_boxrooted_ocaml_list(cr, &data_type, &series, false)?.to_ocaml(cr)
 }
 
 #[ocaml_interop_export(raise_on_err)]
 fn rust_series_to_option_list(
     cr: &mut &mut OCamlRuntime,
     data_type: OCamlRef<GADTDataType>,
-    series: OCamlRef<DynBox<Series>>,
+    series: OCamlRef<DynBox<PolarsSeries>>,
 ) -> OCaml<DummyBoxRoot> {
     let data_type: GADTDataType = data_type.to_rust(cr);
     let Abstract(series) = series.to_rust(cr);
+    let series = series.borrow();
 
-    series_to_boxrooted_ocaml_list(cr, &data_type, series, true)?.to_ocaml(cr)
+    series_to_boxrooted_ocaml_list(cr, &data_type, &series, true)?.to_ocaml(cr)
 }
 
 fn series_get(
     cr: &mut &mut OCamlRuntime,
     data_type: &GADTDataType,
-    series: Series,
+    series: &Series,
     index: usize,
 ) -> Result<DummyBoxRoot, String> {
     macro_rules! extract_value {
@@ -574,7 +580,7 @@ fn series_get(
             match series.list().map_err(|err| err.to_string())?.get(index) {
                 None => Ok(None),
                 Some(series) => {
-                    series_to_boxrooted_ocaml_list(cr, data_type, series, false).map(Some)
+                    series_to_boxrooted_ocaml_list(cr, data_type, &series, false).map(Some)
                 }
             }?
         ),
@@ -585,99 +591,120 @@ fn series_get(
 fn rust_series_get(
     cr: &mut &mut OCamlRuntime,
     data_type: OCamlRef<GADTDataType>,
-    series: OCamlRef<DynBox<Series>>,
+    series: OCamlRef<DynBox<PolarsSeries>>,
     index: OCamlRef<OCamlInt>,
 ) -> OCaml<DummyBoxRoot> {
     let data_type: GADTDataType = data_type.to_rust(cr);
     let Abstract(series) = series.to_rust(cr);
+    let series = series.borrow();
     let index = index.to_rust::<Coerce<_, i64, usize>>(cr).get()?;
 
-    series_get(cr, &data_type, series, index)?.to_ocaml(cr)
+    series_get(cr, &data_type, &series, index)?.to_ocaml(cr)
 }
 
 #[ocaml_interop_export]
-fn rust_series_name(cr: &mut &mut OCamlRuntime, series: OCamlRef<DynBox<Series>>) -> OCaml<String> {
+fn rust_series_name(
+    cr: &mut &mut OCamlRuntime,
+    series: OCamlRef<DynBox<PolarsSeries>>,
+) -> OCaml<String> {
     let Abstract(series) = series.to_rust(cr);
+    let series = series.borrow();
     series.name().to_ocaml(cr)
 }
 
 #[ocaml_interop_export]
 fn rust_series_rename(
     cr: &mut &mut OCamlRuntime,
-    series: OCamlRef<DynBox<Series>>,
+    series: OCamlRef<DynBox<PolarsSeries>>,
     name: OCamlRef<String>,
-) -> OCaml<DynBox<Series>> {
-    let Abstract(mut series) = series.to_rust(cr);
+) -> OCaml<()> {
+    let Abstract(series) = series.to_rust(cr);
     let name: String = name.to_rust(cr);
 
-    let _ = series.rename(&name);
+    let _ = series.borrow_mut().rename(&name);
 
-    OCaml::box_value(cr, series)
+    OCaml::unit()
 }
 
 #[ocaml_interop_export]
 fn rust_series_dtype(
     cr: &mut &mut OCamlRuntime,
-    series: OCamlRef<DynBox<Series>>,
+    series: OCamlRef<DynBox<PolarsSeries>>,
 ) -> OCaml<DataType> {
     let Abstract(series) = series.to_rust(cr);
+    let series = series.borrow();
     PolarsDataType(series.dtype().clone()).to_ocaml(cr)
 }
 
 #[ocaml_interop_export]
 fn rust_series_to_data_frame(
     cr: &mut &mut OCamlRuntime,
-    series: OCamlRef<DynBox<Series>>,
-) -> OCaml<DynBox<DataFrame>> {
-    dyn_box!(cr, |series| series.into_frame())
+    series: OCamlRef<DynBox<PolarsSeries>>,
+) -> OCaml<DynBox<crate::data_frame::PolarsDataFrame>> {
+    dyn_box!(cr, |series| {
+        let data_frame = match Rc::try_unwrap(series) {
+            Ok(series) => series.into_inner().into_frame(),
+            Err(series) => series.borrow().clone().into_frame(),
+        };
+        Rc::new(RefCell::new(data_frame))
+    })
 }
 
 #[ocaml_interop_export]
 fn rust_series_sort(
     cr: &mut &mut OCamlRuntime,
-    series: OCamlRef<DynBox<Series>>,
+    series: OCamlRef<DynBox<PolarsSeries>>,
     descending: OCamlRef<bool>,
-) -> OCaml<DynBox<Series>> {
+) -> OCaml<DynBox<PolarsSeries>> {
     let descending: bool = descending.to_rust(cr);
 
-    dyn_box!(cr, |series| series.sort(descending))
+    dyn_box!(cr, |series| {
+        let series = series.borrow();
+        Rc::new(RefCell::new(series.sort(descending)))
+    })
 }
 
 #[ocaml_interop_export(raise_on_err)]
 fn rust_series_head(
     cr: &mut &mut OCamlRuntime,
-    series: OCamlRef<DynBox<Series>>,
+    series: OCamlRef<DynBox<PolarsSeries>>,
     length: OCamlRef<Option<OCamlInt>>,
-) -> OCaml<DynBox<Series>> {
+) -> OCaml<DynBox<PolarsSeries>> {
     let length = length
         .to_rust::<Coerce<_, Option<i64>, Option<usize>>>(cr)
         .get()?;
 
-    dyn_box!(cr, |series| series.head(length))
+    dyn_box!(cr, |series| {
+        let series = series.borrow();
+        Rc::new(RefCell::new(series.head(length)))
+    })
 }
 
 #[ocaml_interop_export(raise_on_err)]
 fn rust_series_tail(
     cr: &mut &mut OCamlRuntime,
-    series: OCamlRef<DynBox<Series>>,
+    series: OCamlRef<DynBox<PolarsSeries>>,
     length: OCamlRef<Option<OCamlInt>>,
-) -> OCaml<DynBox<Series>> {
+) -> OCaml<DynBox<PolarsSeries>> {
     let length = length
         .to_rust::<Coerce<_, Option<i64>, Option<usize>>>(cr)
         .get()?;
 
-    dyn_box!(cr, |series| series.tail(length))
+    dyn_box!(cr, |series| {
+        let series = series.borrow();
+        Rc::new(RefCell::new(series.tail(length)))
+    })
 }
 
 #[ocaml_interop_export(raise_on_err)]
 fn rust_series_sample_n(
     cr: &mut &mut OCamlRuntime,
-    series: OCamlRef<DynBox<Series>>,
+    series: OCamlRef<DynBox<PolarsSeries>>,
     n: OCamlRef<OCamlInt>,
     with_replacement: OCamlRef<bool>,
     shuffle: OCamlRef<bool>,
     seed: OCamlRef<Option<OCamlInt>>,
-) -> OCaml<Result<DynBox<Series>, String>> {
+) -> OCaml<Result<DynBox<PolarsSeries>, String>> {
     let n = n.to_rust::<Coerce<_, i64, usize>>(cr).get()?;
     let with_replacement: bool = with_replacement.to_rust(cr);
     let shuffle: bool = shuffle.to_rust(cr);
@@ -686,61 +713,87 @@ fn rust_series_sample_n(
         .get()?;
 
     dyn_box_result!(cr, |series| {
-        series.sample_n(n, with_replacement, shuffle, seed)
+        let series = series.borrow();
+        series
+            .sample_n(n, with_replacement, shuffle, seed)
+            .map(|s| Rc::new(RefCell::new(s)))
     })
 }
 
 #[ocaml_interop_export]
 fn rust_series_fill_null_with_strategy(
     cr: &mut &mut OCamlRuntime,
-    series: OCamlRef<DynBox<Series>>,
+    series: OCamlRef<DynBox<PolarsSeries>>,
     strategy: OCamlRef<FillNullStrategy>,
-) -> OCaml<Result<DynBox<Series>, String>> {
+) -> OCaml<Result<DynBox<PolarsSeries>, String>> {
     let PolarsFillNullStrategy(strategy) = strategy.to_rust(cr);
 
-    dyn_box_result!(cr, |series| series.fill_null(strategy))
+    dyn_box_result!(cr, |series| {
+        let series = series.borrow();
+        series.fill_null(strategy).map(|s| Rc::new(RefCell::new(s)))
+    })
 }
 
 #[ocaml_interop_export]
 fn rust_series_interpolate(
     cr: &mut &mut OCamlRuntime,
-    series: OCamlRef<DynBox<Series>>,
+    series: OCamlRef<DynBox<PolarsSeries>>,
     method: OCamlRef<InterpolationMethod>,
-) -> OCaml<DynBox<Series>> {
+) -> OCaml<DynBox<PolarsSeries>> {
     let PolarsInterpolationMethod(method) = method.to_rust(cr);
 
-    dyn_box!(cr, |series| interpolate(&series, method))
+    dyn_box!(cr, |series| {
+        let series = series.borrow();
+        Rc::new(RefCell::new(interpolate(&series, method)))
+    })
 }
 
 macro_rules! series_op {
     ($name:ident, |$($var:ident),+| $body:expr) => {
-        dyn_box_op!($name, Series, |$($var),+| $body);
+        dyn_box_op!($name, PolarsSeries, |$($var),+| {
+            $(
+                let $var = $var.borrow();
+
+                // TODO: I'm not sure why we need to explicitly deref here, but
+                // without this the compiler complains for various functions
+                // below...
+                let $var = $var.deref();
+            )+
+            Rc::new(RefCell::new($body))
+    });
     }
 }
 
 macro_rules! series_op_result {
     ($name:ident, |$($var:ident),+| $body:expr) => {
-        dyn_box_op_result!($name, Series, |$($var),+| $body);
+        dyn_box_op_result!($name, PolarsSeries, |$($var),+| {
+            $(
+                let $var = $var.borrow();
+                let $var = $var.deref();
+            )+
+
+            $body.map(|s| Rc::new(RefCell::new(s)))
+        });
     }
 }
 
 series_op_result!(rust_series_eq, |series, other| {
-    series.equal(&other).map(|series| series.into_series())
+    series.equal(other).map(|series| series.into_series())
 });
 series_op_result!(rust_series_neq, |series, other| {
-    series.not_equal(&other).map(|series| series.into_series())
+    series.not_equal(other).map(|series| series.into_series())
 });
 series_op_result!(rust_series_gt, |series, other| {
-    series.gt(&other).map(|series| series.into_series())
+    series.gt(other).map(|series| series.into_series())
 });
 series_op_result!(rust_series_gt_eq, |series, other| {
-    series.gt_eq(&other).map(|series| series.into_series())
+    series.gt_eq(other).map(|series| series.into_series())
 });
 series_op_result!(rust_series_lt, |series, other| {
-    series.lt(&other).map(|series| series.into_series())
+    series.lt(other).map(|series| series.into_series())
 });
 series_op_result!(rust_series_lt_eq, |series, other| {
-    series.lt_eq(&other).map(|series| series.into_series())
+    series.lt_eq(other).map(|series| series.into_series())
 });
 
 series_op!(rust_series_add, |series, other| series + other);
@@ -751,8 +804,9 @@ series_op!(rust_series_div, |series, other| series / other);
 #[ocaml_interop_export]
 fn rust_series_to_string_hum(
     cr: &mut &mut OCamlRuntime,
-    series: OCamlRef<DynBox<Series>>,
+    series: OCamlRef<DynBox<PolarsSeries>>,
 ) -> OCaml<String> {
     let Abstract(series) = series.to_rust(cr);
+    let series = series.borrow();
     ToString::to_string(&series).to_ocaml(cr)
 }
