@@ -198,7 +198,7 @@ module T = struct
   let get_exn data_type t i = get data_type t i |> Option.value_exn ~here:[%here]
 
   external name : t -> string = "rust_series_name"
-  external rename : t -> name:string -> t = "rust_series_rename"
+  external rename : t -> name:string -> unit = "rust_series_rename"
   external dtype : t -> Data_type.t = "rust_series_dtype"
   external to_data_frame : t -> Data_frame0.t = "rust_series_to_data_frame"
   external sort : t -> descending:bool -> t = "rust_series_sort"

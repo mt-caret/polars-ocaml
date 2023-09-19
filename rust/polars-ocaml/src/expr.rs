@@ -6,6 +6,7 @@ use polars::lazy::dsl::GetOutput;
 use polars::prelude::*;
 use polars::series::IsSorted;
 use polars_ocaml_macros::ocaml_interop_export;
+use std::rc::Rc;
 
 use crate::utils::PolarsDataType;
 use crate::utils::*;
@@ -133,9 +134,14 @@ fn rust_expr_naive_datetime(
 #[ocaml_interop_export]
 fn rust_expr_series(
     cr: &mut &mut OCamlRuntime,
-    series: OCamlRef<DynBox<Series>>,
+    series: OCamlRef<DynBox<crate::series::PolarsSeries>>,
 ) -> OCaml<DynBox<Expr>> {
-    dyn_box!(cr, |series| lit(series))
+    dyn_box!(cr, |series| {
+        match Rc::try_unwrap(series) {
+            Ok(series) => lit(series.into_inner()),
+            Err(series) => lit(series.borrow().clone()),
+        }
+    })
 }
 
 #[ocaml_interop_export]
@@ -149,9 +155,9 @@ fn rust_expr_cast(
     let is_strict: bool = is_strict.to_rust(cr);
     dyn_box!(cr, |expr| {
         if is_strict {
-            expr.strict_cast(data_type.clone())
+            expr.strict_cast(data_type)
         } else {
-            expr.cast(data_type.clone())
+            expr.cast(data_type)
         }
     })
 }
@@ -743,13 +749,13 @@ fn rust_expr_str_strptime(
     dyn_box!(cr, |expr| {
         // TODO: make other options configurable
         let options = StrptimeOptions {
-            format: Some(format.clone()),
+            format: Some(format),
             strict: true,
             exact: true,
             cache: false,
             use_earliest: None,
         };
-        expr.str().strptime(data_type.clone(), options)
+        expr.str().strptime(data_type, options)
     })
 }
 
