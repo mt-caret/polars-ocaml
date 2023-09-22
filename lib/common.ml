@@ -101,7 +101,7 @@ module Naive_datetime = struct
   let%expect_test "of_time_ns" =
     let time_ns = Time_ns_unix.of_string "2023-01-02 03:04:05.678" in
     of_time_ns_exn time_ns |> to_string |> print_endline;
-    [%expect {| 2023-01-02 08:04:05.678 |}]
+    [%expect {| 2023-01-02 03:04:05.678 |}]
   ;;
 
   external to_timestamp_nanos : t -> int = "rust_naive_datetime_to_timestamp_nanos"
