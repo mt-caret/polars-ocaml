@@ -375,9 +375,7 @@ fn rust_data_frame_as_single_chunk_par(
     data_frame: OCamlRef<DynBox<PolarsDataFrame>>,
 ) -> OCaml<()> {
     let Abstract(data_frame) = data_frame.to_rust(cr);
-    data_frame
-        .borrow_mut()
-        .as_single_chunk_par();
+    data_frame.borrow_mut().as_single_chunk_par();
     OCaml::unit()
 }
 
