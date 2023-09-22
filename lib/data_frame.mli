@@ -20,6 +20,7 @@ val read_jsonl : string -> (t, string) result
 val read_jsonl_exn : string -> t
 val write_jsonl : t -> string -> (unit, string) result
 val write_jsonl_exn : t -> string -> unit
+val clear : t -> t
 val describe_exn : ?percentiles:float list -> t -> t
 val height : t -> int
 val lazy_ : t -> Lazy_frame.t
@@ -94,6 +95,9 @@ val columns_exn : t -> names:string list -> Series.t list
 val get_column_names : t -> string list
 val concat : ?how:[ `Diagonal | `Horizontal | `Vertical ] -> t list -> (t, string) result
 val concat_exn : ?how:[ `Diagonal | `Horizontal | `Vertical ] -> t list -> t
+val as_single_chunk_par : t -> unit
+val vstack : t -> other:t -> (unit, string) result
+val vstack_exn : t -> other:t -> unit
 
 val pivot
   :  ?agg_expr:

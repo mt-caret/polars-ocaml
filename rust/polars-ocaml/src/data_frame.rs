@@ -186,6 +186,16 @@ fn rust_data_frame_write_jsonl(
 }
 
 #[ocaml_interop_export]
+fn rust_data_frame_clear(
+    cr: &mut &mut OCamlRuntime,
+    data_frame: OCamlRef<DynBox<PolarsDataFrame>>,
+) -> OCaml<DynBox<PolarsDataFrame>> {
+    let Abstract(data_frame) = data_frame.to_rust(cr);
+    let cleared = data_frame.borrow_mut().clear();
+    Abstract(Rc::new(RefCell::new(cleared))).to_ocaml(cr)
+}
+
+#[ocaml_interop_export]
 fn rust_data_frame_describe(
     cr: &mut &mut OCamlRuntime,
     data_frame: OCamlRef<DynBox<PolarsDataFrame>>,
@@ -337,6 +347,38 @@ fn rust_data_frame_diagonal_concat(
         .map(|df| Abstract(Rc::new(RefCell::new(df))))
         .map_err(|err| err.to_string())
         .to_ocaml(cr)
+}
+
+#[ocaml_interop_export]
+fn rust_data_frame_vstack(
+    cr: &mut &mut OCamlRuntime,
+    data_frame: OCamlRef<DynBox<PolarsDataFrame>>,
+    other: OCamlRef<DynBox<PolarsDataFrame>>,
+) -> OCaml<Result<(), String>> {
+    let Abstract(data_frame) = data_frame.to_rust(cr);
+    let Abstract(other) = other.to_rust(cr);
+    let other = match Rc::try_unwrap(other) {
+        Ok(data_frame) => data_frame.into_inner(),
+        Err(data_frame) => data_frame.borrow().clone(),
+    };
+    let result = data_frame
+        .borrow_mut()
+        .vstack_mut(&other)
+        .map(|_| ())
+        .map_err(|err| err.to_string());
+    result.to_ocaml(cr)
+}
+
+#[ocaml_interop_export]
+fn rust_data_frame_as_single_chunk_par(
+    cr: &mut &mut OCamlRuntime,
+    data_frame: OCamlRef<DynBox<PolarsDataFrame>>,
+) -> OCaml<()> {
+    let Abstract(data_frame) = data_frame.to_rust(cr);
+    data_frame
+        .borrow_mut()
+        .as_single_chunk_par();
+    OCaml::unit()
 }
 
 #[ocaml_interop_export]
