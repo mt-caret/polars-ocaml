@@ -969,7 +969,65 @@ val rank
   -> t
   -> t
 
+(** [when_] starts a when-then-otherwise expression.
+
+    {@ocaml[
+      # let df =
+          Data_frame.create_exn
+            Series.
+              [ int "foo" [ 1; 3; 4 ]
+              ; int "bar" [ 3; 4; 0 ]
+              ]
+      val df : Data_frame.t =
+        shape: (3, 2)
+      +-----+-----+
+      | foo | bar |
+      | --- | --- |
+      | i64 | i64 |
+      +===========+
+      | 1   | 3   |
+      | 3   | 4   |
+      | 4   | 0   |
+      +-----+-----+
+
+      # Data_frame.with_columns_exn
+          df
+          ~exprs:
+            Expr.
+              [ when_ [ col "foo" > int 2, int 1 ] ~otherwise:(int (-1)) |> alias ~name:"val" ]
+      - : Data_frame.t =
+      shape: (3, 3)
+      +-----+-----+-----+
+      | foo | bar | val |
+      | --- | --- | --- |
+      | i64 | i64 | i64 |
+      +=================+
+      | 1   | 3   | -1  |
+      | 3   | 4   | 1   |
+      | 4   | 0   | 1   |
+      +-----+-----+-----+
+    ]}
+
+    {@ocaml[
+      # Data_frame.with_columns_exn
+          df
+          ~exprs:
+            Expr.
+              [ when_ [ col "foo" > int 2, int 1; col "bar" > int 2, int 4 ] ~otherwise:(int (-1)) |> alias ~name:"val" ]
+      - : Data_frame.t =
+      shape: (3, 3)
+      +-----+-----+-----+
+      | foo | bar | val |
+      | --- | --- | --- |
+      | i64 | i64 | i64 |
+      +=================+
+      | 1   | 3   | 4   |
+      | 3   | 4   | 1   |
+      | 4   | 0   | 1   |
+      +-----+-----+-----+
+    ]} *)
 val when_ : (t * t) list -> otherwise:t -> t
+
 val shift : ?fill_value:t -> t -> periods:int -> t
 val cum_count : ?reverse:bool -> t -> t
 val cum_sum : ?reverse:bool -> t -> t
