@@ -106,7 +106,7 @@ jobs:
         uses: coverallsapp/github-action@v2
         with:
           file: /tmp/kcov/kcov-merged/cobertura.xml
-          base-path: .
+          base-path: ./_build/default
           debug: true
 
   format-ocaml:
