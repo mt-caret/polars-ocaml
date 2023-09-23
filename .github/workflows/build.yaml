@@ -100,6 +100,13 @@ jobs:
       - run: opam exec -- dune build
       - run: opam exec -- dune runtest
 
+      - run: apt install --yes kcov
+      - run: ./kcov.sh
+      - name: Coveralls
+        uses: coverallsapp/github-action@v2
+        with:
+          file: /tmp/kcov/kcov-merged/cobertura.xml
+
   format-ocaml:
     runs-on: ubuntu-latest
     steps:

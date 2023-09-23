@@ -5,10 +5,6 @@ set -euxo pipefail
 # properly track execution of the individual test executables. Instad, we
 # manually inspected the test commands via `dune runtest --force --verbose
 # --always-show-command-line` and run each executable outside of dune.
-#
-# We want to still run `dune runtest` separately to make sure the inline test
-# runners properly exist.
-dune runtest
 
 KCOV_DIR=/tmp/kcov
 KCOV_DIRS=$(echo /tmp/{kcov_polars_async,kcov_polars_guide,kcov_polars,kcov_polars_tests})
