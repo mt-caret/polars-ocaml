@@ -100,7 +100,7 @@ jobs:
       - run: opam exec -- dune build
       - run: opam exec -- dune runtest
 
-      - run: apt install --yes kcov
+      - run: sudo apt install --yes kcov
       - run: ./kcov.sh
       - name: Coveralls
         uses: coverallsapp/github-action@v2
