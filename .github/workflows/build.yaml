@@ -106,6 +106,8 @@ jobs:
         uses: coverallsapp/github-action@v2
         with:
           file: /tmp/kcov/kcov-merged/cobertura.xml
+        env:
+          NODE_COVERALLS_DEBUG: true
 
   format-ocaml:
     runs-on: ubuntu-latest
