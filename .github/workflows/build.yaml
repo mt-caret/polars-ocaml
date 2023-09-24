@@ -103,16 +103,13 @@ jobs:
       - run: sudo apt install --yes kcov
       - run: ./kcov.sh
 
+      # For some reason the coverage report contains a path that's different from
+      # what we get when running locally, so we need to fix that.
+      - run: sed -i 's/_build\/default\///g' /tmp/kcov/kcov-merged/cobertura.xml
       - name: Coveralls
-        run: curl -sL https://coveralls.io/coveralls-linux.tar.gz | tar -xz && ./coveralls report /tmp/kcov/kcov-merged/cobertura.xml
-        env:
-          COVERALLS_REPO_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      # - name: Coveralls
-      #   uses: coverallsapp/github-action@v2
-      #   with:
-      #     file: /tmp/kcov/kcov-merged/cobertura.xml
-      #     base-path: ./_build/default
-      #     debug: true
+        uses: coverallsapp/github-action@v2
+        with:
+          file: /tmp/kcov/kcov-merged/cobertura.xml
 
   format-ocaml:
     runs-on: ubuntu-latest
