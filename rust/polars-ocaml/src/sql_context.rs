@@ -46,21 +46,18 @@ fn rust_sql_context_register(
 #[ocaml_interop_export]
 fn rust_sql_context_execute_with_data_frames(
     cr: &mut &mut OCamlRuntime,
-    data_frames: OCamlRef<OCamlList<DynBox<crate::data_frame::PolarsDataFrame>>>,
-    names: OCamlRef<OCamlList<String>>,
+    names_and_data_frames: OCamlRef<
+        OCamlList<(String, DynBox<crate::data_frame::PolarsDataFrame>)>,
+    >,
     query: OCamlRef<String>,
 ) -> OCaml<Result<DynBox<crate::data_frame::PolarsDataFrame>, String>> {
-    let data_frames: Vec<crate::data_frame::PolarsDataFrame> =
-        unwrap_abstract_vec(data_frames.to_rust(cr));
-    let names: Vec<String> = names.to_rust(cr);
+    let names_and_data_frames = names_and_data_frames.to_rust(cr);
     let query: String = query.to_rust(cr);
 
     let mut sql_context = SQLContext::new();
-    let _ = data_frames
-        .into_iter()
-        .zip(names.iter())
-        .map(|(df, name)| sql_context.register(&name, df.borrow().clone().lazy()))
-        .collect::<Vec<_>>();
+    for (name, Abstract(data_frame)) in names_and_data_frames {
+        sql_context.register(&name, data_frame.borrow().clone().lazy());
+    }
 
     match sql_context.execute(&query) {
         Err(e) => Err(e),
