@@ -50,7 +50,7 @@ fn rust_sql_context_execute_with_data_frames(
     names: OCamlRef<OCamlList<String>>,
     query: OCamlRef<String>,
 ) -> OCaml<Result<DynBox<crate::data_frame::PolarsDataFrame>, String>> {
-    let data_frames: Vec<crate::data_frame::PolarsDataFrame> = 
+    let data_frames: Vec<crate::data_frame::PolarsDataFrame> =
         unwrap_abstract_vec(data_frames.to_rust(cr));
     let names: Vec<String> = names.to_rust(cr);
     let query: String = query.to_rust(cr);
