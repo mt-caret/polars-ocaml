@@ -356,18 +356,20 @@ fn rust_data_frame_vstack(
     data_frame: OCamlRef<DynBox<PolarsDataFrame>>,
     other: OCamlRef<DynBox<PolarsDataFrame>>,
 ) -> OCaml<Result<DynBox<()>, String>> {
-    let Abstract(other) = other.to_rust(cr);
-    let other = match Rc::try_unwrap(other) {
-        Ok(other) => other.into_inner(),
-        Err(other) => other.borrow().clone(),
-    };
+    dyn_box_result!(cr, |data_frame, other| {
+        let other = match Rc::try_unwrap(other) {
+            Ok(data_frame) => data_frame.into_inner(),
+            Err(data_frame) => data_frame.borrow().clone(),
+        };
 
-    dyn_box_result!(cr, |data_frame| {
-        data_frame
+        // Assign an explicit variable to this result to avoid variable
+        // lifetime compile errors
+        let result = data_frame
             .borrow_mut()
             .vstack_mut(&other)
             .map(|_| ())
-            .map_err(|err| err.to_string())
+            .map_err(|err| err.to_string());
+        result
     })
 }
 
