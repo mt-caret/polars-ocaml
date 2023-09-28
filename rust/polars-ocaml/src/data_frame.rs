@@ -191,8 +191,8 @@ fn rust_data_frame_clear(
     data_frame: OCamlRef<DynBox<PolarsDataFrame>>,
 ) -> OCaml<DynBox<PolarsDataFrame>> {
     dyn_box!(cr, |data_frame| {
-        let cleared = data_frame.borrow().clear();
-        Rc::new(RefCell::new(cleared))
+        let data_frame = data_frame.borrow();
+        Rc::new(RefCell::new(data_frame.clear()))
     })
 }
 
@@ -362,14 +362,11 @@ fn rust_data_frame_vstack(
             Err(data_frame) => data_frame.borrow().clone(),
         };
 
-        // Assign an explicit variable to this result to avoid variable
-        // lifetime compile errors
-        let result = data_frame
-            .borrow_mut()
+        let mut data_frame = data_frame.borrow_mut();
+        data_frame
             .vstack_mut(&other)
             .map(|_| ())
-            .map_err(|err| err.to_string());
-        result
+            .map_err(|err| err.to_string())
     })
 }
 
