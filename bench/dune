@@ -1,0 +1,13 @@
+(library
+ (name dataframe_builders_bench)
+ (modules dataframe_builders_bench)
+ (library_flags -linkall)
+ (preprocess
+  (pps ppx_bench))
+ (libraries core polars core_bench.inline_benchmarks))
+
+(executable
+ (name dataframe_builders_bench_main)
+ ;(allow_overlapping_dependencies)
+ (modules dataframe_builders_bench_main)
+ (libraries dataframe_builders_bench core_bench.inline_benchmarks))
