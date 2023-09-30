@@ -25,6 +25,7 @@
  (synopsis "OCaml bindings to the Polars dataframe library")
  (description "OCaml bindings to the Polars dataframe library")
  (depends
+  (core_bench :with-test)
   (expect_test_helpers_core :with-test)
   (mdx :with-test)
   (ocamlformat :dev)

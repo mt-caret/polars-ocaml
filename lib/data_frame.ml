@@ -55,6 +55,8 @@ external write_jsonl
 
 let write_jsonl_exn t path = write_jsonl t path |> Utils.string_result_ok_exn
 
+external clear : t -> t = "rust_data_frame_clear"
+
 external describe
   :  t
   -> percentiles:float list option
@@ -178,6 +180,11 @@ let concat ?(how = `Vertical) ts =
 ;;
 
 let concat_exn ?how ts = concat ?how ts |> Utils.string_result_ok_exn
+
+external as_single_chunk_par : t -> unit = "rust_data_frame_as_single_chunk_par"
+external vstack : t -> other:t -> (unit, string) result = "rust_data_frame_vstack"
+
+let vstack_exn t ~other = vstack t ~other |> Utils.string_result_ok_exn
 
 external pivot
   :  t

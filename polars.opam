@@ -10,6 +10,7 @@ homepage: "https://github.com/mt-caret/polars-ocaml"
 doc: "https://github.com/mt-caret/polars-ocaml"
 bug-reports: "https://github.com/mt-caret/polars-ocaml/issues"
 depends: [
+  "core_bench" {with-test}
   "expect_test_helpers_core" {with-test}
   "mdx" {with-test}
   "ocamlformat" {dev}

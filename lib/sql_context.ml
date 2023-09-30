@@ -5,6 +5,16 @@ type t
 external create : unit -> t = "rust_sql_context_new"
 external register : t -> name:string -> Lazy_frame.t -> unit = "rust_sql_context_register"
 
+external execute_with_data_frames
+  :  names_and_data_frames:(string * Data_frame.t) list
+  -> query:string
+  -> (Data_frame.t, string) result
+  = "rust_sql_context_execute_with_data_frames"
+
+let execute_with_data_frames_exn ~names_and_data_frames ~query =
+  execute_with_data_frames ~names_and_data_frames ~query |> Utils.string_result_ok_exn
+;;
+
 let create tables =
   let t = create () in
   List.iter tables ~f:(fun (name, lazy_frame) -> register t ~name lazy_frame);
