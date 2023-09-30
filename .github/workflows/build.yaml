@@ -12,12 +12,25 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - run: hostname
-      - run: whoami
-      - run: echo $PATH
-      - run: ls ~/
-      - run: echo ~
-      - run: ls /usr/bin/mold
+      # We need nightly, at least until
+      # https://github.com/mt-caret/polars-ocaml/pull/30 is merged.
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: ocaml/setup-ocaml@v2
+        with:
+          ocaml-compiler: 4.14.x
+      # These environment variables are used by ocaml-sys to figure out which
+      # version of OCaml we're building for
+      - name: Set opam env
+        run: opam env | tr '\n' ' ' >> $GITHUB_ENV
+      - name: Add opam switch to PATH
+        run: opam var bin >> $GITHUB_PATH
+
+      - name: Install mold
+        run: sudo apt install --yes mold
 
       - name: Check
         run: cargo check --verbose
@@ -46,9 +59,31 @@ jobs:
   # [1]: https://github.com/mt-caret/polars-ocaml/pull/64
   # [2]: https://github.com/pola-rs/polars/blob/c4fdbfe2c7f7ce7616ad9301981bc5d616c3beef/crates/polars-row/src/row.rs#L21
   build-ocaml:
-    runs-on: self-hosted
+    strategy:
+      fail-fast: false
+      matrix:
+        ocaml-compiler:
+          - 4.14.1
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
+
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Setup OCaml ${{ matrix.ocaml-compiler }}
+        uses: ocaml/setup-ocaml@v2
+        with:
+          ocaml-compiler: ${{ matrix.ocaml-compiler }}
+      - name: Set opam env
+        run: opam env | tr '\n' ' ' >> $GITHUB_ENV
+      - name: Add opam switch to PATH
+        run: opam var bin >> $GITHUB_PATH
+
+      - name: Install mold
+        run: sudo apt install --yes mold
 
       - run: opam install . --deps-only --with-doc --with-test
 
@@ -60,7 +95,8 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - run: echo $PATH
-      - run: which opam
+      - uses: ocaml/setup-ocaml@v2
+        with:
+          ocaml-compiler: 4.14.x
 
       - uses: ocaml/setup-ocaml/lint-fmt@v2
