@@ -29,8 +29,8 @@ jobs:
       - name: Add opam switch to PATH
         run: opam var bin >> $GITHUB_PATH
 
-      - name: Install mold
-        run: sudo apt install --yes mold
+      - name: Install mold (and clang as a linker driver)
+        run: sudo apt install --yes mold clang
 
       - name: Check
         run: cargo check --verbose
@@ -82,8 +82,8 @@ jobs:
       - name: Add opam switch to PATH
         run: opam var bin >> $GITHUB_PATH
 
-      - name: Install mold
-        run: sudo apt install --yes mold
+      - name: Install mold (and clang as a linker driver)
+        run: sudo apt install --yes mold clang
 
       - run: opam install . --deps-only --with-doc --with-test
 
