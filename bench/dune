@@ -1,10 +1,7 @@
 (library
  (name dataframe_builders_bench)
  (modules dataframe_builders_bench)
- ; TODO: the usual way to setup inline benchmark runners is to specify below
- ; flag,[1] but it causes weird linker errorson  github actions, for some reason.
- ; [1]: https://github.com/ocaml/dune/tree/776813d59bf22cb1ce35ed2299b4b8c0e30fae21/bench/micro
- ;(library_flags -linkall)
+ (library_flags -linkall)
  (preprocess
   (pps ppx_bench))
  (libraries core polars core_bench.inline_benchmarks))
