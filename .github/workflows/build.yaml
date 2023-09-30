@@ -19,14 +19,6 @@ jobs:
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
 
-      - name: OCaml/opam cache
-        id: polars-ocaml-opam-cache
-        uses: actions/cache@v3
-        with:
-          path: "~/.opam"
-          # TODO: this should actually should be keyed by variables as done in
-          # https://github.com/zshipko/ocaml-rs/blob/3e73b04764e1e633874be029e1626bdbe1640135/.github/workflows/ocaml.yml
-          key: polars-ocaml-opam-4.14.x-ubuntu-latest
       - uses: ocaml/setup-ocaml@v2
         with:
           ocaml-compiler: 4.14.x
@@ -103,12 +95,6 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - name: OCaml/opam cache
-        id: polars-ocaml-opam-cache
-        uses: actions/cache@v3
-        with:
-          path: "~/.opam"
-          key: polars-ocaml-opam-4.14.x-ubuntu-latest
       - uses: ocaml/setup-ocaml@v2
         with:
           ocaml-compiler: 4.14.x
