@@ -90,6 +90,18 @@ jobs:
       - run: opam exec -- dune build
       - run: opam exec -- dune runtest
 
+      - run: sudo apt install --yes kcov
+      - run: ./kcov.sh
+
+      # For some reason the coverage report contains a path that's different from
+      # what we get when running locally, so we need to fix that.
+      - run: sed -i 's/_build\/default\///g' /tmp/kcov/kcov-merged/cobertura.xml
+      - name: Coveralls
+        uses: coverallsapp/github-action@v2
+        with:
+          file: /tmp/kcov/kcov-merged/cobertura.xml
+          debug: true
+
   format-ocaml:
     runs-on: ubuntu-latest
     steps:
