@@ -15,4 +15,4 @@ opam init --auto-setup --compiler=4.14.1
 
 # install rustup, and make nightly toolchain default
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs |
-sh -s -- --default-toolchain=nightly
+sh -s -- -y --default-toolchain=nightly
