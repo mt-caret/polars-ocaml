@@ -16,6 +16,7 @@ jobs:
       - run: whoami
       - run: echo $PATH
       - run: ls ~/
+      - run: echo ~
 
       - name: Check
         run: cargo check --verbose
