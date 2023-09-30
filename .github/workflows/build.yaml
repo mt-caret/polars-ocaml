@@ -17,6 +17,7 @@ jobs:
       - run: echo $PATH
       - run: ls ~/
       - run: echo ~
+      - run: ls /usr/bin/mold
 
       - name: Check
         run: cargo check --verbose
