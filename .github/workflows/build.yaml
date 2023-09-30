@@ -39,11 +39,6 @@ jobs:
   # [1]: https://github.com/mt-caret/polars-ocaml/pull/64
   # [2]: https://github.com/pola-rs/polars/blob/c4fdbfe2c7f7ce7616ad9301981bc5d616c3beef/crates/polars-row/src/row.rs#L21
   build-ocaml:
-    strategy:
-      fail-fast: false
-      matrix:
-        ocaml-compiler:
-          - 4.14.1
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v3
