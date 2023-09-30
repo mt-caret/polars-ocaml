@@ -37,10 +37,8 @@ jobs:
       - name: Add opam switch to PATH
         run: opam var bin >> $GITHUB_PATH
 
-      - uses: rui314/setup-mold@v1
-      # By default setup-mold replaces the default linker with mold, so we don't
-      # need the config.toml file in github actions.
-      - run: rm ./rust/.cargo/config.toml
+      - name: Install mold
+        run: sudo apt install --yes mold
 
       - name: Check
         run: cargo check --verbose
@@ -92,8 +90,8 @@ jobs:
       - name: Add opam switch to PATH
         run: opam var bin >> $GITHUB_PATH
 
-      - run: rm ./rust/.cargo/config.toml
-      - run: sed -i '/.*mold.*/d' lib/dune test/dune guide/dune
+      - name: Install mold
+        run: sudo apt install --yes mold
 
       - run: opam install . --deps-only --with-doc --with-test
 
