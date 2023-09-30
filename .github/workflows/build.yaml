@@ -12,26 +12,6 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      # We need nightly, at least until
-      # https://github.com/mt-caret/polars-ocaml/pull/30 is merged.
-      - uses: dtolnay/rust-toolchain@nightly
-        with:
-          components: clippy, rustfmt
-      - uses: Swatinem/rust-cache@v2
-
-      - uses: ocaml/setup-ocaml@v2
-        with:
-          ocaml-compiler: 4.14.x
-      # These environment variables are used by ocaml-sys to figure out which
-      # version of OCaml we're building for
-      - name: Set opam env
-        run: opam env | tr '\n' ' ' >> $GITHUB_ENV
-      - name: Add opam switch to PATH
-        run: opam var bin >> $GITHUB_PATH
-
-      - name: Install mold
-        run: sudo apt install --yes mold
-
       - name: Check
         run: cargo check --verbose
         working-directory: ./rust
@@ -68,25 +48,6 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - uses: dtolnay/rust-toolchain@nightly
-        with:
-          components: clippy, rustfmt
-      - uses: Swatinem/rust-cache@v2
-
-      - run: sudo apt install --yes build-essential bubblewrap
-
-      - name: Setup OCaml ${{ matrix.ocaml-compiler }}
-        uses: ocaml/setup-ocaml@v2
-        with:
-          ocaml-compiler: ${{ matrix.ocaml-compiler }}
-      - name: Set opam env
-        run: opam env | tr '\n' ' ' >> $GITHUB_ENV
-      - name: Add opam switch to PATH
-        run: opam var bin >> $GITHUB_PATH
-
-      - name: Install mold
-        run: sudo apt install --yes mold
-
       - run: opam install . --deps-only --with-doc --with-test
 
       - run: opam exec -- dune build
@@ -96,9 +57,5 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-
-      - uses: ocaml/setup-ocaml@v2
-        with:
-          ocaml-compiler: 4.14.x
 
       - uses: ocaml/setup-ocaml/lint-fmt@v2
