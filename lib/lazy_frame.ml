@@ -110,7 +110,7 @@ external groupby_dynamic
        | `Saturday
        | `Sunday
        ]
-       option
+         option
   -> check_sorted:bool option
   -> agg:Expr.t list
   -> t
