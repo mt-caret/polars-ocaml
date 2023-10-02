@@ -4,99 +4,122 @@ on:
   push:
     branches:
       - main
-env:
-  CARGO_TERM_COLOR: always
+
 jobs:
-  build-rust:
+  build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout (GitHub)
+        uses: actions/checkout@v3
 
-      # We need nightly, at least until
-      # https://github.com/mt-caret/polars-ocaml/pull/30 is merged.
-      - uses: dtolnay/rust-toolchain@nightly
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v2 
         with:
-          components: clippy, rustfmt
-      - uses: Swatinem/rust-cache@v2
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: ocaml/setup-ocaml@v2
+      - name: Build and run Dev Container task
+        uses: devcontainers/ci@v0.3
         with:
-          ocaml-compiler: 4.14.x
-      # These environment variables are used by ocaml-sys to figure out which
-      # version of OCaml we're building for
-      - name: Set opam env
-        run: opam env | tr '\n' ' ' >> $GITHUB_ENV
-      - name: Add opam switch to PATH
-        run: opam var bin >> $GITHUB_PATH
-
-      - name: Install mold
-        run: sudo apt install --yes mold
-
-      - name: Check
-        run: cargo check --verbose
-        working-directory: ./rust
-      - name: Build
-        run: cargo build --verbose
-        working-directory: ./rust
-      - name: Run tests
-        run: cargo test --verbose
-        working-directory: ./rust
-      - name: Clippy
-        uses: giraffate/clippy-action@v1
-        with:
-          reporter: "github-pr-review"
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Rust format
-        run: cargo fmt --all -- --check
-        working-directory: ./rust
-
-  # In the past we tried to support building this on 32bit architectures,[1] but
-  # some of polars' crates clearly don't support it[2] and getting both the
-  # OCaml and Rust compilers to work on 32bit is a pain, so we are leaving
-  # this comment as a reminder so that we do not try this without sufficient
-  # motivation again.
-  #
-  # [1]: https://github.com/mt-caret/polars-ocaml/pull/64
-  # [2]: https://github.com/pola-rs/polars/blob/c4fdbfe2c7f7ce7616ad9301981bc5d616c3beef/crates/polars-row/src/row.rs#L21
-  build-ocaml:
-    strategy:
-      fail-fast: false
-      matrix:
-        ocaml-compiler:
-          - 4.14.1
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-
-      - uses: dtolnay/rust-toolchain@nightly
-        with:
-          components: clippy, rustfmt
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Setup OCaml ${{ matrix.ocaml-compiler }}
-        uses: ocaml/setup-ocaml@v2
-        with:
-          ocaml-compiler: ${{ matrix.ocaml-compiler }}
-      - name: Set opam env
-        run: opam env | tr '\n' ' ' >> $GITHUB_ENV
-      - name: Add opam switch to PATH
-        run: opam var bin >> $GITHUB_PATH
-
-      - name: Install mold
-        run: sudo apt install --yes mold
-
-      - run: opam install . --deps-only --with-doc --with-test
-
-      - run: opam exec -- dune build
-      - run: opam exec -- dune runtest
-
-  format-ocaml:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-
-      - uses: ocaml/setup-ocaml@v2
-        with:
-          ocaml-compiler: 4.14.x
-
-      - uses: ocaml/setup-ocaml/lint-fmt@v2
+          imageName: ghcr.io/mt-caret/polars-ocaml
+          runCmd: |
+            opam exec -- dune build
+            opam exec -- dune runtest
+# env:
+#   CARGO_TERM_COLOR: always
+# jobs:
+#   build-rust:
+#     runs-on: ubuntu-latest
+#     steps:
+#       - uses: actions/checkout@v3
+# 
+#       # We need nightly, at least until
+#       # https://github.com/mt-caret/polars-ocaml/pull/30 is merged.
+#       - uses: dtolnay/rust-toolchain@nightly
+#         with:
+#           components: clippy, rustfmt
+#       - uses: Swatinem/rust-cache@v2
+# 
+#       - uses: ocaml/setup-ocaml@v2
+#         with:
+#           ocaml-compiler: 4.14.x
+#       # These environment variables are used by ocaml-sys to figure out which
+#       # version of OCaml we're building for
+#       - name: Set opam env
+#         run: opam env | tr '\n' ' ' >> $GITHUB_ENV
+#       - name: Add opam switch to PATH
+#         run: opam var bin >> $GITHUB_PATH
+# 
+#       - name: Install mold
+#         run: sudo apt install --yes mold
+# 
+#       - name: Check
+#         run: cargo check --verbose
+#         working-directory: ./rust
+#       - name: Build
+#         run: cargo build --verbose
+#         working-directory: ./rust
+#       - name: Run tests
+#         run: cargo test --verbose
+#         working-directory: ./rust
+#       - name: Clippy
+#         uses: giraffate/clippy-action@v1
+#         with:
+#           reporter: "github-pr-review"
+#           github_token: ${{ secrets.GITHUB_TOKEN }}
+#       - name: Rust format
+#         run: cargo fmt --all -- --check
+#         working-directory: ./rust
+# 
+#   # In the past we tried to support building this on 32bit architectures,[1] but
+#   # some of polars' crates clearly don't support it[2] and getting both the
+#   # OCaml and Rust compilers to work on 32bit is a pain, so we are leaving
+#   # this comment as a reminder so that we do not try this without sufficient
+#   # motivation again.
+#   #
+#   # [1]: https://github.com/mt-caret/polars-ocaml/pull/64
+#   # [2]: https://github.com/pola-rs/polars/blob/c4fdbfe2c7f7ce7616ad9301981bc5d616c3beef/crates/polars-row/src/row.rs#L21
+#   build-ocaml:
+#     strategy:
+#       fail-fast: false
+#       matrix:
+#         ocaml-compiler:
+#           - 4.14.1
+#     runs-on: ubuntu-latest
+#     steps:
+#       - uses: actions/checkout@v3
+# 
+#       - uses: dtolnay/rust-toolchain@nightly
+#         with:
+#           components: clippy, rustfmt
+#       - uses: Swatinem/rust-cache@v2
+# 
+#       - name: Setup OCaml ${{ matrix.ocaml-compiler }}
+#         uses: ocaml/setup-ocaml@v2
+#         with:
+#           ocaml-compiler: ${{ matrix.ocaml-compiler }}
+#       - name: Set opam env
+#         run: opam env | tr '\n' ' ' >> $GITHUB_ENV
+#       - name: Add opam switch to PATH
+#         run: opam var bin >> $GITHUB_PATH
+# 
+#       - name: Install mold
+#         run: sudo apt install --yes mold
+# 
+#       - run: opam install . --deps-only --with-doc --with-test
+# 
+#       - run: opam exec -- dune build
+#       - run: opam exec -- dune runtest
+# 
+#   format-ocaml:
+#     runs-on: ubuntu-latest
+#     steps:
+#       - uses: actions/checkout@v3
+# 
+#       - uses: ocaml/setup-ocaml@v2
+#         with:
+#           ocaml-compiler: 4.14.x
+# 
+#       - uses: ocaml/setup-ocaml/lint-fmt@v2
+# 
