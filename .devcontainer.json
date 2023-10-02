@@ -1,5 +1,15 @@
 {
+    "name": "polars-ocaml dev",
     "build": {
         "dockerfile": "Dockerfile"
+    },
+    "customizations": {
+        "vscode": {
+            "settings": {},
+            "extensions": [
+                "rust-lang.rust-analyzer",
+                "ocamllabs.ocaml-platform"
+            ]
+        }
     },
 }
