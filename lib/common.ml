@@ -99,9 +99,12 @@ module Naive_datetime = struct
   ;;
 
   let%expect_test "of_time_ns" =
-    let time_ns = Time_ns_unix.of_string "2023-01-02 03:04:05.678" in
+    (* We need to specify the "-08:00" portion, since without it
+       [Time_ns_unix.of_string] assumes the time zone is the local time zone,
+       resulting in non-determinism. *)
+    let time_ns = Time_ns_unix.of_string "2023-01-02 03:04:05.678-08:00" in
     of_time_ns_exn time_ns |> to_string |> print_endline;
-    [%expect {| 2023-01-02 03:04:05.678 |}]
+    [%expect {| 2023-01-02 11:04:05.678 |}]
   ;;
 
   external to_timestamp_nanos : t -> int = "rust_naive_datetime_to_timestamp_nanos"
