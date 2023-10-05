@@ -14,7 +14,7 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
     sh -s -- -y --default-toolchain=nightly
 
 RUN opam install dune ocamlformat ocaml-lsp-server --yes
-RUN cargo install cargo-watch
+RUN source ~/.cargo/env && cargo install cargo-watch
 
 COPY ./polars.opam ./polars_async.opam ./
 RUN opam install . --deps-only --with-doc --with-test --yes
