@@ -8,14 +8,14 @@ on:
 env:
   CARGO_TERM_COLOR: always
 jobs:
-  # In the past we tried to support building this on 32bit architectures,[1] but
-  # some of polars' crates clearly don't support it[2] and getting both the
-  # OCaml and Rust compilers to work on 32bit is a pain, so we are leaving
-  # this comment as a reminder so that we do not try this without sufficient
-  # motivation again.
-  #
-  # [1]: https://github.com/mt-caret/polars-ocaml/pull/64
-  # [2]: https://github.com/pola-rs/polars/blob/c4fdbfe2c7f7ce7616ad9301981bc5d616c3beef/crates/polars-row/src/row.rs#L21
+# In the past we tried to support building this on 32bit architectures,[1] but
+# some of polars' crates clearly don't support it[2] and getting both the
+# OCaml and Rust compilers to work on 32bit is a pain, so we are leaving
+# this comment as a reminder so that we do not try this without sufficient
+# motivation again.
+#
+# [1]: https://github.com/mt-caret/polars-ocaml/pull/64
+# [2]: https://github.com/pola-rs/polars/blob/c4fdbfe2c7f7ce7616ad9301981bc5d616c3beef/crates/polars-row/src/row.rs#L21
   build:
     runs-on: self-hosted
     permissions:
