@@ -33,10 +33,10 @@ module T = struct
     | Duration of Time_unit.t
     | Time
     | List of t
-        (* We want this branch to be tested very well, since code dealing with
-           this recursive case is usually the most non-trivial portion of the
-           logic. *)
-        [@quickcheck.weight 10.]
+    (* We want this branch to be tested very well, since code dealing with
+       this recursive case is usually the most non-trivial portion of the
+       logic. *)
+    [@quickcheck.weight 10.]
     | Null
     | Struct of (string * t) list
     | Unknown

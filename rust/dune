@@ -1,0 +1,3 @@
+(dirs :standard .cargo \ target)
+
+(data_only_dirs vendor)
