@@ -74,14 +74,17 @@ fn rust_time_ns_to_naive_datetime(
     .to_ocaml(cr)
 }
 
-#[ocaml_interop_export]
+#[ocaml_interop_export(raise_on_err)]
 fn rust_naive_datetime_to_timestamp_nanos(
     cr: &mut &mut OCamlRuntime,
     datetime: OCamlRef<DynBox<NaiveDateTime>>,
 ) -> OCaml<OCamlInt> {
     let Abstract(datetime) = datetime.to_rust(cr);
 
-    datetime.timestamp_nanos().to_ocaml(cr)
+    datetime
+        .timestamp_nanos_opt()
+        .ok_or_else(|| format!("out of range datetime: {:?}", datetime))?
+        .to_ocaml(cr)
 }
 
 #[ocaml_interop_export]
