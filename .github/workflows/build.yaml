@@ -22,9 +22,8 @@ jobs:
       - name: Build and run Dev Container task
         uses: devcontainers/ci@v0.3
         with:
-          imageName: ghcr.io/mt-caret/polars-ocaml
           cacheFrom: ghcr.io/mt-caret/polars-ocaml
-          push: always
+          push: never
           runCmd: |
             opam exec -- dune build
             opam exec -- dune runtest
