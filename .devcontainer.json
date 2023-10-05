@@ -3,14 +3,5 @@
     "build": {
         "cacheFrom": "ghcr.io/mt-caret/polars-ocaml",
         "dockerfile": "Dockerfile"
-    },
-    "customizations": {
-        "vscode": {
-            "settings": {},
-            "extensions": [
-                "rust-lang.rust-analyzer",
-                "ocamllabs.ocaml-platform"
-            ]
-        }
-    },
+    }
 }
