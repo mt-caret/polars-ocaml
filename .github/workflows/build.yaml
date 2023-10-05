@@ -5,6 +5,13 @@ on:
     branches:
       - main
 
+  # Since cargo and opam dependencies change over time, we schedule a build of
+  # the container every week so we can catch issues early on
+  schedule:
+      # Run at 1AM UTC every Saturday; this translates to 9AM HKT and 9PM EST
+      # (new york outside of DST)
+      - cron: '0 1 * * 6'
+
 env:
   CARGO_TERM_COLOR: always
 
