@@ -105,7 +105,7 @@ fn rust_expr_lit(
                 cr,
                 &GADTDataType::List(data_type),
                 "series",
-                vec![value],
+                vec![value].into_iter(),
                 false,
             )?;
             lit(series)

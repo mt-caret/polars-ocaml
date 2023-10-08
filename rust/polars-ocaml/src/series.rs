@@ -20,25 +20,26 @@ pub type PolarsSeries = Rc<RefCell<Series>>;
 //
 // In the case of series_new takes a vec of DummyBoxRoots, and we recurse when
 // data_type turns out to be a GADTDataType::List(inner_data_type).
-pub fn series_new(
+pub fn series_new<I>(
     cr: &mut &mut OCamlRuntime,
     data_type: &GADTDataType,
     name: &str,
     // TODO: can we just pass a DummyBoxRoot here instead of a Vec, and save a copy?
-    values: Vec<DummyBoxRoot>,
+    values: I,
     are_values_options: bool,
-) -> Result<Series, String> {
+) -> Result<Series, String>
+where
+    I: Iterator<Item = DummyBoxRoot>,
+{
     macro_rules! create_series {
         ($ocaml_type:ty, $rust_type:ty) => {{
             if are_values_options {
                 let values: Vec<Option<$rust_type>> = values
-                    .into_iter()
                     .map(|v| v.interpret::<Option<$ocaml_type>>(cr).to_rust())
                     .collect();
                 Ok(Series::new(&name, values))
             } else {
                 let values: Vec<$rust_type> = values
-                    .into_iter()
                     .map(|v| v.interpret::<$ocaml_type>(cr).to_rust())
                     .collect();
                 Ok(Series::new(&name, values))
@@ -62,7 +63,6 @@ pub fn series_new(
                 Ok(Series::new(&name, values))
             } else {
                 let values = values
-                    .into_iter()
                     .map(|v| v.interpret::<OCamlInt>(cr).to_rust::<i64>().try_into())
                     .collect::<Result<Vec<$rust_type>, _>>()
                     .map_err(|err| err.to_string())?;
@@ -84,7 +84,6 @@ pub fn series_new(
         GADTDataType::Float32 => {
             if are_values_options {
                 let values: Vec<Option<f32>> = values
-                    .into_iter()
                     .map(|v| {
                         v.interpret::<Option<OCamlFloat>>(cr)
                             .to_rust::<Option<f64>>()
@@ -94,7 +93,6 @@ pub fn series_new(
                 Ok(Series::new(name, values))
             } else {
                 let values: Vec<f32> = values
-                    .into_iter()
                     .map(|v| v.interpret::<OCamlFloat>(cr).to_rust::<f64>() as f32)
                     .collect();
                 Ok(Series::new(name, values))
@@ -104,22 +102,28 @@ pub fn series_new(
         GADTDataType::Utf8 => create_series!(String, String),
         GADTDataType::Binary => create_series!(OCamlBytes, Vec<u8>),
         GADTDataType::List(data_type) => {
+            let mut values = values.peekable();
             // Series creation doesn't work for empty lists and use of
             // `Series::new_empty` is suggested instead.
             // https://github.com/pola-rs/polars/pull/10558#issuecomment-1684923274
-            if values.is_empty() {
+            if values.peek().is_none() {
                 let data_type = DataType::List(Box::new(data_type.to_data_type()));
                 return Ok(Series::new_empty(name, &data_type));
             }
 
             if are_values_options {
                 let values: Vec<Option<Series>> = values
-                    .into_iter()
                     .map(|v| {
-                        match v.interpret::<Option<OCamlList<DummyBoxRoot>>>(cr).to_rust() {
+                        match v
+                            .interpret::<Option<OCamlList<DummyBoxRoot>>>(cr)
+                            .to_rust::<Option<Vec<DummyBoxRoot>>>()
+                        {
                             None => Ok(None),
                             Some(list) => series_new(
-                                cr, data_type, name, list,
+                                cr,
+                                data_type,
+                                name,
+                                list.into_iter(),
                                 // The OCaml GADT's type assumes all values are non-null for simplicity,
                                 // but we expose a top-level function that allows the outermost layer
                                 // to be optional. So, all recursive layers are non-optional so
@@ -133,11 +137,14 @@ pub fn series_new(
                 Ok(Series::new(name, values))
             } else {
                 let values: Vec<Series> = values
-                    .into_iter()
                     .map(|v| {
-                        let list = v.interpret::<OCamlList<DummyBoxRoot>>(cr).to_rust();
+                        let list: Vec<DummyBoxRoot> =
+                            v.interpret::<OCamlList<DummyBoxRoot>>(cr).to_rust();
                         series_new(
-                            cr, data_type, name, list, // See call above to series_new
+                            cr,
+                            data_type,
+                            name,
+                            list.into_iter(), // See call above to series_new
                             false,
                         )
                     })
@@ -160,7 +167,7 @@ fn rust_series_new(
     let data_type: GADTDataType = data_type.to_rust(cr);
     let values: Vec<DummyBoxRoot> = values.to_rust(cr);
 
-    let series = series_new(cr, &data_type, &name, values, false)?;
+    let series = series_new(cr, &data_type, &name, values.into_iter(), false)?;
 
     OCaml::box_value(cr, Rc::new(RefCell::new(series)))
 }
@@ -176,7 +183,7 @@ fn rust_series_new_option(
     let data_type: GADTDataType = data_type.to_rust(cr);
     let values: Vec<DummyBoxRoot> = values.to_rust(cr);
 
-    let series = series_new(cr, &data_type, &name, values, true)?;
+    let series = series_new(cr, &data_type, &name, values.into_iter(), true)?;
 
     OCaml::box_value(cr, Rc::new(RefCell::new(series)))
 }
@@ -192,7 +199,7 @@ fn rust_series_new_array(
     let data_type: GADTDataType = data_type.to_rust(cr);
     let values: Vec<DummyBoxRoot> = values.to_rust(cr);
 
-    let series = series_new(cr, &data_type, &name, values, false)?;
+    let series = series_new(cr, &data_type, &name, values.into_iter(), false)?;
 
     OCaml::box_value(cr, Rc::new(RefCell::new(series)))
 }
@@ -208,7 +215,7 @@ fn rust_series_new_option_array(
     let data_type: GADTDataType = data_type.to_rust(cr);
     let values: Vec<DummyBoxRoot> = values.to_rust(cr);
 
-    let series = series_new(cr, &data_type, &name, values, true)?;
+    let series = series_new(cr, &data_type, &name, values.into_iter(), true)?;
 
     OCaml::box_value(cr, Rc::new(RefCell::new(series)))
 }
