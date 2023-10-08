@@ -609,6 +609,38 @@ fn rust_series_get(
     series_get(cr, &data_type, &series, index)?.to_ocaml(cr)
 }
 
+#[ocaml_interop_export(raise_on_err)]
+fn rust_series_map(
+    cr: &mut &mut OCamlRuntime,
+    arg_type: OCamlRef<GADTDataType>,
+    return_type: OCamlRef<GADTDataType>,
+    series: OCamlRef<DynBox<PolarsSeries>>,
+    f: OCamlRef<fn(DummyBoxRoot) -> DummyBoxRoot>,
+) -> OCaml<DynBox<PolarsSeries>> {
+    let arg_type: GADTDataType = arg_type.to_rust(cr);
+    let return_type: GADTDataType = return_type.to_rust(cr);
+    let Abstract(series) = series.to_rust(cr);
+    let f = f.to_boxroot(cr);
+
+    let mut return_values = Vec::new();
+    for i in 0..series.borrow().len() {
+        let arg: DummyBoxRoot = series_get(cr, &arg_type, &series.borrow(), i)?;
+        let return_value = f
+            .try_call(cr, &arg)
+            .map_err(|exception| exception.message().expect("Empty exception"))?;
+        return_values.push(return_value.to_rust());
+    }
+
+    let series = series_new(
+        cr,
+        &return_type,
+        series.borrow().name(),
+        return_values.into_iter(),
+        true,
+    )?;
+    Abstract(Rc::new(RefCell::new(series))).to_ocaml(cr)
+}
+
 #[ocaml_interop_export]
 fn rust_series_name(
     cr: &mut &mut OCamlRuntime,
