@@ -76,24 +76,26 @@ fn rust_expr_lit(
     let data_type: GADTDataType = data_type.to_rust(cr);
     let value: DummyBoxRoot = value.to_rust(cr);
 
-    macro_rules! expr_lit_int {
-        ($rust_type:ty) => {{
-            let value = value.interpret::<OCamlInt>(cr).to_rust::<i64>();
-            let value = TryInto::<$rust_type>::try_into(value).map_err(|err| err.to_string())?;
-            lit(value)
-        }};
+    fn expr_lit_int<T>(cr: &mut &mut OCamlRuntime, value: DummyBoxRoot) -> Result<Expr, String>
+    where
+        T: TryFrom<i64> + polars::prelude::Literal,
+        T::Error: std::fmt::Display,
+    {
+        let value = value.interpret::<OCamlInt>(cr).to_rust::<i64>();
+        let value = TryInto::<T>::try_into(value).map_err(|err| err.to_string())?;
+        Ok(lit(value))
     }
 
     let lit = match data_type {
         GADTDataType::Boolean => lit(value.interpret::<bool>(cr).to_rust::<bool>()),
-        GADTDataType::UInt8 => expr_lit_int!(u8),
-        GADTDataType::UInt16 => expr_lit_int!(u16),
-        GADTDataType::UInt32 => expr_lit_int!(u32),
-        GADTDataType::UInt64 => expr_lit_int!(u64),
-        GADTDataType::Int8 => expr_lit_int!(i8),
-        GADTDataType::Int16 => expr_lit_int!(i16),
-        GADTDataType::Int32 => expr_lit_int!(i32),
-        GADTDataType::Int64 => expr_lit_int!(i64),
+        GADTDataType::UInt8 => expr_lit_int::<u8>(cr, value)?,
+        GADTDataType::UInt16 => expr_lit_int::<u16>(cr, value)?,
+        GADTDataType::UInt32 => expr_lit_int::<u32>(cr, value)?,
+        GADTDataType::UInt64 => expr_lit_int::<u64>(cr, value)?,
+        GADTDataType::Int8 => expr_lit_int::<i8>(cr, value)?,
+        GADTDataType::Int16 => expr_lit_int::<i16>(cr, value)?,
+        GADTDataType::Int32 => expr_lit_int::<i32>(cr, value)?,
+        GADTDataType::Int64 => expr_lit_int::<i64>(cr, value)?,
         GADTDataType::Float32 => lit(value.interpret::<OCamlFloat>(cr).to_rust::<f64>() as f32),
         GADTDataType::Float64 => lit(value.interpret::<OCamlFloat>(cr).to_rust::<f64>()),
         GADTDataType::Utf8 => lit(value.interpret::<String>(cr).to_rust::<String>()),
