@@ -12,18 +12,6 @@ use std::borrow::Borrow;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 
-macro_rules! dyn_box_legacy {
-    ($cr:ident, |$($var:ident),+| $body:expr) => {
-        {
-            $(
-                let Abstract($var) = $var.to_rust($cr);
-            )+
-
-            OCaml::box_value($cr, $body)
-        }
-    };
-}
-
 pub fn dyn_box<'a, T, F, R>(
     cr: &'a mut OCamlRuntime,
     var: OCamlRef<DynBox<T>>,
@@ -52,7 +40,6 @@ where
     let v = body(cr, rust);
     OCaml::box_value(cr, v)
 }
-
 
 pub fn dyn_box2<'a, T1, T2, F, R>(
     cr: &'a mut OCamlRuntime,
@@ -84,7 +71,10 @@ where
     Result<Abstract<R>, String>: ToOCaml<Result<DynBox<R>, String>>,
 {
     let Abstract(rust) = var.to_rust(cr);
-    body(rust).map(Abstract).map_err(|err| err.to_string()).to_ocaml(cr)
+    body(rust)
+        .map(Abstract)
+        .map_err(|err| err.to_string())
+        .to_ocaml(cr)
 }
 
 pub fn dyn_box_result_with_cr<'a, T, F, R, E>(
@@ -100,7 +90,10 @@ where
     Result<Abstract<R>, String>: ToOCaml<Result<DynBox<R>, String>>,
 {
     let Abstract(rust) = var.to_rust(cr);
-    body(cr, rust).map(Abstract).map_err(|err| err.to_string()).to_ocaml(cr)
+    body(cr, rust)
+        .map(Abstract)
+        .map_err(|err| err.to_string())
+        .to_ocaml(cr)
 }
 
 pub fn dyn_box_result2<'a, T1, T2, F, R, E>(
@@ -119,9 +112,23 @@ where
 {
     let Abstract(rust1) = v1.to_rust(cr);
     let Abstract(rust2) = v2.to_rust(cr);
-    body(rust1, rust2).map(Abstract).map_err(|err| err.to_string()).to_ocaml(cr)
+    body(rust1, rust2)
+        .map(Abstract)
+        .map_err(|err| err.to_string())
+        .to_ocaml(cr)
 }
 
+macro_rules! dyn_box_legacy {
+    ($cr:ident, |$($var:ident),+| $body:expr) => {
+        {
+            $(
+                let Abstract($var) = $var.to_rust($cr);
+            )+
+
+            OCaml::box_value($cr, $body)
+        }
+    };
+}
 
 macro_rules! dyn_box_result_legacy {
     ($cr:ident, |$($var:ident),+| $body:expr) => {
