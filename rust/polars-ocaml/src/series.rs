@@ -1,8 +1,8 @@
 use crate::utils::*;
 use chrono::naive::{NaiveDate, NaiveDateTime};
 use ocaml_interop::{
-    BoxRoot, DynBox, FromOCaml, OCaml, OCamlBytes, OCamlFloat, OCamlInt, OCamlList, OCamlRef,
-    OCamlRuntime, ToOCaml,
+    BoxRoot, DynBox, OCaml, OCamlBytes, OCamlFloat, OCamlInt, OCamlList, OCamlRef, OCamlRuntime,
+    ToOCaml,
 };
 use polars::prelude::prelude::*;
 use polars::prelude::*;
@@ -28,32 +28,22 @@ pub fn series_new(
     values: Vec<DummyBoxRoot>,
     are_values_options: bool,
 ) -> Result<Series, String> {
-    fn create_series<MlType, RustType, V1, V2>(
-        cr: &mut OCamlRuntime,
-        are_values_options: bool,
-        name: &str,
-        values: Vec<DummyBoxRoot>,
-    ) -> polars::prelude::Series
-    where
-        polars::prelude::Series: polars::prelude::NamedFrom<Vec<Option<RustType>>, V1>,
-        polars::prelude::Series: polars::prelude::NamedFrom<Vec<RustType>, V2>,
-        V1: ?Sized,
-        V2: ?Sized,
-        RustType: FromOCaml<MlType>,
-    {
-        if are_values_options {
-            let values: Vec<Option<RustType>> = values
-                .into_iter()
-                .map(|v| v.interpret::<Option<MlType>>(cr).to_rust())
-                .collect();
-            (Series::new(&name, values))
-        } else {
-            let values: Vec<RustType> = values
-                .into_iter()
-                .map(|v| v.interpret::<MlType>(cr).to_rust())
-                .collect();
-            (Series::new(&name, values))
-        }
+    macro_rules! create_series {
+        ($ocaml_type:ty, $rust_type:ty) => {{
+            if are_values_options {
+                let values: Vec<Option<$rust_type>> = values
+                    .into_iter()
+                    .map(|v| v.interpret::<Option<$ocaml_type>>(cr).to_rust())
+                    .collect();
+                Ok(Series::new(&name, values))
+            } else {
+                let values: Vec<$rust_type> = values
+                    .into_iter()
+                    .map(|v| v.interpret::<$ocaml_type>(cr).to_rust())
+                    .collect();
+                Ok(Series::new(&name, values))
+            }
+        }};
     }
 
     macro_rules! create_int_series {
@@ -82,12 +72,7 @@ pub fn series_new(
     }
 
     match data_type {
-        GADTDataType::Boolean => Ok(create_series::<bool, bool, _, _>(
-            cr,
-            are_values_options,
-            name,
-            values,
-        )),
+        GADTDataType::Boolean => create_series!(bool, bool),
         GADTDataType::UInt8 => create_int_series!(u8),
         GADTDataType::UInt16 => create_int_series!(u16),
         GADTDataType::UInt32 => create_int_series!(u32),
@@ -115,24 +100,9 @@ pub fn series_new(
                 Ok(Series::new(name, values))
             }
         }
-        GADTDataType::Float64 => Ok(create_series::<OCamlFloat, f64, _, _>(
-            cr,
-            are_values_options,
-            name,
-            values,
-        )),
-        GADTDataType::Utf8 => Ok(create_series::<String, String, _, _>(
-            cr,
-            are_values_options,
-            name,
-            values,
-        )),
-        GADTDataType::Binary => Ok(create_series::<OCamlBytes, Vec<u8>, _, _>(
-            cr,
-            are_values_options,
-            name,
-            values,
-        )),
+        GADTDataType::Float64 => create_series!(OCamlFloat, f64),
+        GADTDataType::Utf8 => create_series!(String, String),
+        GADTDataType::Binary => create_series!(OCamlBytes, Vec<u8>),
         GADTDataType::List(data_type) => {
             // Series creation doesn't work for empty lists and use of
             // `Series::new_empty` is suggested instead.
