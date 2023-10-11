@@ -19,14 +19,17 @@ struct MacroArgs {
 // When `raise_on_err` is true, the macro will expect the function to return
 // `Result<OCaml<_>, String>` and will raise an OCaml exception if the function
 // returns an error.
-fn ocaml_interop_export_implementation(item_fn: syn::ItemFn, args: MacroArgs) -> TokenStream2 {
+fn try_ocaml_interop_export_implementation(
+    item_fn: syn::ItemFn,
+    args: MacroArgs,
+) -> Result<TokenStream2, String> {
     let mut inputs_iter = item_fn.sig.inputs.iter().map(|fn_arg| match fn_arg {
-        syn::FnArg::Receiver(_) => panic!("receiver not supported"),
-        syn::FnArg::Typed(pat_type) => pat_type.clone(),
+        syn::FnArg::Receiver(_) => Err("receiver not supported"),
+        syn::FnArg::Typed(pat_type) => Ok(pat_type.clone()),
     });
 
     // The first argument to the function corresponds to the OCaml runtime.
-    let runtime_name = match *inputs_iter.next().unwrap().pat {
+    let runtime_name = match *inputs_iter.next().unwrap()?.pat {
         syn::Pat::Ident(pat_ident) => pat_ident.ident,
         _ => panic!("expected ident"),
     };
@@ -36,15 +39,16 @@ fn ocaml_interop_export_implementation(item_fn: syn::ItemFn, args: MacroArgs) ->
     let new_inputs: Punctuated<_, _> = inputs_iter
         .clone()
         .map(|pat_type| {
-            syn::FnArg::Typed(syn::PatType {
+            let pat_type = pat_type?;
+            Ok::<_, String>(syn::FnArg::Typed(syn::PatType {
                 ty: syn::parse2(quote! {
                     ::ocaml_interop::RawOCaml
                 })
                 .unwrap(),
                 ..pat_type
-            })
+            }))
         })
-        .collect();
+        .collect::<Result<_, _>>()?;
     let number_of_arguments = new_inputs.len();
 
     let signature = syn::Signature {
@@ -58,18 +62,23 @@ fn ocaml_interop_export_implementation(item_fn: syn::ItemFn, args: MacroArgs) ->
 
     // We take each non-runtime argument to the function and convert them to the
     // appropriate Rust type.
-    let locals = inputs_iter.map(|pat_type| match *pat_type.pat {
-        syn::Pat::Ident(pat_ident) => {
-            let ident = pat_ident.ident;
-            let ty = pat_type.ty;
-            quote! {
-                let #ident: #ty = &::ocaml_interop::BoxRoot::new(unsafe {
-                    OCaml::new(cr, #ident)
-                });
+    let locals = inputs_iter
+        .map(|pat_type| {
+            let pat_type = pat_type?;
+            match *pat_type.pat {
+                syn::Pat::Ident(pat_ident) => {
+                    let ident = pat_ident.ident;
+                    let ty = pat_type.ty;
+                    Ok(quote! {
+                        let #ident: #ty = &::ocaml_interop::BoxRoot::new(unsafe {
+                            OCaml::new(cr, #ident)
+                        });
+                    })
+                }
+                _ => Err("expected ident"),
             }
-        }
-        _ => panic!("expected ident"),
-    });
+        })
+        .collect::<Result<Vec<_>, _>>()?;
 
     let return_type = match item_fn.sig.output.clone() {
         syn::ReturnType::Default => panic!("functions with no return type are not supported"),
@@ -163,7 +172,7 @@ fn ocaml_interop_export_implementation(item_fn: syn::ItemFn, args: MacroArgs) ->
             }
         });
 
-        quote! {
+        Ok(quote! {
             #native_function
 
             #[no_mangle]
@@ -179,9 +188,19 @@ fn ocaml_interop_export_implementation(item_fn: syn::ItemFn, args: MacroArgs) ->
 
                 #native_function_name(#( #arguments ),*)
             }
-        }
+        })
     } else {
-        native_function
+        Ok(native_function)
+    }
+}
+
+fn ocaml_interop_export_implementation(
+    item_fn: syn::ItemFn,
+    macro_args: MacroArgs,
+) -> TokenStream2 {
+    match try_ocaml_interop_export_implementation(item_fn, macro_args) {
+        Ok(expanded) => expanded,
+        Err(error_message) => quote! { compile_error!(#error_message); },
     }
 }
 
@@ -427,6 +446,30 @@ mod tests {
                 }
             }
         "##]]
+        .assert_eq(&macro_output);
+    }
+
+    #[test]
+    fn test_invalid_function() {
+        let macro_output = apply_macro_and_pretty_print(
+            quote! {
+                fn rust_expr_col(
+                    self,
+                    cr: &mut &mut OCamlRuntime,
+                    name: OCamlRef<String>
+                ) -> OCaml<DynBox<Expr>> {
+                    let name: String = name.to_rust(cr);
+                    OCaml::box_value(cr, col(&name))
+                }
+            },
+            MacroArgs {
+                raise_on_err: false,
+            },
+        );
+
+        expect![[r#"
+            compile_error!("receiver not supported");
+        "#]]
         .assert_eq(&macro_output);
     }
 
