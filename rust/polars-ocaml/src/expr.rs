@@ -138,11 +138,9 @@ fn rust_expr_series(
     cr: &mut &mut OCamlRuntime,
     series: OCamlRef<DynBox<crate::series::PolarsSeries>>,
 ) -> OCaml<DynBox<Expr>> {
-    dyn_box(cr, series, |series| {
-        match Rc::try_unwrap(series) {
-            Ok(series) => lit(series.into_inner()),
-            Err(series) => lit(series.borrow().clone()),
-        }
+    dyn_box(cr, series, |series| match Rc::try_unwrap(series) {
+        Ok(series) => lit(series.into_inner()),
+        Err(series) => lit(series.borrow().clone()),
     })
 }
 
@@ -254,13 +252,9 @@ fn rust_expr_sample_n(
         .get()?;
     let fixed_seed = fixed_seed.to_rust(cr);
 
-    dyn_box(cr, expr, |expr| expr.sample_n(
-        n,
-        with_replacement,
-        shuffle,
-        seed,
-        fixed_seed
-    ))
+    dyn_box(cr, expr, |expr| {
+        expr.sample_n(n, with_replacement, shuffle, seed, fixed_seed)
+    })
 }
 
 expr_op!(rust_expr_filter, |expr, predicate| expr.filter(predicate));
@@ -407,7 +401,8 @@ fn rust_expr_rank(
         let descending: bool = descending.to_rust(cr);
         let seed = seed
             .to_rust::<Coerce<_, Option<i64>, Option<u64>>>(cr)
-            .get().unwrap();
+            .get()
+            .unwrap();
         expr.rank(RankOptions { method, descending }, seed)
     })
 }
@@ -994,5 +989,7 @@ fn rust_expr_list_eval(
     parallel: OCamlRef<bool>,
 ) -> OCaml<DynBox<Expr>> {
     let parallel = parallel.to_rust(cr);
-    dyn_box2(cr, expr, other, |expr, other| expr.list().eval(other, parallel))
+    dyn_box2(cr, expr, other, |expr, other| {
+        expr.list().eval(other, parallel)
+    })
 }

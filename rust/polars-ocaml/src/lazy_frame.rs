@@ -182,7 +182,9 @@ fn rust_lazy_frame_filter(
     lazy_frame: OCamlRef<DynBox<LazyFrame>>,
     expr: OCamlRef<DynBox<Expr>>,
 ) -> OCaml<DynBox<LazyFrame>> {
-    dyn_box2(cr, lazy_frame, expr, |lazy_frame, expr| lazy_frame.filter(expr))
+    dyn_box2(cr, lazy_frame, expr, |lazy_frame, expr| {
+        lazy_frame.filter(expr)
+    })
 }
 
 #[ocaml_interop_export]
@@ -333,7 +335,9 @@ fn rust_lazy_frame_sort(
         maintain_order: maintain_order.unwrap_or(sort_options.maintain_order),
     };
 
-    dyn_box(cr, lazy_frame, |lazy_frame| lazy_frame.sort(&by_column, sort_options))
+    dyn_box(cr, lazy_frame, |lazy_frame| {
+        lazy_frame.sort(&by_column, sort_options)
+    })
 }
 
 #[ocaml_interop_export]
@@ -445,7 +449,9 @@ fn rust_lazy_frame_with_streaming(
 ) -> OCaml<DynBox<LazyFrame>> {
     let toggle = toggle.to_rust(cr);
 
-    dyn_box(cr, lazy_frame, |lazy_frame| lazy_frame.with_streaming(toggle))
+    dyn_box(cr, lazy_frame, |lazy_frame| {
+        lazy_frame.with_streaming(toggle)
+    })
 }
 
 #[ocaml_interop_export]
