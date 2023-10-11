@@ -104,7 +104,7 @@ fn rust_lazy_frame_collect(
 ) -> OCaml<Result<DynBox<crate::data_frame::PolarsDataFrame>, String>> {
     let streaming = streaming.to_rust(cr);
 
-    dyn_box_result!(cr, |lazy_frame| {
+    dyn_box_result_with_cr(cr, lazy_frame, |cr, lazy_frame| {
         cr.releasing_runtime(|| {
             lazy_frame
                 .with_streaming(streaming)
@@ -171,7 +171,7 @@ fn rust_lazy_frame_fetch(
 ) -> OCaml<Result<DynBox<crate::data_frame::PolarsDataFrame>, String>> {
     let n_rows = n_rows.to_rust::<Coerce<_, i64, usize>>(cr).get()?;
 
-    dyn_box_result!(cr, |lazy_frame| {
+    dyn_box_result_with_cr(cr, lazy_frame, |cr, lazy_frame| {
         cr.releasing_runtime(|| lazy_frame.fetch(n_rows).map(|df| Rc::new(RefCell::new(df))))
     })
 }
@@ -459,7 +459,7 @@ fn rust_lazy_frame_schema(
     cr: &mut &mut OCamlRuntime,
     lazy_frame: OCamlRef<DynBox<LazyFrame>>,
 ) -> OCaml<Result<DynBox<Schema>, String>> {
-    dyn_box_result!(cr, |lazy_frame| {
+    dyn_box_result(cr, lazy_frame, |lazy_frame| {
         lazy_frame.schema().map(|schema| (*schema).clone())
     })
 }

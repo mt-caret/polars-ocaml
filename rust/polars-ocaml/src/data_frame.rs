@@ -248,7 +248,7 @@ fn rust_data_frame_column(
 ) -> OCaml<Result<DynBox<PolarsSeries>, String>> {
     let name: String = name.to_rust(cr);
 
-    dyn_box_result!(cr, |data_frame| {
+    dyn_box_result(cr, data_frame, |data_frame| {
         let data_frame = data_frame.borrow();
         data_frame
             .column(&name)
@@ -356,7 +356,7 @@ fn rust_data_frame_vstack(
     data_frame: OCamlRef<DynBox<PolarsDataFrame>>,
     other: OCamlRef<DynBox<PolarsDataFrame>>,
 ) -> OCaml<Result<DynBox<()>, String>> {
-    dyn_box_result!(cr, |data_frame, other| {
+    dyn_box_result2(cr, data_frame, other, |data_frame, other| {
         let other = match Rc::try_unwrap(other) {
             Ok(data_frame) => data_frame.into_inner(),
             Err(data_frame) => data_frame.borrow().clone(),
@@ -403,7 +403,7 @@ fn rust_data_frame_pivot(
 
     let stable: bool = stable.to_rust(cr);
 
-    dyn_box_result!(cr, |data_frame| {
+    dyn_box_result(cr, data_frame, |data_frame| {
         let result = if stable {
             pivot::pivot_stable(
                 &data_frame.borrow(),
@@ -465,7 +465,7 @@ fn rust_data_frame_melt(
         streamable,
     };
 
-    dyn_box_result!(cr, |data_frame| {
+    dyn_box_result(cr, data_frame, |data_frame| {
         let data_frame = data_frame.borrow();
         data_frame
             .melt2(melt_args)
@@ -485,7 +485,7 @@ fn rust_data_frame_sort(
     let descending: Vec<bool> = descending.to_rust(cr);
     let maintain_order: bool = maintain_order.to_rust(cr);
 
-    dyn_box_result!(cr, |data_frame| {
+    dyn_box_result(cr, data_frame, |data_frame| {
         let data_frame = data_frame.borrow();
         data_frame
             .sort(by_column, descending, maintain_order)
@@ -541,7 +541,7 @@ fn rust_data_frame_sample_n(
         .to_rust::<Coerce<_, Option<i64>, Option<u64>>>(cr)
         .get()?;
 
-    dyn_box_result!(cr, |data_frame| {
+    dyn_box_result(cr, data_frame, |data_frame| {
         let data_frame = data_frame.borrow();
         data_frame
             .sample_n(n, with_replacement, shuffle, seed)
@@ -575,7 +575,7 @@ fn rust_data_frame_fill_null_with_strategy(
 ) -> OCaml<Result<DynBox<PolarsDataFrame>, String>> {
     let PolarsFillNullStrategy(strategy) = strategy.to_rust(cr);
 
-    dyn_box_result!(cr, |data_frame| {
+    dyn_box_result(cr, data_frame, |data_frame| {
         let data_frame = data_frame.borrow();
         data_frame
             .fill_null(strategy)
@@ -591,7 +591,7 @@ fn rust_data_frame_interpolate(
 ) -> OCaml<Result<DynBox<PolarsDataFrame>, String>> {
     let PolarsInterpolationMethod(method) = method.to_rust(cr);
 
-    dyn_box_result!(cr, |data_frame| {
+    dyn_box_result(cr, data_frame, |data_frame| {
         let data_frame = data_frame.borrow();
 
         let series = data_frame
@@ -620,7 +620,7 @@ fn rust_data_frame_upsample(
     let offset: String = offset.to_rust(cr);
     let stable: bool = stable.to_rust(cr);
 
-    dyn_box_result!(cr, |data_frame| {
+    dyn_box_result(cr, data_frame, |data_frame| {
         let result = if stable {
             data_frame.borrow().upsample_stable(
                 &by,
@@ -649,7 +649,7 @@ fn rust_data_frame_explode(
 ) -> OCaml<Result<DynBox<PolarsDataFrame>, String>> {
     let columns: Vec<String> = columns.to_rust(cr);
 
-    dyn_box_result!(cr, |data_frame| {
+    dyn_box_result(cr, data_frame, |data_frame| {
         let data_frame = data_frame.borrow();
         data_frame
             .explode(columns)

@@ -712,7 +712,7 @@ fn rust_series_sample_n(
         .to_rust::<Coerce<_, Option<i64>, Option<u64>>>(cr)
         .get()?;
 
-    dyn_box_result!(cr, |series| {
+    dyn_box_result(cr, series, |series| {
         let series = series.borrow();
         series
             .sample_n(n, with_replacement, shuffle, seed)
@@ -728,7 +728,7 @@ fn rust_series_fill_null_with_strategy(
 ) -> OCaml<Result<DynBox<PolarsSeries>, String>> {
     let PolarsFillNullStrategy(strategy) = strategy.to_rust(cr);
 
-    dyn_box_result!(cr, |series| {
+    dyn_box_result(cr, series, |series| {
         let series = series.borrow();
         series.fill_null(strategy).map(|s| Rc::new(RefCell::new(s)))
     })

@@ -90,7 +90,7 @@ fn rust_sql_context_execute(
 ) -> OCaml<Result<DynBox<LazyFrame>, String>> {
     let query: String = query.to_rust(cr);
 
-    dyn_box_result!(cr, |sql_context| {
+    dyn_box_result(cr, sql_context, |sql_context| {
         let result = sql_context.borrow_mut().execute(&query);
         result
     })

@@ -53,6 +53,7 @@ where
     OCaml::box_value(cr, v)
 }
 
+
 pub fn dyn_box2<'a, T1, T2, F, R>(
     cr: &'a mut OCamlRuntime,
     var1: OCamlRef<DynBox<T1>>,
@@ -70,7 +71,59 @@ where
     OCaml::box_value(cr, body(t1, t2))
 }
 
-macro_rules! dyn_box_result {
+pub fn dyn_box_result<'a, T, F, R, E>(
+    cr: &'a mut OCamlRuntime,
+    var: OCamlRef<DynBox<T>>,
+    body: F,
+) -> OCaml<'a, Result<DynBox<R>, String>>
+where
+    F: FnOnce(T) -> Result<R, E>,
+    T: Clone + 'static,
+    R: 'static,
+    E: std::string::ToString,
+    Result<Abstract<R>, String>: ToOCaml<Result<DynBox<R>, String>>,
+{
+    let Abstract(rust) = var.to_rust(cr);
+    body(rust).map(Abstract).map_err(|err| err.to_string()).to_ocaml(cr)
+}
+
+pub fn dyn_box_result_with_cr<'a, T, F, R, E>(
+    cr: &'a mut OCamlRuntime,
+    var: OCamlRef<DynBox<T>>,
+    body: F,
+) -> OCaml<'a, Result<DynBox<R>, String>>
+where
+    F: FnOnce(&mut OCamlRuntime, T) -> Result<R, E>,
+    T: Clone + 'static,
+    R: 'static,
+    E: std::string::ToString,
+    Result<Abstract<R>, String>: ToOCaml<Result<DynBox<R>, String>>,
+{
+    let Abstract(rust) = var.to_rust(cr);
+    body(cr, rust).map(Abstract).map_err(|err| err.to_string()).to_ocaml(cr)
+}
+
+pub fn dyn_box_result2<'a, T1, T2, F, R, E>(
+    cr: &'a mut OCamlRuntime,
+    v1: OCamlRef<DynBox<T1>>,
+    v2: OCamlRef<DynBox<T2>>,
+    body: F,
+) -> OCaml<'a, Result<DynBox<R>, String>>
+where
+    F: FnOnce(T1, T2) -> Result<R, E>,
+    T1: Clone + 'static,
+    T2: Clone + 'static,
+    R: 'static,
+    E: std::string::ToString,
+    Result<Abstract<R>, String>: ToOCaml<Result<DynBox<R>, String>>,
+{
+    let Abstract(rust1) = v1.to_rust(cr);
+    let Abstract(rust2) = v2.to_rust(cr);
+    body(rust1, rust2).map(Abstract).map_err(|err| err.to_string()).to_ocaml(cr)
+}
+
+
+macro_rules! dyn_box_result_legacy {
     ($cr:ident, |$($var:ident),+| $body:expr) => {
         {
             $(
@@ -95,7 +148,6 @@ macro_rules! dyn_box_op {
         }
     }
 }
-
 macro_rules! dyn_box_op_result {
     ($name:ident, $type:ty, |$($var:ident),+| $body:expr) => {
         #[ocaml_interop_export]
@@ -105,7 +157,7 @@ macro_rules! dyn_box_op_result {
                 $var: OCamlRef<DynBox<$type>>,
             )+
         ) -> OCaml<Result<DynBox<$type>, String>> {
-            dyn_box_result!(cr, |$($var),+| $body)
+            dyn_box_result_legacy!(cr, |$($var),+| $body)
         }
     }
 }
@@ -113,7 +165,7 @@ macro_rules! dyn_box_op_result {
 pub(crate) use dyn_box_legacy;
 pub(crate) use dyn_box_op;
 pub(crate) use dyn_box_op_result;
-pub(crate) use dyn_box_result;
+pub(crate) use dyn_box_result_legacy;
 
 // This function is actually quite unsafe; as a general rule, additional use of
 // this is strongly discouraged. See comment for `raise_ocaml_exception` in the
