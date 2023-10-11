@@ -8,9 +8,6 @@ struct MacroArgs {
     raise_on_err: bool,
 }
 
-// TODO: currently, the macro panicks all over the place which is not very nice.
-// We should instead emit compile_error! with the appropriate error messages.
-
 // TODO: a common mistake when using the attribute macro is to specify OCaml<_>
 // for arguments or OCamlRef<_> for return types, which should never happen.
 // In these cases, the macro should probably point out this issue and suggest
