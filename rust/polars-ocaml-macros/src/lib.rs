@@ -28,11 +28,15 @@ fn try_ocaml_interop_export_implementation(
         syn::FnArg::Typed(pat_type) => Ok(pat_type.clone()),
     });
 
+    let first_argument = inputs_iter
+        .next()
+        .ok_or("expected at least one argument")??;
+
     // The first argument to the function corresponds to the OCaml runtime.
-    let runtime_name = match *inputs_iter.next().unwrap()?.pat {
-        syn::Pat::Ident(pat_ident) => pat_ident.ident,
-        _ => panic!("expected ident"),
-    };
+    let runtime_name = match *first_argument.pat {
+        syn::Pat::Ident(pat_ident) => Ok(pat_ident.ident),
+        _ => Err("expected identifier corresponding to runtime for first argument"),
+    }?;
 
     // The remaining arguments are stripped of their types and converted to
     // `RawOCaml` values.
