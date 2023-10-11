@@ -190,7 +190,7 @@ fn rust_data_frame_clear(
     cr: &mut &mut OCamlRuntime,
     data_frame: OCamlRef<DynBox<PolarsDataFrame>>,
 ) -> OCaml<DynBox<PolarsDataFrame>> {
-    dyn_box!(cr, |data_frame| {
+    dyn_box(cr, data_frame, |data_frame| {
         let data_frame = data_frame.borrow();
         Rc::new(RefCell::new(data_frame.clear()))
     })
@@ -232,7 +232,7 @@ fn rust_data_frame_lazy(
     cr: &mut &mut OCamlRuntime,
     data_frame: OCamlRef<DynBox<PolarsDataFrame>>,
 ) -> OCaml<DynBox<LazyFrame>> {
-    dyn_box!(cr, |data_frame| {
+    dyn_box(cr, data_frame, |data_frame| {
         match Rc::try_unwrap(data_frame) {
             Ok(data_frame) => data_frame.into_inner().lazy(),
             Err(data_frame) => data_frame.borrow().clone().lazy(),
@@ -503,7 +503,7 @@ fn rust_data_frame_head(
         .to_rust::<Coerce<_, Option<i64>, Option<usize>>>(cr)
         .get()?;
 
-    dyn_box!(cr, |data_frame| {
+    dyn_box(cr, data_frame, |data_frame| {
         let data_frame = data_frame.borrow();
         Rc::new(RefCell::new(data_frame.head(length)))
     })
@@ -519,7 +519,7 @@ fn rust_data_frame_tail(
         .to_rust::<Coerce<_, Option<i64>, Option<usize>>>(cr)
         .get()?;
 
-    dyn_box!(cr, |data_frame| {
+    dyn_box(cr, data_frame, |data_frame| {
         let data_frame = data_frame.borrow();
         Rc::new(RefCell::new(data_frame.tail(length)))
     })
@@ -662,7 +662,7 @@ fn rust_data_frame_schema(
     cr: &mut &mut OCamlRuntime,
     data_frame: OCamlRef<DynBox<PolarsDataFrame>>,
 ) -> OCaml<DynBox<Schema>> {
-    dyn_box!(cr, |data_frame| {
+    dyn_box(cr, data_frame, |data_frame| {
         let data_frame = data_frame.borrow();
         data_frame.schema()
     })

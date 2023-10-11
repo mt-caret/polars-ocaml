@@ -58,7 +58,7 @@ fn rust_expr_exclude(
     names: OCamlRef<OCamlList<String>>,
 ) -> OCaml<DynBox<Expr>> {
     let names: Vec<String> = names.to_rust(cr);
-    dyn_box!(cr, |expr| expr.exclude(names))
+    dyn_box(cr, expr, |expr| expr.exclude(names))
 }
 
 #[ocaml_interop_export]
@@ -122,7 +122,7 @@ fn rust_expr_naive_date(
     cr: &mut &mut OCamlRuntime,
     value: OCamlRef<DynBox<NaiveDate>>,
 ) -> OCaml<DynBox<Expr>> {
-    dyn_box!(cr, |value| lit(value))
+    dyn_box(cr, value, |value| lit(value))
 }
 
 #[ocaml_interop_export]
@@ -130,7 +130,7 @@ fn rust_expr_naive_datetime(
     cr: &mut &mut OCamlRuntime,
     value: OCamlRef<DynBox<NaiveDateTime>>,
 ) -> OCaml<DynBox<Expr>> {
-    dyn_box!(cr, |value| lit(value))
+    dyn_box(cr, value, |value| lit(value))
 }
 
 #[ocaml_interop_export]
@@ -138,7 +138,7 @@ fn rust_expr_series(
     cr: &mut &mut OCamlRuntime,
     series: OCamlRef<DynBox<crate::series::PolarsSeries>>,
 ) -> OCaml<DynBox<Expr>> {
-    dyn_box!(cr, |series| {
+    dyn_box(cr, series, |series| {
         match Rc::try_unwrap(series) {
             Ok(series) => lit(series.into_inner()),
             Err(series) => lit(series.borrow().clone()),
@@ -155,7 +155,7 @@ fn rust_expr_cast(
 ) -> OCaml<DynBox<Expr>> {
     let PolarsDataType(data_type): PolarsDataType = data_type.to_rust(cr);
     let is_strict: bool = is_strict.to_rust(cr);
-    dyn_box!(cr, |expr| {
+    dyn_box(cr, expr, |expr| {
         if is_strict {
             expr.strict_cast(data_type)
         } else {
@@ -171,7 +171,7 @@ fn rust_expr_sort(
     descending: OCamlRef<bool>,
 ) -> OCaml<DynBox<Expr>> {
     let descending: bool = descending.to_rust(cr);
-    dyn_box!(cr, |expr| expr.sort(descending))
+    dyn_box(cr, expr, |expr| expr.sort(descending))
 }
 
 #[ocaml_interop_export]
@@ -184,7 +184,7 @@ fn rust_expr_sort_by(
     let by = unwrap_abstract_vec(by.to_rust(cr));
     let descending: bool = descending.to_rust(cr);
     let descending = vec![descending; by.len()];
-    dyn_box!(cr, |expr| expr.sort_by(by, descending))
+    dyn_box(cr, expr, |expr| expr.sort_by(by, descending))
 }
 
 #[ocaml_interop_export]
@@ -194,7 +194,7 @@ fn rust_expr_set_sorted_flag(
     is_sorted: OCamlRef<IsSorted>,
 ) -> OCaml<DynBox<Expr>> {
     let PolarsIsSorted(is_sorted) = is_sorted.to_rust(cr);
-    dyn_box!(cr, |expr| expr.set_sorted_flag(is_sorted))
+    dyn_box(cr, expr, |expr| expr.set_sorted_flag(is_sorted))
 }
 
 expr_op!(rust_expr_first, |expr| expr.first());
@@ -218,7 +218,7 @@ fn rust_expr_head(
         .to_rust::<Coerce<_, Option<i64>, Option<usize>>>(cr)
         .get()?;
 
-    dyn_box!(cr, |expr| expr.head(length))
+    dyn_box(cr, expr, |expr| expr.head(length))
 }
 
 #[ocaml_interop_export(raise_on_err)]
@@ -231,7 +231,7 @@ fn rust_expr_tail(
         .to_rust::<Coerce<_, Option<i64>, Option<usize>>>(cr)
         .get()?;
 
-    dyn_box!(cr, |expr| expr.tail(length))
+    dyn_box(cr, expr, |expr| expr.tail(length))
 }
 
 expr_op!(rust_expr_take, |expr, idx| expr.take(idx));
@@ -254,7 +254,7 @@ fn rust_expr_sample_n(
         .get()?;
     let fixed_seed = fixed_seed.to_rust(cr);
 
-    dyn_box!(cr, |expr| expr.sample_n(
+    dyn_box(cr, expr, |expr| expr.sample_n(
         n,
         with_replacement,
         shuffle,
@@ -274,7 +274,7 @@ fn rust_expr_clip_min_float(
     min: OCamlRef<OCamlFloat>,
 ) -> OCaml<DynBox<Expr>> {
     let min: f64 = min.to_rust(cr);
-    dyn_box!(cr, |expr| expr.clip_min(AnyValue::Float64(min)))
+    dyn_box(cr, expr, |expr| expr.clip_min(AnyValue::Float64(min)))
 }
 
 #[ocaml_interop_export]
@@ -284,7 +284,7 @@ fn rust_expr_clip_max_float(
     max: OCamlRef<OCamlFloat>,
 ) -> OCaml<DynBox<Expr>> {
     let max: f64 = max.to_rust(cr);
-    dyn_box!(cr, |expr| expr.clip_max(AnyValue::Float64(max)))
+    dyn_box(cr, expr, |expr| expr.clip_max(AnyValue::Float64(max)))
 }
 
 #[ocaml_interop_export]
@@ -294,7 +294,7 @@ fn rust_expr_clip_min_int(
     min: OCamlRef<OCamlInt>,
 ) -> OCaml<DynBox<Expr>> {
     let min: i64 = min.to_rust(cr);
-    dyn_box!(cr, |expr| expr.clip_min(AnyValue::Int64(min)))
+    dyn_box(cr, expr, |expr| expr.clip_min(AnyValue::Int64(min)))
 }
 
 #[ocaml_interop_export]
@@ -304,7 +304,7 @@ fn rust_expr_clip_max_int(
     max: OCamlRef<OCamlInt>,
 ) -> OCaml<DynBox<Expr>> {
     let max: i64 = max.to_rust(cr);
-    dyn_box!(cr, |expr| expr.clip_max(AnyValue::Int64(max)))
+    dyn_box(cr, expr, |expr| expr.clip_max(AnyValue::Int64(max)))
 }
 
 expr_op!(rust_expr_pow, |base, exponent| base.pow(exponent));
@@ -337,7 +337,7 @@ fn rust_expr_over(
 ) -> OCaml<DynBox<Expr>> {
     let PolarsWindowMapping(mapping_strategy) = mapping_strategy.to_rust(cr);
     let partition_by: Vec<_> = unwrap_abstract_vec(partition_by.to_rust(cr));
-    dyn_box!(cr, |expr| {
+    dyn_box(cr, expr, |expr| {
         expr.over_with_options(
             &partition_by,
             WindowOptions {
@@ -391,7 +391,7 @@ fn rust_expr_interpolate(
     method: OCamlRef<InterpolationMethod>,
 ) -> OCaml<DynBox<Expr>> {
     let PolarsInterpolationMethod(method) = method.to_rust(cr);
-    dyn_box!(cr, |expr| expr.interpolate(method))
+    dyn_box(cr, expr, |expr| expr.interpolate(method))
 }
 
 #[ocaml_interop_export(raise_on_err)]
@@ -402,12 +402,12 @@ fn rust_expr_rank(
     descending: OCamlRef<bool>,
     seed: OCamlRef<Option<OCamlInt>>,
 ) -> OCaml<DynBox<Expr>> {
-    dyn_box!(cr, |expr| {
+    dyn_box_with_cr(cr, expr, |cr, expr| {
         let PolarsRankMethod(method) = method.to_rust(cr);
         let descending: bool = descending.to_rust(cr);
         let seed = seed
             .to_rust::<Coerce<_, Option<i64>, Option<u64>>>(cr)
-            .get()?;
+            .get().unwrap();
         expr.rank(RankOptions { method, descending }, seed)
     })
 }
@@ -441,7 +441,7 @@ fn rust_expr_when_then(
         .into_iter()
         .map(|(Abstract(when), Abstract(then))| (when, then))
         .collect();
-    dyn_box!(cr, |otherwise| {
+    dyn_box(cr, otherwise, |otherwise| {
         let mut ret = WhenThenClause::Empty;
 
         for (when_expr, then_expr) in when_then_clauses {
@@ -473,7 +473,7 @@ fn rust_expr_shift(
     periods: OCamlRef<OCamlInt>,
     fill_value: OCamlRef<Option<DynBox<Expr>>>,
 ) -> OCaml<DynBox<Expr>> {
-    dyn_box!(cr, |expr| {
+    dyn_box_with_cr(cr, expr, |cr, expr| {
         let periods: i64 = periods.to_rust(cr);
         let fill_value: Option<Abstract<Expr>> = fill_value.to_rust(cr);
 
@@ -491,7 +491,7 @@ fn rust_expr_cum_count(
     reverse: OCamlRef<bool>,
 ) -> OCaml<DynBox<Expr>> {
     let reverse: bool = reverse.to_rust(cr);
-    dyn_box!(cr, |expr| expr.cumcount(reverse))
+    dyn_box(cr, expr, |expr| expr.cumcount(reverse))
 }
 
 #[ocaml_interop_export]
@@ -501,7 +501,7 @@ fn rust_expr_cum_sum(
     reverse: OCamlRef<bool>,
 ) -> OCaml<DynBox<Expr>> {
     let reverse: bool = reverse.to_rust(cr);
-    dyn_box!(cr, |expr| expr.cumsum(reverse))
+    dyn_box(cr, expr, |expr| expr.cumsum(reverse))
 }
 
 #[ocaml_interop_export]
@@ -511,7 +511,7 @@ fn rust_expr_cum_prod(
     reverse: OCamlRef<bool>,
 ) -> OCaml<DynBox<Expr>> {
     let reverse: bool = reverse.to_rust(cr);
-    dyn_box!(cr, |expr| expr.cumprod(reverse))
+    dyn_box(cr, expr, |expr| expr.cumprod(reverse))
 }
 
 #[ocaml_interop_export]
@@ -521,7 +521,7 @@ fn rust_expr_cum_min(
     reverse: OCamlRef<bool>,
 ) -> OCaml<DynBox<Expr>> {
     let reverse: bool = reverse.to_rust(cr);
-    dyn_box!(cr, |expr| expr.cummin(reverse))
+    dyn_box(cr, expr, |expr| expr.cummin(reverse))
 }
 
 #[ocaml_interop_export]
@@ -531,7 +531,7 @@ fn rust_expr_cum_max(
     reverse: OCamlRef<bool>,
 ) -> OCaml<DynBox<Expr>> {
     let reverse: bool = reverse.to_rust(cr);
-    dyn_box!(cr, |expr| expr.cummax(reverse))
+    dyn_box(cr, expr, |expr| expr.cummax(reverse))
 }
 
 #[ocaml_interop_export]
@@ -541,7 +541,7 @@ fn rust_expr_alias(
     name: OCamlRef<String>,
 ) -> OCaml<DynBox<Expr>> {
     let name: String = name.to_rust(cr);
-    dyn_box!(cr, |expr| expr.alias(&name))
+    dyn_box(cr, expr, |expr| expr.alias(&name))
 }
 
 #[ocaml_interop_export]
@@ -551,7 +551,7 @@ fn rust_expr_prefix(
     prefix: OCamlRef<String>,
 ) -> OCaml<DynBox<Expr>> {
     let prefix: String = prefix.to_rust(cr);
-    dyn_box!(cr, |expr| expr.prefix(&prefix))
+    dyn_box(cr, expr, |expr| expr.prefix(&prefix))
 }
 
 #[ocaml_interop_export]
@@ -561,7 +561,7 @@ fn rust_expr_suffix(
     suffix: OCamlRef<String>,
 ) -> OCaml<DynBox<Expr>> {
     let suffix: String = suffix.to_rust(cr);
-    dyn_box!(cr, |expr| expr.suffix(&suffix))
+    dyn_box(cr, expr, |expr| expr.suffix(&suffix))
 }
 
 #[ocaml_interop_export(raise_on_err)]
@@ -572,7 +572,7 @@ fn rust_expr_round(
 ) -> OCaml<DynBox<Expr>> {
     let decimals = decimals.to_rust::<Coerce<_, i64, u32>>(cr).get()?;
 
-    dyn_box!(cr, |expr| expr.round(decimals))
+    dyn_box(cr, expr, |expr| expr.round(decimals))
 }
 
 expr_op!(rust_expr_eq, |expr, other| expr.eq(other));
@@ -598,7 +598,7 @@ fn rust_expr_dt_strftime(
     format: OCamlRef<String>,
 ) -> OCaml<DynBox<Expr>> {
     let format: String = format.to_rust(cr);
-    dyn_box!(cr, |expr| expr.dt().to_string(&format))
+    dyn_box(cr, expr, |expr| expr.dt().to_string(&format))
 }
 
 #[ocaml_interop_export]
@@ -608,7 +608,7 @@ fn rust_expr_dt_convert_time_zone(
     timezone: OCamlRef<String>,
 ) -> OCaml<DynBox<Expr>> {
     let timezone: String = timezone.to_rust(cr);
-    dyn_box!(cr, |expr| expr.dt().convert_time_zone(timezone))
+    dyn_box(cr, expr, |expr| expr.dt().convert_time_zone(timezone))
 }
 
 #[ocaml_interop_export]
@@ -620,7 +620,7 @@ fn rust_expr_dt_replace_time_zone(
 ) -> OCaml<DynBox<Expr>> {
     let timezone: Option<String> = timezone.to_rust(cr);
     let use_earliest: Option<bool> = use_earliest.to_rust(cr);
-    dyn_box!(cr, |expr| {
+    dyn_box(cr, expr, |expr| {
         expr.dt().replace_time_zone(timezone, use_earliest)
     })
 }
@@ -729,7 +729,7 @@ fn rust_expr_str_split(
 ) -> OCaml<DynBox<Expr>> {
     let by: String = by.to_rust(cr);
     let inclusive = inclusive.to_rust(cr);
-    dyn_box!(cr, |expr| {
+    dyn_box(cr, expr, |expr| {
         if inclusive {
             expr.str().split_inclusive(&by)
         } else {
@@ -748,7 +748,7 @@ fn rust_expr_str_strptime(
     let PolarsDataType(data_type): PolarsDataType = data_type.to_rust(cr);
     let format: String = format.to_rust(cr);
 
-    dyn_box!(cr, |expr| {
+    dyn_box(cr, expr, |expr| {
         // TODO: make other options configurable
         let options = StrptimeOptions {
             format: Some(format),
@@ -852,7 +852,7 @@ fn rust_expr_str_extract(
     let pat: String = pat.to_rust(cr);
     let group_index = group_index.to_rust::<Coerce<_, i64, usize>>(cr).get()?;
 
-    dyn_box!(cr, |expr| {
+    dyn_box(cr, expr, |expr| {
         let f = move |series: Series| {
             Ok(Some(
                 series.utf8()?.extract(&pat, group_index)?.into_series(),
@@ -938,7 +938,7 @@ fn rust_expr_str_strip(
     matches: OCamlRef<Option<String>>,
 ) -> OCaml<DynBox<Expr>> {
     let matches: Option<String> = matches.to_rust(cr);
-    dyn_box!(cr, |expr| expr.str().strip(matches))
+    dyn_box(cr, expr, |expr| expr.str().strip(matches))
 }
 
 #[ocaml_interop_export]
@@ -948,7 +948,7 @@ fn rust_expr_str_lstrip(
     matches: OCamlRef<Option<String>>,
 ) -> OCaml<DynBox<Expr>> {
     let matches: Option<String> = matches.to_rust(cr);
-    dyn_box!(cr, |expr| expr.str().lstrip(matches))
+    dyn_box(cr, expr, |expr| expr.str().lstrip(matches))
 }
 
 #[ocaml_interop_export]
@@ -958,7 +958,7 @@ fn rust_expr_str_rstrip(
     matches: OCamlRef<Option<String>>,
 ) -> OCaml<DynBox<Expr>> {
     let matches: Option<String> = matches.to_rust(cr);
-    dyn_box!(cr, |expr| expr.str().rstrip(matches))
+    dyn_box(cr, expr, |expr| expr.str().rstrip(matches))
 }
 
 expr_op!(rust_expr_str_to_lowercase, |expr| expr.str().to_lowercase());
@@ -975,7 +975,7 @@ fn rust_expr_str_slice(
     let length = length
         .to_rust::<Coerce<_, Option<i64>, Option<u64>>>(cr)
         .get()?;
-    dyn_box!(cr, |expr| expr.str().str_slice(start, length))
+    dyn_box(cr, expr, |expr| expr.str().str_slice(start, length))
 }
 
 expr_op!(rust_expr_list_lengths, |expr| expr.list().lengths());
@@ -994,5 +994,5 @@ fn rust_expr_list_eval(
     parallel: OCamlRef<bool>,
 ) -> OCaml<DynBox<Expr>> {
     let parallel = parallel.to_rust(cr);
-    dyn_box!(cr, |expr, other| expr.list().eval(other, parallel))
+    dyn_box2(cr, expr, other, |expr, other| expr.list().eval(other, parallel))
 }

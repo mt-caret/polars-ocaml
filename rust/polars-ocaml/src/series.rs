@@ -641,7 +641,7 @@ fn rust_series_to_data_frame(
     cr: &mut &mut OCamlRuntime,
     series: OCamlRef<DynBox<PolarsSeries>>,
 ) -> OCaml<DynBox<crate::data_frame::PolarsDataFrame>> {
-    dyn_box!(cr, |series| {
+    dyn_box(cr, series, |series| {
         let data_frame = match Rc::try_unwrap(series) {
             Ok(series) => series.into_inner().into_frame(),
             Err(series) => series.borrow().clone().into_frame(),
@@ -658,7 +658,7 @@ fn rust_series_sort(
 ) -> OCaml<DynBox<PolarsSeries>> {
     let descending: bool = descending.to_rust(cr);
 
-    dyn_box!(cr, |series| {
+    dyn_box(cr, series, |series| {
         let series = series.borrow();
         Rc::new(RefCell::new(series.sort(descending)))
     })
@@ -674,7 +674,7 @@ fn rust_series_head(
         .to_rust::<Coerce<_, Option<i64>, Option<usize>>>(cr)
         .get()?;
 
-    dyn_box!(cr, |series| {
+    dyn_box(cr, series, |series| {
         let series = series.borrow();
         Rc::new(RefCell::new(series.head(length)))
     })
@@ -690,7 +690,7 @@ fn rust_series_tail(
         .to_rust::<Coerce<_, Option<i64>, Option<usize>>>(cr)
         .get()?;
 
-    dyn_box!(cr, |series| {
+    dyn_box(cr, series, |series| {
         let series = series.borrow();
         Rc::new(RefCell::new(series.tail(length)))
     })
@@ -742,7 +742,7 @@ fn rust_series_interpolate(
 ) -> OCaml<DynBox<PolarsSeries>> {
     let PolarsInterpolationMethod(method) = method.to_rust(cr);
 
-    dyn_box!(cr, |series| {
+    dyn_box(cr, series, |series| {
         let series = series.borrow();
         Rc::new(RefCell::new(interpolate(&series, method)))
     })

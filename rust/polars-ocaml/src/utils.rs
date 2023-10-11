@@ -1,7 +1,7 @@
 use ocaml_interop::{
     impl_from_ocaml_variant, ocaml_alloc_polymorphic_variant, ocaml_alloc_tagged_block,
     ocaml_alloc_variant, ocaml_unpack_polymorphic_variant, ocaml_unpack_variant,
-    polymorphic_variant_tag_hash, BoxRoot, DynBox, FromOCaml, OCaml, OCamlInt, OCamlList,
+    polymorphic_variant_tag_hash, BoxRoot, DynBox, FromOCaml, OCaml, OCamlInt, OCamlList, OCamlRef,
     OCamlRuntime, ToOCaml,
 };
 use polars::series::IsSorted;
@@ -12,7 +12,7 @@ use std::borrow::Borrow;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 
-macro_rules! dyn_box {
+macro_rules! dyn_box_legacy {
     ($cr:ident, |$($var:ident),+| $body:expr) => {
         {
             $(
@@ -22,6 +22,40 @@ macro_rules! dyn_box {
             OCaml::box_value($cr, $body)
         }
     };
+}
+
+pub fn dyn_box<'a, T, F, R>(cr: &'a mut OCamlRuntime, var: OCamlRef<DynBox<T>>, body: F) -> OCaml<'a, DynBox<R>>
+where
+    F: FnOnce(T) -> R,
+    T: Clone + 'static,
+    R: 'static
+{
+    let Abstract(rust) = var.to_rust(cr);
+    OCaml::box_value(cr, body(rust))
+}
+
+pub fn dyn_box_with_cr<'a, T, F, R>(cr: &'a mut OCamlRuntime, var: OCamlRef<DynBox<T>>, body: F) -> OCaml<'a, DynBox<R>>
+where
+    F: FnOnce(&mut OCamlRuntime, T) -> R,
+    T: Clone + 'static,
+    R: 'static
+{
+    let Abstract(rust) = var.to_rust(cr);
+    let v =  body(cr, rust);
+    OCaml::box_value(cr, v)
+}
+
+
+pub fn dyn_box2<'a, T1, T2, F, R>(cr: &'a mut OCamlRuntime, var1: OCamlRef<DynBox<T1>>, var2: OCamlRef<DynBox<T2>>, body: F) -> OCaml<'a, DynBox<R>>
+where
+    F: FnOnce(T1, T2) -> R,
+    T1: Clone + 'static,
+    T2: Clone + 'static,
+    R: 'static,
+{
+    let Abstract(t1) = var1.to_rust(cr);
+    let Abstract(t2) = var2.to_rust(cr);
+    OCaml::box_value(cr, body(t1, t2))
 }
 
 macro_rules! dyn_box_result {
@@ -45,7 +79,7 @@ macro_rules! dyn_box_op {
                 $var: OCamlRef<DynBox<$type>>,
             )+
         ) -> OCaml<DynBox<$type>> {
-            dyn_box!(cr, |$($var),+| $body)
+            dyn_box_legacy!(cr, |$($var),+| $body)
         }
     }
 }
@@ -64,7 +98,7 @@ macro_rules! dyn_box_op_result {
     }
 }
 
-pub(crate) use dyn_box;
+pub(crate) use dyn_box_legacy;
 pub(crate) use dyn_box_op;
 pub(crate) use dyn_box_op_result;
 pub(crate) use dyn_box_result;
