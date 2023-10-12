@@ -21,7 +21,9 @@ fn try_ocaml_interop_export_implementation(
     args: MacroArgs,
 ) -> Result<TokenStream2, String> {
     let mut inputs_iter = item_fn.sig.inputs.iter().map(|fn_arg| match fn_arg {
-        syn::FnArg::Receiver(_) => Err("receiver not supported"),
+        syn::FnArg::Receiver(_) => {
+            Err("'self' arguments are not supported by ocaml_interop_export")
+        }
         syn::FnArg::Typed(pat_type) => Ok(pat_type.clone()),
     });
 
@@ -469,7 +471,7 @@ mod tests {
         );
 
         expect![[r#"
-            compile_error!("receiver not supported");
+            compile_error!("'self' arguments are not supported by ocaml_interop_export");
         "#]]
         .assert_eq(&macro_output);
     }
