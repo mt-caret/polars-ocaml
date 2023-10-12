@@ -103,30 +103,6 @@ where
         .to_ocaml(cr)
 }
 
-macro_rules! dyn_box_legacy {
-    ($cr:ident, |$($var:ident),+| $body:expr) => {
-        {
-            $(
-                let Abstract($var) = $var.to_rust($cr);
-            )+
-
-            OCaml::box_value($cr, $body)
-        }
-    };
-}
-
-macro_rules! dyn_box_result_legacy {
-    ($cr:ident, |$($var:ident),+| $body:expr) => {
-        {
-            $(
-                let Abstract($var) = $var.to_rust($cr);
-            )+
-
-            $body.map(Abstract).map_err(|err| err.to_string()).to_ocaml($cr)
-        }
-    };
-}
-
 macro_rules! dyn_box_op {
     ($name:ident, $type:ty, |$($var:ident),+| $body:expr) => {
         #[ocaml_interop_export]
@@ -136,7 +112,13 @@ macro_rules! dyn_box_op {
                 $var: OCamlRef<DynBox<$type>>,
             )+
         ) -> OCaml<DynBox<$type>> {
-            dyn_box_legacy!(cr, |$($var),+| $body)
+        {
+            $(
+                let Abstract($var) = $var.to_rust(cr);
+            )+
+
+            OCaml::box_value(cr, $body)
+        }
         }
     }
 }
@@ -149,15 +131,19 @@ macro_rules! dyn_box_op_result {
                 $var: OCamlRef<DynBox<$type>>,
             )+
         ) -> OCaml<Result<DynBox<$type>, String>> {
-            dyn_box_result_legacy!(cr, |$($var),+| $body)
+        {
+            $(
+                let Abstract($var) = $var.to_rust(cr);
+            )+
+
+            $body.map(Abstract).map_err(|err| err.to_string()).to_ocaml(cr)
+        }
         }
     }
 }
 
-pub(crate) use dyn_box_legacy;
 pub(crate) use dyn_box_op;
 pub(crate) use dyn_box_op_result;
-pub(crate) use dyn_box_result_legacy;
 
 // This function is actually quite unsafe; as a general rule, additional use of
 // this is strongly discouraged. See comment for `raise_ocaml_exception` in the
