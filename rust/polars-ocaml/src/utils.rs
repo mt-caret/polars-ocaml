@@ -53,7 +53,6 @@ where
     T: Clone + 'static,
     R: 'static,
     E: std::string::ToString,
-    Abstract<R>: ToOCaml<DynBox<R>>,
 {
     let Abstract(rust) = var.to_rust(cr);
     body(rust)
@@ -72,7 +71,6 @@ where
     T: Clone + 'static,
     R: 'static,
     E: std::string::ToString,
-    Abstract<R>: ToOCaml<DynBox<R>>,
 {
     let Abstract(rust) = var.to_rust(cr);
     body(cr, rust)
@@ -93,7 +91,6 @@ where
     T2: Clone + 'static,
     R: 'static,
     E: std::string::ToString,
-    Abstract<R>: ToOCaml<DynBox<R>>,
 {
     let Abstract(rust1) = v1.to_rust(cr);
     let Abstract(rust2) = v2.to_rust(cr);
