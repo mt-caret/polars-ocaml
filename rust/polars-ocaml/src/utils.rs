@@ -26,21 +26,6 @@ where
     OCaml::box_value(cr, body(rust))
 }
 
-pub fn dyn_box_with_cr<'a, T, F, R>(
-    cr: &'a mut OCamlRuntime,
-    var: OCamlRef<DynBox<T>>,
-    body: F,
-) -> OCaml<'a, DynBox<R>>
-where
-    F: FnOnce(&mut OCamlRuntime, T) -> R,
-    T: Clone + 'static,
-    R: 'static,
-{
-    let Abstract(rust) = var.to_rust(cr);
-    let v = body(cr, rust);
-    OCaml::box_value(cr, v)
-}
-
 pub fn dyn_box2<'a, T1, T2, F, R>(
     cr: &'a mut OCamlRuntime,
     var1: OCamlRef<DynBox<T1>>,

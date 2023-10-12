@@ -467,14 +467,11 @@ fn rust_expr_shift(
     periods: OCamlRef<OCamlInt>,
     fill_value: OCamlRef<Option<DynBox<Expr>>>,
 ) -> OCaml<DynBox<Expr>> {
-    dyn_box_with_cr(cr, expr, |cr, expr| {
-        let periods: i64 = periods.to_rust(cr);
-        let fill_value: Option<Abstract<Expr>> = fill_value.to_rust(cr);
-
-        match fill_value {
-            None => expr.shift(periods),
-            Some(Abstract(fill_value)) => expr.shift_and_fill(periods, fill_value),
-        }
+    let periods: i64 = periods.to_rust(cr);
+    let fill_value: Option<Abstract<Expr>> = fill_value.to_rust(cr);
+    dyn_box(cr, expr, |expr| match fill_value {
+        None => expr.shift(periods),
+        Some(Abstract(fill_value)) => expr.shift_and_fill(periods, fill_value),
     })
 }
 
