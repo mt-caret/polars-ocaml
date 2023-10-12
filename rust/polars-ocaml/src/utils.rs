@@ -53,13 +53,12 @@ where
     T: Clone + 'static,
     R: 'static,
     E: std::string::ToString,
-    for<'c> &'c Abstract<R>: ToOCaml<DynBox<R>>,
-    for<'c, 'd> &'d Result<&'c Abstract<R>, String>: ToOCaml<Result<DynBox<R>, String>>,
+    Abstract<R>: ToOCaml<DynBox<R>>,
 {
     let Abstract(rust) = var.to_rust(cr);
-    (&body(rust)
+    body(rust)
         .map(Abstract)
-        .map_err(|err| err.to_string()))
+        .map_err(|err| err.to_string())
         .to_ocaml(cr)
 }
 
@@ -73,12 +72,12 @@ where
     T: Clone + 'static,
     R: 'static,
     E: std::string::ToString,
-    for<'c> &'c Abstract<R>: ToOCaml<DynBox<R>>,
+    Abstract<R>: ToOCaml<DynBox<R>>,
 {
     let Abstract(rust) = var.to_rust(cr);
-    (&body(cr, rust)
+    body(cr, rust)
         .map(Abstract)
-        .map_err(|err| err.to_string()))
+        .map_err(|err| err.to_string())
         .to_ocaml(cr)
 }
 
@@ -94,13 +93,13 @@ where
     T2: Clone + 'static,
     R: 'static,
     E: std::string::ToString,
-    for<'c> &'c Abstract<R>: ToOCaml<DynBox<R>>,
+    Abstract<R>: ToOCaml<DynBox<R>>,
 {
     let Abstract(rust1) = v1.to_rust(cr);
     let Abstract(rust2) = v2.to_rust(cr);
-    (&body(rust1, rust2)
+    body(rust1, rust2)
         .map(Abstract)
-        .map_err(|err| err.to_string()))
+        .map_err(|err| err.to_string())
         .to_ocaml(cr)
 }
 
@@ -731,11 +730,11 @@ unsafe impl<T: 'static + Clone> FromOCaml<DynBox<T>> for Abstract<T> {
     }
 }
 
-unsafe impl<T: 'static + Clone> ToOCaml<DynBox<T>> for &Abstract<T> {
+unsafe impl<T: 'static> ToOCaml<DynBox<T>> for Abstract<T> {
     fn to_ocaml<'a>(self, cr: &'a mut OCamlRuntime) -> OCaml<'a, DynBox<T>> {
         // TODO: I don't fully understand why ToOCaml takes a &self, since that
         // prevents us from using box_value without a clone() call.
-        OCaml::box_value(cr, self.0.clone())
+        OCaml::box_value(cr, self.0)
     }
 }
 
