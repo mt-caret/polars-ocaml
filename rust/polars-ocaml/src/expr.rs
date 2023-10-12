@@ -76,7 +76,7 @@ fn rust_expr_lit(
     let data_type: GADTDataType = data_type.to_rust(cr);
     let value: DummyBoxRoot = value.to_rust(cr);
 
-    fn expr_lit_int<T>(cr: &mut &mut OCamlRuntime, value: DummyBoxRoot) -> Result<Expr, String>
+    fn expr_lit_int<T>(cr: &OCamlRuntime, value: DummyBoxRoot) -> Result<Expr, String>
     where
         T: TryFrom<i64> + polars::prelude::Literal,
         T::Error: std::fmt::Display,
@@ -401,7 +401,7 @@ fn rust_expr_rank(
     let seed = seed
         .to_rust::<Coerce<_, Option<i64>, Option<u64>>>(cr)
         .get()?;
-    dyn_box_with_cr(cr, expr, |cr, expr| {
+    dyn_box(cr, expr, |expr| {
         expr.rank(RankOptions { method, descending }, seed)
     })
 }
