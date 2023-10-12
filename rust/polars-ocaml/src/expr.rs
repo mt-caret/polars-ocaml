@@ -122,7 +122,7 @@ fn rust_expr_naive_date(
     cr: &mut &mut OCamlRuntime,
     value: OCamlRef<DynBox<NaiveDate>>,
 ) -> OCaml<DynBox<Expr>> {
-    dyn_box(cr, value, |value| lit(value))
+    dyn_box(cr, value, lit)
 }
 
 #[ocaml_interop_export]
@@ -130,7 +130,7 @@ fn rust_expr_naive_datetime(
     cr: &mut &mut OCamlRuntime,
     value: OCamlRef<DynBox<NaiveDateTime>>,
 ) -> OCaml<DynBox<Expr>> {
-    dyn_box(cr, value, |value| lit(value))
+    dyn_box(cr, value, lit)
 }
 
 #[ocaml_interop_export]
@@ -396,13 +396,12 @@ fn rust_expr_rank(
     descending: OCamlRef<bool>,
     seed: OCamlRef<Option<OCamlInt>>,
 ) -> OCaml<DynBox<Expr>> {
+    let seed = seed
+        .to_rust::<Coerce<_, Option<i64>, Option<u64>>>(cr)
+        .get()?;
     dyn_box_with_cr(cr, expr, |cr, expr| {
         let PolarsRankMethod(method) = method.to_rust(cr);
         let descending: bool = descending.to_rust(cr);
-        let seed = seed
-            .to_rust::<Coerce<_, Option<i64>, Option<u64>>>(cr)
-            .get()
-            .unwrap();
         expr.rank(RankOptions { method, descending }, seed)
     })
 }
