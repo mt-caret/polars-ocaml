@@ -291,31 +291,6 @@ let%expect_test "Series.createo and Series.createo' doesn't raise" =
       [%test_result: Series_createo.t] ~expect:args' args;
       List.iteri values' ~f:(fun i value ->
         let value_equal = Option.equal (Comparable.equal (value_compare data_type)) in
-        (* <<<<<<< HEAD
-        assert (value_equal value (Series.get data_type series i))));
-  [%expect.unreachable]
-[@@expect.uncaught_exn
-  {|
-  (* CR expect_test_collector: This test expectation appears to contain a backtrace.
-     This is strongly discouraged as backtraces are fragile.
-     Please change this test to not include a backtrace. *)
-
-  ("Base_quickcheck.Test.run: test failed"
-    (input ((List (List (List Date))) (((((5325-08-22)))))))
-    (error
-      ((Failure
-          "Polars panicked: data types don't match: invalid series dtype: expected `Date`, got `i32`\
-         \nbacktrace not captured")
-        ("Raised by primitive operation at Polars_tests__Data_type_gadt_test.(fun) in file \"test/data_type_gadt_test.ml\", line 348, characters 34-65"
-          "Called from Base__List.iteri.(fun) in file \"src/list.ml\", line 630, characters 7-12"
-          "Called from Base__List0.fold in file \"src/list0.ml\", line 37, characters 27-37"
-          "Called from Base__List.iteri in file \"src/list.ml\", line 629, characters 5-62"
-          "Called from Base__Or_error.try_with in file \"src/or_error.ml\", line 99, characters 9-15"))))
-  Raised at Base__Error.raise in file "src/error.ml" (inlined), line 9, characters 14-30
-  Called from Base__Or_error.ok_exn in file "src/or_error.ml", line 107, characters 17-32
-  Called from Polars_tests__Data_type_gadt_test.(fun) in file "test/data_type_gadt_test.ml", line 339, characters 2-574
-  Called from Expect_test_collector.Make.Instance_io.exec in file "collector/expect_test_collector.ml", line 234, characters 12-19 |}]
-=======*)
         assert (value_equal value (Series.get data_type series i)));
       (* Test Series.createo' *)
       let series =
@@ -340,11 +315,11 @@ let%expect_test "Series.createo and Series.createo' doesn't raise" =
           "Polars panicked: data types don't match: invalid series dtype: expected `Date`, got `i32`\
          \nbacktrace not captured")
         ("Raised by primitive operation at Polars__Series.T.get in file \"lib/series.ml\", line 195, characters 19-36"
-          "Called from Polars_tests__Data_type_gadt_test.(fun) in file \"test/data_type_gadt_test.ml\", line 319, characters 34-65"
+          "Called from Polars_tests__Data_type_gadt_test.(fun) in file \"test/data_type_gadt_test.ml\", line 294, characters 34-65"
           "Called from Base__List.iteri.(fun) in file \"src/list.ml\", line 630, characters 7-12"
           "Called from Base__List0.fold in file \"src/list0.ml\", line 37, characters 27-37"
           "Called from Base__List.iteri in file \"src/list.ml\", line 629, characters 5-62"
-          "Called from Polars_tests__Data_type_gadt_test.(fun) in file \"test/data_type_gadt_test.ml\", line 292, characters 6-1023"
+          "Called from Polars_tests__Data_type_gadt_test.(fun) in file \"test/data_type_gadt_test.ml\", line 292, characters 6-198"
           "Called from Base__Or_error.try_with in file \"src/or_error.ml\", line 99, characters 9-15"))))
   Raised at Base__Error.raise in file "src/error.ml" (inlined), line 9, characters 14-30
   Called from Base__Or_error.ok_exn in file "src/or_error.ml", line 107, characters 17-32
@@ -415,7 +390,7 @@ let%expect_test "Expr.lit roundtrip" =
           "Polars panicked: data types don't match: invalid series dtype: expected `Date`, got `datetime[\206\188s]`\
          \nbacktrace not captured")
         ("Raised by primitive operation at Polars__Series.T.to_list in file \"lib/series.ml\", line 173, characters 48-67"
-          "Called from Polars_tests__Data_type_gadt_test.(fun) in file \"test/data_type_gadt_test.ml\", line 397, characters 8-203"
+          "Called from Polars_tests__Data_type_gadt_test.(fun) in file \"test/data_type_gadt_test.ml\", line 372, characters 8-203"
           "Called from Base__Or_error.try_with in file \"src/or_error.ml\", line 99, characters 9-15"))))
   Raised at Base__Error.raise in file "src/error.ml" (inlined), line 9, characters 14-30
   Called from Base__Or_error.ok_exn in file "src/or_error.ml", line 107, characters 17-32
