@@ -8,6 +8,7 @@ mod utils;
 
 #[cfg(test)]
 mod tests {
+    use chrono::NaiveDate;
     use expect_test::{expect, Expect};
     use polars::prelude::*;
     use std::fmt::Debug;
@@ -15,6 +16,41 @@ mod tests {
     fn check<T: Debug>(actual: T, expect: Expect) {
         let actual = format!("{:?}", actual);
         expect.assert_eq(&actual);
+    }
+
+    #[test]
+    fn date_creation() {
+        let date = NaiveDate::from_ymd_opt(2023, 1, 1).unwrap();
+
+        let df = DataFrame::new::<Series>(vec![])
+            .unwrap()
+            .lazy()
+            .select([lit(date)])
+            .collect()
+            .unwrap();
+
+        check(
+            df.clone(),
+            expect![[r#"
+                shape: (1, 1)
+                ┌─────────────────────┐
+                │ literal             │
+                │ ---                 │
+                │ datetime[ns]        │
+                ╞═════════════════════╡
+                │ 2023-01-01 00:00:00 │
+                └─────────────────────┘"#]],
+        );
+
+        check(
+            Series::new("date", [date]),
+            expect![[r#"
+                shape: (1,)
+                Series: 'date' [date]
+                [
+                	2023-01-01
+                ]"#]],
+        );
     }
 
     #[test]
