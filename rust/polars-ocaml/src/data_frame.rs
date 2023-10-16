@@ -3,17 +3,24 @@ use ocaml_interop::{DynBox, OCaml, OCamlFloat, OCamlInt, OCamlList, OCamlRef, To
 use polars::prelude::*;
 use polars_ocaml_macros::ocaml_interop_export;
 use smartstring::{LazyCompact, SmartString};
+use std::cell::RefCell;
 use std::fs::File;
+use std::rc::Rc;
+
+use crate::series::PolarsSeries;
+
+pub type PolarsDataFrame = Rc<RefCell<DataFrame>>;
 
 #[ocaml_interop_export]
 fn rust_data_frame_new(
     cr: &mut &mut OCamlRuntime,
-    series: OCamlRef<OCamlList<DynBox<Series>>>,
-) -> OCaml<Result<DynBox<DataFrame>, String>> {
-    let series: Vec<Series> = unwrap_abstract_vec(series.to_rust(cr));
+    series: OCamlRef<OCamlList<DynBox<PolarsSeries>>>,
+) -> OCaml<Result<DynBox<PolarsDataFrame>, String>> {
+    let series: Vec<PolarsSeries> = unwrap_abstract_vec(series.to_rust(cr));
+    let series: Vec<Series> = series.into_iter().map(|s| s.borrow().clone()).collect();
 
     DataFrame::new(series)
-        .map(Abstract)
+        .map(|df| Abstract(Rc::new(RefCell::new(df))))
         .map_err(|err| err.to_string())
         .to_ocaml(cr)
 }
@@ -24,7 +31,7 @@ fn rust_data_frame_read_csv(
     path: OCamlRef<String>,
     schema: OCamlRef<Option<DynBox<Schema>>>,
     try_parse_dates: OCamlRef<Option<bool>>,
-) -> OCaml<Result<DynBox<DataFrame>, String>> {
+) -> OCaml<Result<DynBox<PolarsDataFrame>, String>> {
     let path: String = path.to_rust(cr);
     let schema = schema
         .to_rust::<Option<Abstract<Schema>>>(cr)
@@ -40,7 +47,7 @@ fn rust_data_frame_read_csv(
             }
             .finish()
         })
-        .map(Abstract)
+        .map(|df| Abstract(Rc::new(RefCell::new(df))))
         .map_err(|err| err.to_string())
         .to_ocaml(cr)
 }
@@ -48,17 +55,17 @@ fn rust_data_frame_read_csv(
 #[ocaml_interop_export]
 fn rust_data_frame_write_csv(
     cr: &mut &mut OCamlRuntime,
-    data_frame: OCamlRef<DynBox<DataFrame>>,
+    data_frame: OCamlRef<DynBox<PolarsDataFrame>>,
     path: OCamlRef<String>,
 ) -> OCaml<Result<(), String>> {
-    let Abstract(mut data_frame) = data_frame.to_rust(cr);
+    let Abstract(data_frame) = data_frame.to_rust(cr);
     let path: String = path.to_rust(cr);
 
     File::create(path)
         .map_err(|err| err.to_string())
         .and_then(|file| {
             CsvWriter::new(&file)
-                .finish(&mut data_frame)
+                .finish(&mut data_frame.borrow_mut())
                 .map_err(|err| err.to_string())
         })
         .to_ocaml(cr)
@@ -68,7 +75,7 @@ fn rust_data_frame_write_csv(
 fn rust_data_frame_read_parquet(
     cr: &mut &mut OCamlRuntime,
     path: OCamlRef<String>,
-) -> OCaml<Result<DynBox<DataFrame>, String>> {
+) -> OCaml<Result<DynBox<PolarsDataFrame>, String>> {
     let path: String = path.to_rust(cr);
 
     File::open(path)
@@ -78,24 +85,24 @@ fn rust_data_frame_read_parquet(
                 .finish()
                 .map_err(|err| err.to_string())
         })
-        .map(Abstract)
+        .map(|df| Abstract(Rc::new(RefCell::new(df))))
         .to_ocaml(cr)
 }
 
 #[ocaml_interop_export]
 fn rust_data_frame_write_parquet(
     cr: &mut &mut OCamlRuntime,
-    data_frame: OCamlRef<DynBox<DataFrame>>,
+    data_frame: OCamlRef<DynBox<PolarsDataFrame>>,
     path: OCamlRef<String>,
 ) -> OCaml<Result<(), String>> {
-    let Abstract(mut data_frame) = data_frame.to_rust(cr);
+    let Abstract(data_frame) = data_frame.to_rust(cr);
     let path: String = path.to_rust(cr);
 
     File::create(path)
         .map_err(|err| err.to_string())
         .and_then(|file| {
             ParquetWriter::new(file)
-                .finish(&mut data_frame)
+                .finish(&mut data_frame.borrow_mut())
                 .map(|_file_size_in_bytes| ())
                 .map_err(|err| err.to_string())
         })
@@ -106,7 +113,7 @@ fn rust_data_frame_write_parquet(
 fn rust_data_frame_read_json(
     cr: &mut &mut OCamlRuntime,
     path: OCamlRef<String>,
-) -> OCaml<Result<DynBox<DataFrame>, String>> {
+) -> OCaml<Result<DynBox<PolarsDataFrame>, String>> {
     let path: String = path.to_rust(cr);
 
     File::open(path)
@@ -116,17 +123,17 @@ fn rust_data_frame_read_json(
                 .finish()
                 .map_err(|err| err.to_string())
         })
-        .map(Abstract)
+        .map(|df| Abstract(Rc::new(RefCell::new(df))))
         .to_ocaml(cr)
 }
 
 #[ocaml_interop_export]
 fn rust_data_frame_write_json(
     cr: &mut &mut OCamlRuntime,
-    data_frame: OCamlRef<DynBox<DataFrame>>,
+    data_frame: OCamlRef<DynBox<PolarsDataFrame>>,
     path: OCamlRef<String>,
 ) -> OCaml<Result<(), String>> {
-    let Abstract(mut data_frame) = data_frame.to_rust(cr);
+    let Abstract(data_frame) = data_frame.to_rust(cr);
     let path: String = path.to_rust(cr);
 
     File::create(path)
@@ -134,7 +141,7 @@ fn rust_data_frame_write_json(
         .and_then(|file| {
             JsonWriter::new(file)
                 .with_json_format(JsonFormat::Json)
-                .finish(&mut data_frame)
+                .finish(&mut data_frame.borrow_mut())
                 .map_err(|err| err.to_string())
         })
         .to_ocaml(cr)
@@ -144,7 +151,7 @@ fn rust_data_frame_write_json(
 fn rust_data_frame_read_jsonl(
     cr: &mut &mut OCamlRuntime,
     path: OCamlRef<String>,
-) -> OCaml<Result<DynBox<DataFrame>, String>> {
+) -> OCaml<Result<DynBox<PolarsDataFrame>, String>> {
     let path: String = path.to_rust(cr);
 
     File::open(path)
@@ -154,17 +161,17 @@ fn rust_data_frame_read_jsonl(
                 .finish()
                 .map_err(|err| err.to_string())
         })
-        .map(Abstract)
+        .map(|df| Abstract(Rc::new(RefCell::new(df))))
         .to_ocaml(cr)
 }
 
 #[ocaml_interop_export]
 fn rust_data_frame_write_jsonl(
     cr: &mut &mut OCamlRuntime,
-    data_frame: OCamlRef<DynBox<DataFrame>>,
+    data_frame: OCamlRef<DynBox<PolarsDataFrame>>,
     path: OCamlRef<String>,
 ) -> OCaml<Result<(), String>> {
-    let Abstract(mut data_frame) = data_frame.to_rust(cr);
+    let Abstract(data_frame) = data_frame.to_rust(cr);
     let path: String = path.to_rust(cr);
 
     File::create(path)
@@ -172,19 +179,31 @@ fn rust_data_frame_write_jsonl(
         .and_then(|file| {
             JsonWriter::new(file)
                 .with_json_format(JsonFormat::JsonLines)
-                .finish(&mut data_frame)
+                .finish(&mut data_frame.borrow_mut())
                 .map_err(|err| err.to_string())
         })
         .to_ocaml(cr)
 }
 
 #[ocaml_interop_export]
+fn rust_data_frame_clear(
+    cr: &mut &mut OCamlRuntime,
+    data_frame: OCamlRef<DynBox<PolarsDataFrame>>,
+) -> OCaml<DynBox<PolarsDataFrame>> {
+    dyn_box(cr, data_frame, |data_frame| {
+        let data_frame = data_frame.borrow();
+        Rc::new(RefCell::new(data_frame.clear()))
+    })
+}
+
+#[ocaml_interop_export]
 fn rust_data_frame_describe(
     cr: &mut &mut OCamlRuntime,
-    data_frame: OCamlRef<DynBox<DataFrame>>,
+    data_frame: OCamlRef<DynBox<PolarsDataFrame>>,
     percentiles: OCamlRef<Option<OCamlList<OCamlFloat>>>,
-) -> OCaml<Result<DynBox<DataFrame>, String>> {
+) -> OCaml<Result<DynBox<PolarsDataFrame>, String>> {
     let Abstract(data_frame) = data_frame.to_rust(cr);
+    let data_frame = data_frame.borrow();
     let percentiles: Option<Vec<f64>> = percentiles.to_rust(cr);
 
     // TODO: I'm not sure why I can't do this with something like
@@ -193,49 +212,66 @@ fn rust_data_frame_describe(
         None => data_frame.describe(None),
         Some(percentiles) => data_frame.describe(Some(percentiles.as_slice())),
     }
-    .map(Abstract)
+    .map(|df| Abstract(Rc::new(RefCell::new(df))))
     .map_err(|err| err.to_string())
     .to_ocaml(cr)
 }
 
 #[ocaml_interop_export]
+fn rust_data_frame_height(
+    cr: &mut &mut OCamlRuntime,
+    data_frame: OCamlRef<DynBox<PolarsDataFrame>>,
+) -> OCaml<OCamlInt> {
+    let Abstract(data_frame) = data_frame.to_rust(cr);
+    let height = data_frame.borrow().height() as i64;
+    height.to_ocaml(cr)
+}
+
+#[ocaml_interop_export]
 fn rust_data_frame_lazy(
     cr: &mut &mut OCamlRuntime,
-    data_frame: OCamlRef<DynBox<DataFrame>>,
+    data_frame: OCamlRef<DynBox<PolarsDataFrame>>,
 ) -> OCaml<DynBox<LazyFrame>> {
-    let Abstract(data_frame) = data_frame.to_rust(cr);
-    OCaml::box_value(cr, data_frame.lazy())
+    dyn_box(cr, data_frame, |data_frame| {
+        match Rc::try_unwrap(data_frame) {
+            Ok(data_frame) => data_frame.into_inner().lazy(),
+            Err(data_frame) => data_frame.borrow().clone().lazy(),
+        }
+    })
 }
 
 #[ocaml_interop_export]
 fn rust_data_frame_column(
     cr: &mut &mut OCamlRuntime,
-    data_frame: OCamlRef<DynBox<DataFrame>>,
+    data_frame: OCamlRef<DynBox<PolarsDataFrame>>,
     name: OCamlRef<String>,
-) -> OCaml<Result<DynBox<Series>, String>> {
-    let Abstract(data_frame) = data_frame.to_rust(cr);
+) -> OCaml<Result<DynBox<PolarsSeries>, String>> {
     let name: String = name.to_rust(cr);
-    data_frame
-        .column(&name)
-        .map(|series| Abstract(series.clone()))
-        .map_err(|err| err.to_string())
-        .to_ocaml(cr)
+
+    dyn_box_result(cr, data_frame, |data_frame| {
+        let data_frame = data_frame.borrow();
+        data_frame
+            .column(&name)
+            .cloned()
+            .map(|s| Rc::new(RefCell::new(s)))
+    })
 }
 
 #[ocaml_interop_export]
 fn rust_data_frame_columns(
     cr: &mut &mut OCamlRuntime,
-    data_frame: OCamlRef<DynBox<DataFrame>>,
+    data_frame: OCamlRef<DynBox<PolarsDataFrame>>,
     names: OCamlRef<OCamlList<String>>,
-) -> OCaml<Result<OCamlList<DynBox<Series>>, String>> {
+) -> OCaml<Result<OCamlList<DynBox<PolarsSeries>>, String>> {
     let Abstract(data_frame) = data_frame.to_rust(cr);
     let names: Vec<String> = names.to_rust(cr);
+    let data_frame = data_frame.borrow();
     data_frame
         .columns(&names)
         .map(|series| {
             series
                 .into_iter()
-                .map(|series| Abstract(series.clone()))
+                .map(|series| Abstract(Rc::new(RefCell::new(series.clone()))))
                 .collect::<Vec<Abstract<_>>>()
         })
         .map_err(|err| err.to_string())
@@ -245,17 +281,18 @@ fn rust_data_frame_columns(
 #[ocaml_interop_export]
 fn rust_data_frame_get_column_names(
     cr: &mut &mut OCamlRuntime,
-    data_frame: OCamlRef<DynBox<DataFrame>>,
+    data_frame: OCamlRef<DynBox<PolarsDataFrame>>,
 ) -> OCaml<OCamlList<String>> {
     let Abstract(data_frame) = data_frame.to_rust(cr);
+    let data_frame = data_frame.borrow();
     data_frame.get_column_names().to_ocaml(cr)
 }
 
 #[ocaml_interop_export]
 fn rust_data_frame_vertical_concat(
     cr: &mut &mut OCamlRuntime,
-    data_frames: OCamlRef<OCamlList<DynBox<DataFrame>>>,
-) -> OCaml<Result<DynBox<DataFrame>, String>> {
+    data_frames: OCamlRef<OCamlList<DynBox<PolarsDataFrame>>>,
+) -> OCaml<Result<DynBox<PolarsDataFrame>, String>> {
     let data_frames = unwrap_abstract_vec(data_frames.to_rust(cr));
 
     let stack = || {
@@ -264,13 +301,17 @@ fn rust_data_frame_vertical_concat(
             "No dataframes provided for vertical concatenation".into(),
         ))?;
         for data_frame in data_frames {
-            result = result.vstack(&data_frame)?;
+            // TODO: there has to be a more elegant way to do this that doesn't
+            // involve creating a new Rc<RefCell<_>> on every iteration!
+            result = Rc::new(RefCell::new({
+                let borrowed_result = result.borrow();
+                borrowed_result.vstack(&data_frame.borrow())
+            }?));
         }
-        Ok(result)
+        Ok(Abstract(result))
     };
 
     stack()
-        .map(Abstract)
         .map_err(|err: PolarsError| err.to_string())
         .to_ocaml(cr)
 }
@@ -278,12 +319,16 @@ fn rust_data_frame_vertical_concat(
 #[ocaml_interop_export]
 fn rust_data_frame_horizontal_concat(
     cr: &mut &mut OCamlRuntime,
-    data_frames: OCamlRef<OCamlList<DynBox<DataFrame>>>,
-) -> OCaml<Result<DynBox<DataFrame>, String>> {
-    let data_frames = unwrap_abstract_vec(data_frames.to_rust(cr));
+    data_frames: OCamlRef<OCamlList<DynBox<PolarsDataFrame>>>,
+) -> OCaml<Result<DynBox<PolarsDataFrame>, String>> {
+    let data_frames: Vec<DataFrame> = unwrap_abstract_vec(data_frames.to_rust(cr))
+        // TODO: This clone is probably avoidable
+        .into_iter()
+        .map(|df| df.borrow().clone())
+        .collect();
 
     polars::functions::hor_concat_df(&data_frames)
-        .map(Abstract)
+        .map(|df| Abstract(Rc::new(RefCell::new(df))))
         .map_err(|err| err.to_string())
         .to_ocaml(cr)
 }
@@ -291,20 +336,54 @@ fn rust_data_frame_horizontal_concat(
 #[ocaml_interop_export]
 fn rust_data_frame_diagonal_concat(
     cr: &mut &mut OCamlRuntime,
-    data_frames: OCamlRef<OCamlList<DynBox<DataFrame>>>,
-) -> OCaml<Result<DynBox<DataFrame>, String>> {
-    let data_frames = unwrap_abstract_vec(data_frames.to_rust(cr));
+    data_frames: OCamlRef<OCamlList<DynBox<PolarsDataFrame>>>,
+) -> OCaml<Result<DynBox<PolarsDataFrame>, String>> {
+    let data_frames: Vec<DataFrame> = unwrap_abstract_vec(data_frames.to_rust(cr))
+        // TODO: This clone is probably avoidable
+        .into_iter()
+        .map(|df| df.borrow().clone())
+        .collect();
 
     polars::functions::diag_concat_df(&data_frames)
-        .map(Abstract)
+        .map(|df| Abstract(Rc::new(RefCell::new(df))))
         .map_err(|err| err.to_string())
         .to_ocaml(cr)
 }
 
 #[ocaml_interop_export]
+fn rust_data_frame_vstack(
+    cr: &mut &mut OCamlRuntime,
+    data_frame: OCamlRef<DynBox<PolarsDataFrame>>,
+    other: OCamlRef<DynBox<PolarsDataFrame>>,
+) -> OCaml<Result<DynBox<()>, String>> {
+    dyn_box_result2(cr, data_frame, other, |data_frame, other| {
+        let other = match Rc::try_unwrap(other) {
+            Ok(data_frame) => data_frame.into_inner(),
+            Err(data_frame) => data_frame.borrow().clone(),
+        };
+
+        let mut data_frame = data_frame.borrow_mut();
+        data_frame
+            .vstack_mut(&other)
+            .map(|_| ())
+            .map_err(|err| err.to_string())
+    })
+}
+
+#[ocaml_interop_export]
+fn rust_data_frame_as_single_chunk_par(
+    cr: &mut &mut OCamlRuntime,
+    data_frame: OCamlRef<DynBox<PolarsDataFrame>>,
+) -> OCaml<()> {
+    let Abstract(data_frame) = data_frame.to_rust(cr);
+    data_frame.borrow_mut().as_single_chunk_par();
+    OCaml::unit()
+}
+
+#[ocaml_interop_export]
 fn rust_data_frame_pivot(
     cr: &mut &mut OCamlRuntime,
-    data_frame: OCamlRef<DynBox<DataFrame>>,
+    data_frame: OCamlRef<DynBox<PolarsDataFrame>>,
     values: OCamlRef<OCamlList<String>>,
     index: OCamlRef<OCamlList<String>>,
     columns: OCamlRef<OCamlList<String>>,
@@ -312,9 +391,7 @@ fn rust_data_frame_pivot(
     agg_expr: OCamlRef<Option<DynBox<Expr>>>,
     separator: OCamlRef<Option<String>>,
     stable: OCamlRef<bool>,
-) -> OCaml<Result<DynBox<DataFrame>, String>> {
-    let Abstract(data_frame) = data_frame.to_rust(cr);
-
+) -> OCaml<Result<DynBox<PolarsDataFrame>, String>> {
     let values: Vec<String> = values.to_rust(cr);
     let index: Vec<String> = index.to_rust(cr);
     let columns: Vec<String> = columns.to_rust(cr);
@@ -326,44 +403,43 @@ fn rust_data_frame_pivot(
 
     let stable: bool = stable.to_rust(cr);
 
-    if stable {
-        pivot::pivot_stable(
-            &data_frame,
-            &values,
-            &index,
-            &columns,
-            sort_columns,
-            agg_expr,
-            separator.as_deref(),
-        )
-    } else {
-        pivot::pivot(
-            &data_frame,
-            &values,
-            &index,
-            &columns,
-            sort_columns,
-            agg_expr,
-            separator.as_deref(),
-        )
-    }
-    .map(Abstract)
-    .map_err(|err| err.to_string())
-    .to_ocaml(cr)
+    dyn_box_result(cr, data_frame, |data_frame| {
+        let result = if stable {
+            pivot::pivot_stable(
+                &data_frame.borrow(),
+                &values,
+                &index,
+                &columns,
+                sort_columns,
+                agg_expr,
+                separator.as_deref(),
+            )
+        } else {
+            pivot::pivot(
+                &data_frame.borrow(),
+                &values,
+                &index,
+                &columns,
+                sort_columns,
+                agg_expr,
+                separator.as_deref(),
+            )
+        };
+
+        result.map(|df| Rc::new(RefCell::new(df)))
+    })
 }
 
 #[ocaml_interop_export]
 fn rust_data_frame_melt(
     cr: &mut &mut OCamlRuntime,
-    data_frame: OCamlRef<DynBox<DataFrame>>,
+    data_frame: OCamlRef<DynBox<PolarsDataFrame>>,
     id_vars: OCamlRef<OCamlList<String>>,
     value_vars: OCamlRef<OCamlList<String>>,
     variable_name: OCamlRef<Option<String>>,
     value_name: OCamlRef<Option<String>>,
     streamable: OCamlRef<bool>,
-) -> OCaml<Result<DynBox<DataFrame>, String>> {
-    let Abstract(data_frame) = data_frame.to_rust(cr);
-
+) -> OCaml<Result<DynBox<PolarsDataFrame>, String>> {
     let id_vars: Vec<SmartString<LazyCompact>> = id_vars
         .to_rust::<Vec<String>>(cr)
         .into_iter()
@@ -388,71 +464,76 @@ fn rust_data_frame_melt(
         value_name,
         streamable,
     };
-    data_frame
-        .melt2(melt_args)
-        .map(Abstract)
-        .map_err(|err| err.to_string())
-        .to_ocaml(cr)
+
+    dyn_box_result(cr, data_frame, |data_frame| {
+        let data_frame = data_frame.borrow();
+        data_frame
+            .melt2(melt_args)
+            .map(|df| Rc::new(RefCell::new(df)))
+    })
 }
 
 #[ocaml_interop_export]
 fn rust_data_frame_sort(
     cr: &mut &mut OCamlRuntime,
-    data_frame: OCamlRef<DynBox<DataFrame>>,
+    data_frame: OCamlRef<DynBox<PolarsDataFrame>>,
     by_column: OCamlRef<OCamlList<String>>,
     descending: OCamlRef<OCamlList<bool>>,
     maintain_order: OCamlRef<bool>,
-) -> OCaml<Result<DynBox<DataFrame>, String>> {
-    let Abstract(data_frame) = data_frame.to_rust(cr);
+) -> OCaml<Result<DynBox<PolarsDataFrame>, String>> {
     let by_column: Vec<String> = by_column.to_rust(cr);
     let descending: Vec<bool> = descending.to_rust(cr);
     let maintain_order: bool = maintain_order.to_rust(cr);
 
-    data_frame
-        .sort(by_column, descending, maintain_order)
-        .map(Abstract)
-        .map_err(|err| err.to_string())
-        .to_ocaml(cr)
+    dyn_box_result(cr, data_frame, |data_frame| {
+        let data_frame = data_frame.borrow();
+        data_frame
+            .sort(by_column, descending, maintain_order)
+            .map(|df| Rc::new(RefCell::new(df)))
+    })
 }
 
 #[ocaml_interop_export(raise_on_err)]
 fn rust_data_frame_head(
     cr: &mut &mut OCamlRuntime,
-    data_frame: OCamlRef<DynBox<DataFrame>>,
+    data_frame: OCamlRef<DynBox<PolarsDataFrame>>,
     length: OCamlRef<Option<OCamlInt>>,
-) -> OCaml<DynBox<DataFrame>> {
-    let Abstract(data_frame) = data_frame.to_rust(cr);
+) -> OCaml<DynBox<PolarsDataFrame>> {
     let length = length
         .to_rust::<Coerce<_, Option<i64>, Option<usize>>>(cr)
         .get()?;
 
-    Abstract(data_frame.head(length)).to_ocaml(cr)
+    dyn_box(cr, data_frame, |data_frame| {
+        let data_frame = data_frame.borrow();
+        Rc::new(RefCell::new(data_frame.head(length)))
+    })
 }
 
 #[ocaml_interop_export(raise_on_err)]
 fn rust_data_frame_tail(
     cr: &mut &mut OCamlRuntime,
-    data_frame: OCamlRef<DynBox<DataFrame>>,
+    data_frame: OCamlRef<DynBox<PolarsDataFrame>>,
     length: OCamlRef<Option<OCamlInt>>,
-) -> OCaml<DynBox<DataFrame>> {
-    let Abstract(data_frame) = data_frame.to_rust(cr);
+) -> OCaml<DynBox<PolarsDataFrame>> {
     let length = length
         .to_rust::<Coerce<_, Option<i64>, Option<usize>>>(cr)
         .get()?;
 
-    Abstract(data_frame.tail(length)).to_ocaml(cr)
+    dyn_box(cr, data_frame, |data_frame| {
+        let data_frame = data_frame.borrow();
+        Rc::new(RefCell::new(data_frame.tail(length)))
+    })
 }
 
 #[ocaml_interop_export(raise_on_err)]
 fn rust_data_frame_sample_n(
     cr: &mut &mut OCamlRuntime,
-    data_frame: OCamlRef<DynBox<DataFrame>>,
+    data_frame: OCamlRef<DynBox<PolarsDataFrame>>,
     n: OCamlRef<OCamlInt>,
     with_replacement: OCamlRef<bool>,
     shuffle: OCamlRef<bool>,
     seed: OCamlRef<Option<OCamlInt>>,
-) -> OCaml<Result<DynBox<DataFrame>, String>> {
-    let Abstract(data_frame) = data_frame.to_rust(cr);
+) -> OCaml<Result<DynBox<PolarsDataFrame>, String>> {
     let n = n.to_rust::<Coerce<_, i64, usize>>(cr).get()?;
     let with_replacement: bool = with_replacement.to_rust(cr);
     let shuffle: bool = shuffle.to_rust(cr);
@@ -460,153 +541,139 @@ fn rust_data_frame_sample_n(
         .to_rust::<Coerce<_, Option<i64>, Option<u64>>>(cr)
         .get()?;
 
-    data_frame
-        .sample_n(n, with_replacement, shuffle, seed)
-        .map(Abstract)
-        .map_err(|err| err.to_string())
-        .to_ocaml(cr)
+    dyn_box_result(cr, data_frame, |data_frame| {
+        let data_frame = data_frame.borrow();
+        data_frame
+            .sample_n(n, with_replacement, shuffle, seed)
+            .map(|df| Rc::new(RefCell::new(df)))
+    })
 }
 
-#[ocaml_interop_export]
-fn rust_data_frame_sum(
-    cr: &mut &mut OCamlRuntime,
-    data_frame: OCamlRef<DynBox<DataFrame>>,
-) -> OCaml<DynBox<DataFrame>> {
-    let Abstract(data_frame) = data_frame.to_rust(cr);
-    Abstract(data_frame.sum()).to_ocaml(cr)
-}
-
-#[ocaml_interop_export]
-fn rust_data_frame_mean(
-    cr: &mut &mut OCamlRuntime,
-    data_frame: OCamlRef<DynBox<DataFrame>>,
-) -> OCaml<DynBox<DataFrame>> {
-    let Abstract(data_frame) = data_frame.to_rust(cr);
-    Abstract(data_frame.mean()).to_ocaml(cr)
-}
-
-#[ocaml_interop_export]
-fn rust_data_frame_median(
-    cr: &mut &mut OCamlRuntime,
-    data_frame: OCamlRef<DynBox<DataFrame>>,
-) -> OCaml<DynBox<DataFrame>> {
-    let Abstract(data_frame) = data_frame.to_rust(cr);
-    Abstract(data_frame.median()).to_ocaml(cr)
-}
-
-#[ocaml_interop_export]
-fn rust_data_frame_null_count(
-    cr: &mut &mut OCamlRuntime,
-    data_frame: OCamlRef<DynBox<DataFrame>>,
-) -> OCaml<DynBox<DataFrame>> {
-    let Abstract(data_frame) = data_frame.to_rust(cr);
-    Abstract(data_frame.null_count()).to_ocaml(cr)
-}
+dyn_box_op!(rust_data_frame_sum, PolarsDataFrame, |data_frame| {
+    let data_frame = data_frame.borrow();
+    Rc::new(RefCell::new(data_frame.sum()))
+});
+dyn_box_op!(rust_data_frame_mean, PolarsDataFrame, |data_frame| {
+    let data_frame = data_frame.borrow();
+    Rc::new(RefCell::new(data_frame.mean()))
+});
+dyn_box_op!(rust_data_frame_median, PolarsDataFrame, |data_frame| {
+    let data_frame = data_frame.borrow();
+    Rc::new(RefCell::new(data_frame.median()))
+});
+// TODO: mode is missing for dataframes
+dyn_box_op!(rust_data_frame_null_count, PolarsDataFrame, |data_frame| {
+    let data_frame = data_frame.borrow();
+    Rc::new(RefCell::new(data_frame.null_count()))
+});
 
 #[ocaml_interop_export]
 fn rust_data_frame_fill_null_with_strategy(
     cr: &mut &mut OCamlRuntime,
-    data_frame: OCamlRef<DynBox<DataFrame>>,
+    data_frame: OCamlRef<DynBox<PolarsDataFrame>>,
     strategy: OCamlRef<FillNullStrategy>,
-) -> OCaml<Result<DynBox<DataFrame>, String>> {
-    let Abstract(data_frame) = data_frame.to_rust(cr);
+) -> OCaml<Result<DynBox<PolarsDataFrame>, String>> {
     let PolarsFillNullStrategy(strategy) = strategy.to_rust(cr);
 
-    data_frame
-        .fill_null(strategy)
-        .map(Abstract)
-        .map_err(|err| err.to_string())
-        .to_ocaml(cr)
+    dyn_box_result(cr, data_frame, |data_frame| {
+        let data_frame = data_frame.borrow();
+        data_frame
+            .fill_null(strategy)
+            .map(|df| Rc::new(RefCell::new(df)))
+    })
 }
 
 #[ocaml_interop_export]
 fn rust_data_frame_interpolate(
     cr: &mut &mut OCamlRuntime,
-    data_frame: OCamlRef<DynBox<DataFrame>>,
+    data_frame: OCamlRef<DynBox<PolarsDataFrame>>,
     method: OCamlRef<InterpolationMethod>,
-) -> OCaml<Result<DynBox<DataFrame>, String>> {
-    let Abstract(data_frame) = data_frame.to_rust(cr);
+) -> OCaml<Result<DynBox<PolarsDataFrame>, String>> {
     let PolarsInterpolationMethod(method) = method.to_rust(cr);
 
-    let series = data_frame
-        .get_columns()
-        .iter()
-        .map(|series| interpolate(series, method))
-        .collect::<Vec<_>>();
+    dyn_box_result(cr, data_frame, |data_frame| {
+        let data_frame = data_frame.borrow();
 
-    DataFrame::new(series)
-        .map(Abstract)
-        .map_err(|err| err.to_string())
-        .to_ocaml(cr)
+        let series = data_frame
+            .get_columns()
+            .iter()
+            .map(|series| interpolate(series, method))
+            .collect::<Vec<_>>();
+
+        DataFrame::new(series).map(|df| Rc::new(RefCell::new(df)))
+    })
 }
 
 #[ocaml_interop_export]
 fn rust_data_frame_upsample(
     cr: &mut &mut OCamlRuntime,
-    data_frame: OCamlRef<DynBox<DataFrame>>,
+    data_frame: OCamlRef<DynBox<PolarsDataFrame>>,
     by: OCamlRef<OCamlList<String>>,
     time_column: OCamlRef<String>,
     every: OCamlRef<String>,
     offset: OCamlRef<String>,
     stable: OCamlRef<bool>,
-) -> OCaml<Result<DynBox<DataFrame>, String>> {
-    let Abstract(data_frame) = data_frame.to_rust(cr);
+) -> OCaml<Result<DynBox<PolarsDataFrame>, String>> {
     let by: Vec<String> = by.to_rust(cr);
     let time_column: String = time_column.to_rust(cr);
     let every: String = every.to_rust(cr);
     let offset: String = offset.to_rust(cr);
     let stable: bool = stable.to_rust(cr);
 
-    if stable {
-        data_frame.upsample_stable(
-            &by,
-            &time_column,
-            Duration::parse(&every),
-            Duration::parse(&offset),
-        )
-    } else {
-        data_frame.upsample(
-            &by,
-            &time_column,
-            Duration::parse(&every),
-            Duration::parse(&offset),
-        )
-    }
-    .map(Abstract)
-    .map_err(|err| err.to_string())
-    .to_ocaml(cr)
+    dyn_box_result(cr, data_frame, |data_frame| {
+        let result = if stable {
+            data_frame.borrow().upsample_stable(
+                &by,
+                &time_column,
+                Duration::parse(&every),
+                Duration::parse(&offset),
+            )
+        } else {
+            data_frame.borrow().upsample(
+                &by,
+                &time_column,
+                Duration::parse(&every),
+                Duration::parse(&offset),
+            )
+        };
+
+        result.map(|df| Rc::new(RefCell::new(df)))
+    })
 }
 
 #[ocaml_interop_export]
 fn rust_data_frame_explode(
     cr: &mut &mut OCamlRuntime,
-    data_frame: OCamlRef<DynBox<DataFrame>>,
+    data_frame: OCamlRef<DynBox<PolarsDataFrame>>,
     columns: OCamlRef<OCamlList<String>>,
-) -> OCaml<Result<DynBox<DataFrame>, String>> {
-    let Abstract(data_frame) = data_frame.to_rust(cr);
+) -> OCaml<Result<DynBox<PolarsDataFrame>, String>> {
     let columns: Vec<String> = columns.to_rust(cr);
 
-    data_frame
-        .explode(columns)
-        .map(Abstract)
-        .map_err(|err| err.to_string())
-        .to_ocaml(cr)
+    dyn_box_result(cr, data_frame, |data_frame| {
+        let data_frame = data_frame.borrow();
+        data_frame
+            .explode(columns)
+            .map(|df| Rc::new(RefCell::new(df)))
+    })
 }
 
 #[ocaml_interop_export]
 fn rust_data_frame_schema(
     cr: &mut &mut OCamlRuntime,
-    data_frame: OCamlRef<DynBox<DataFrame>>,
+    data_frame: OCamlRef<DynBox<PolarsDataFrame>>,
 ) -> OCaml<DynBox<Schema>> {
-    let Abstract(data_frame) = data_frame.to_rust(cr);
-    OCaml::box_value(cr, data_frame.schema())
+    dyn_box(cr, data_frame, |data_frame| {
+        let data_frame = data_frame.borrow();
+        data_frame.schema()
+    })
 }
 
 #[ocaml_interop_export]
 fn rust_data_frame_to_string_hum(
     cr: &mut &mut OCamlRuntime,
-    data_frame: OCamlRef<DynBox<DataFrame>>,
+    data_frame: OCamlRef<DynBox<PolarsDataFrame>>,
 ) -> OCaml<String> {
     let Abstract(data_frame) = data_frame.to_rust(cr);
+    let data_frame = data_frame.borrow();
     data_frame.to_string().to_ocaml(cr)
 }

@@ -7,14 +7,14 @@ let%expect_test "unit tests" =
   [%expect {| ((1) () (2)) |}];
   (* Trying to convert to non-null list when there are nulls should raise *)
   Expect_test_helpers_core.require_does_raise [%here] (fun () ->
-    ignore (Series.to_list Int64 series));
+    Series.to_list Int64 series);
   [%expect
     {|
     (Failure
      "Polars panicked: Series contains 1 null values, expected none\nbacktrace not captured") |}];
   (* Trying to convert to list of different type should raise *)
   Expect_test_helpers_core.require_does_raise [%here] (fun () ->
-    ignore (Series.to_option_list Float64 series));
+    Series.to_option_list Float64 series);
   [%expect
     {|
     (Failure
@@ -65,11 +65,9 @@ let rec value_generator : type a. a Data_type.Typed.t -> a Quickcheck.Generator.
     and month = Generator.int_inclusive 1 12 >>| Month.of_int_exn
     and day = Generator.int_inclusive 1 28 in
     Date.create_exn ~y:year ~m:month ~d:day |> Common.Naive_date.of_date
-  | List t ->
-    value_generator t
-    |> (* Polars currently doesn't support passing empty Vec<Series> to Series::new.
-          See test in rust/polars-ocaml/src/lib.rs. *)
-    Generator.list_non_empty
+  | List t -> value_generator t |> Generator.list
+  | Custom { data_type; f; f_inverse = _ } ->
+    value_generator data_type |> Generator.map ~f
 ;;
 
 let rec value_shrinker : type a. a Data_type.Typed.t -> a Quickcheck.Shrinker.t =
@@ -92,6 +90,8 @@ let rec value_shrinker : type a. a Data_type.Typed.t -> a Quickcheck.Shrinker.t 
   | Date -> Shrinker.atomic
   | List t ->
     value_shrinker t |> Shrinker.list |> Shrinker.filter ~f:(Fn.non List.is_empty)
+  | Custom { data_type; f; f_inverse } ->
+    value_shrinker data_type |> Shrinker.map ~f ~f_inverse
 ;;
 
 let rec value_to_sexp : type a. a Data_type.Typed.t -> a -> Sexp.t =
@@ -114,6 +114,7 @@ let rec value_to_sexp : type a. a Data_type.Typed.t -> a -> Sexp.t =
   | List t ->
     let sexp_of_value = value_to_sexp t in
     [%sexp_of: value list] a
+  | Custom { data_type; f = _; f_inverse } -> value_to_sexp data_type (f_inverse a)
 ;;
 
 let rec value_compare : type a. a Data_type.Typed.t -> a -> a -> int =
@@ -134,6 +135,8 @@ let rec value_compare : type a. a Data_type.Typed.t -> a -> a -> int =
   | Binary -> [%compare: string] a b
   | Date -> Comparable.lift [%compare: Date.t] ~f:Common.Naive_date.to_date_exn a b
   | List t -> List.compare (value_compare t) a b
+  | Custom { data_type; f = _; f_inverse } ->
+    Comparable.lift (value_compare data_type) ~f:f_inverse a b
 ;;
 
 module Series_create = struct
@@ -156,7 +159,7 @@ module Series_create = struct
   let quickcheck_generator =
     let open Quickcheck.Generator.Let_syntax in
     let%bind (T data_type) = Data_type.Typed.quickcheck_generator_packed in
-    let%map values = Quickcheck.Generator.list_non_empty (value_generator data_type) in
+    let%map values = Quickcheck.Generator.list (value_generator data_type) in
     Args (data_type, values)
   ;;
 
@@ -174,10 +177,11 @@ module Series_create = struct
   ;;
 end
 
-let%expect_test "Series.create doesn't raise" =
+let%expect_test "Series.create and Series.create' doesn't raise" =
   Base_quickcheck.Test.run_exn
     (module Series_create)
     ~f:(fun (Series_create.Args (data_type, values) as args) ->
+      (* Test Series.create *)
       let series = Series.create data_type "series_name" values in
       let values' = Series.to_list data_type series in
       let args' = Series_create.Args (data_type, values') in
@@ -189,102 +193,43 @@ let%expect_test "Series.create doesn't raise" =
       [%test_result: Series_create.t] ~expect:args' args;
       List.iteri values' ~f:(fun i value ->
         let value_equal = Comparable.equal (value_compare data_type) in
-        assert (value_equal value (Series.get_exn data_type series i))));
-  [%expect.unreachable]
+        assert (value_equal value (Series.get_exn data_type series i)));
+      (* Test Series.create' *)
+      let series =
+        Series.create' data_type "series_name" (Uniform_array.of_list values)
+      in
+      let values' = Series.to_list data_type series in
+      let args' = Series_create.Args (data_type, values') in
+      [%test_result: Series_create.t] ~expect:args' args;
+      let args' =
+        Series_create.Args
+          (data_type, Series.to_option_list data_type series |> List.filter_opt)
+      in
+      [%test_result: Series_create.t] ~expect:args' args;
+      List.iteri values' ~f:(fun i value ->
+        let value_equal = Comparable.equal (value_compare data_type) in
+        assert (value_equal value (Series.get_exn data_type series i))))
 [@@expect.uncaught_exn
   {|
   (* CR expect_test_collector: This test expectation appears to contain a backtrace.
      This is strongly discouraged as backtraces are fragile.
      Please change this test to not include a backtrace. *)
 
-  ("Base_quickcheck.Test.run: test failed" (input ((List (List Date)) ()))
+  ("Base_quickcheck.Test.run: test failed" (input ((List Date) (())))
     (error
       ((Failure
-          "Polars panicked: index out of bounds: the len is 0 but the index is 0\
-         \nBacktrace:\
-         \n   0: polars_ocaml::utils::rust_record_panic_backtraces::{{closure}}::{{closure}}\
-         \n             at /home/ubuntu/dev/ocaml/polars/polars-ocaml/_build/default/rust/polars-ocaml/src/utils.rs:31:1\
-         \n   1: <alloc::boxed::Box<F,A> as core::ops::function::Fn<Args>>::call\
-         \n             at /rustc/498553fc04f6a3fdc53412320f4e913bc53bc267/library/alloc/src/boxed.rs:1999:9\
-         \n   2: std::panicking::rust_panic_with_hook\
-         \n             at /rustc/498553fc04f6a3fdc53412320f4e913bc53bc267/library/std/src/panicking.rs:709:13\
-         \n   3: std::panicking::begin_panic_handler::{{closure}}\
-         \n             at /rustc/498553fc04f6a3fdc53412320f4e913bc53bc267/library/std/src/panicking.rs:597:13\
-         \n   4: std::sys_common::backtrace::__rust_end_short_backtrace\
-         \n             at /rustc/498553fc04f6a3fdc53412320f4e913bc53bc267/library/std/src/sys_common/backtrace.rs:151:18\
-         \n   5: rust_begin_unwind\
-         \n             at /rustc/498553fc04f6a3fdc53412320f4e913bc53bc267/library/std/src/panicking.rs:593:5\
-         \n   6: core::panicking::panic_fmt\
-         \n             at /rustc/498553fc04f6a3fdc53412320f4e913bc53bc267/library/core/src/panicking.rs:67:14\
-         \n   7: core::panicking::panic_bounds_check\
-         \n             at /rustc/498553fc04f6a3fdc53412320f4e913bc53bc267/library/core/src/panicking.rs:162:5\
-         \n   8: <polars_core::series::Series as polars_core::named_from::NamedFrom<T,polars_core::datatypes::ListType>>::new\
-         \n             at /home/ubuntu/.cargo/registry/src/index.crates.io-6f17d22bba15001f/polars-core-0.31.1/src/named_from.rs:126:18\
-         \n   9: polars_ocaml::series::series_new\
-         \n             at /home/ubuntu/dev/ocaml/polars/polars-ocaml/_build/default/rust/polars-ocaml/src/series.rs:188:20\
-         \n  10: polars_ocaml::series::rust_series_new::{{closure}}\
-         \n             at /home/ubuntu/dev/ocaml/polars/polars-ocaml/_build/default/rust/polars-ocaml/src/series.rs:205:18\
-         \n  11: std::panicking::try::do_call\
-         \n             at /rustc/498553fc04f6a3fdc53412320f4e913bc53bc267/library/std/src/panicking.rs:500:40\
-         \n  12: __rust_try\
-         \n  13: std::panicking::try\
-         \n             at /rustc/498553fc04f6a3fdc53412320f4e913bc53bc267/library/std/src/panicking.rs:464:19\
-         \n  14: std::panic::catch_unwind\
-         \n             at /rustc/498553fc04f6a3fdc53412320f4e913bc53bc267/library/std/src/panic.rs:142:14\
-         \n  15: rust_series_new\
-         \n             at /home/ubuntu/dev/ocaml/polars/polars-ocaml/_build/default/rust/polars-ocaml/src/series.rs:194:1\
-         \n  16: camlPolars__Series__fun_4440\
-         \n  17: camlPolars_tests__Data_type_gadt_test__fun_7627\
-         \n             at /workspace_root/test/data_type_gadt_test.ml:181:19\
-         \n  18: camlBase__Or_error__try_with_inner_2477\
-         \n             at /home/ubuntu/.opam/4.14.1/.opam-switch/build/base.v0.16.2/_build/default/src/or_error.ml:99:9\
-         \n  19: camlBase__Or_error__try_with_inner_2477\
-         \n             at /home/ubuntu/.opam/4.14.1/.opam-switch/build/base.v0.16.2/_build/default/src/or_error.ml:99:9\
-         \n  20: camlBase__Or_error__try_with_join_1933\
-         \n             at /home/ubuntu/.opam/4.14.1/.opam-switch/build/base.v0.16.2/_build/default/src/or_error.ml:103:38\
-         \n  21: camlBase_quickcheck__Test__loop_2499\
-         \n             at /home/ubuntu/.opam/4.14.1/.opam-switch/build/base_quickcheck.v0.16.0/_build/default/src/test.ml:83:16\
-         \n  22: camlBase_quickcheck__Test__fun_4279\
-         \n             at /home/ubuntu/.opam/4.14.1/.opam-switch/build/base_quickcheck.v0.16.0/_build/default/src/test.ml:119:25\
-         \n  23: camlBase_quickcheck__Test__run_3813\
-         \n             at /home/ubuntu/.opam/4.14.1/.opam-switch/build/base_quickcheck.v0.16.0/_build/default/src/test.ml:127:8\
-         \n  24: camlBase_quickcheck__Test__run_exn_3995\
-         \n             at /home/ubuntu/.opam/4.14.1/.opam-switch/build/base_quickcheck.v0.16.0/_build/default/src/test.ml:143:2\
-         \n  25: camlPolars_tests__Data_type_gadt_test__fun_7625\
-         \n             at /workspace_root/test/data_type_gadt_test.ml:178:2\
-         \n  26: camlExpect_test_collector__exec_1988\
-         \n             at /home/ubuntu/.opam/4.14.1/.opam-switch/build/ppx_expect.v0.16.0/_build/default/collector/expect_test_collector.ml:234:12\
-         \n  27: camlExpect_test_collector__fun_2607\
-         \n             at /home/ubuntu/.opam/4.14.1/.opam-switch/build/ppx_expect.v0.16.0/_build/default/collector/expect_test_collector.ml:283:11\
-         \n  28: camlPpx_inline_test_lib__time_without_resetting_random_seeds_2082\
-         \n             at /home/ubuntu/.opam/4.14.1/.opam-switch/build/ppx_inline_test.v0.16.0/_build/default/runtime-lib/ppx_inline_test_lib.ml:405:11\
-         \n  29: camlPpx_inline_test_lib__time_and_reset_random_seeds_2263\
-         \n             at /home/ubuntu/.opam/4.14.1/.opam-switch/build/ppx_inline_test.v0.16.0/_build/default/runtime-lib/ppx_inline_test_lib.ml:420:15\
-         \n  30: camlPpx_inline_test_lib__test_inner_2527\
-         \n             at /home/ubuntu/.opam/4.14.1/.opam-switch/build/ppx_inline_test.v0.16.0/_build/default/runtime-lib/ppx_inline_test_lib.ml:546:35\
-         \n  31: camlPolars_tests__Data_type_gadt_test__entry\
-         \n             at /workspace_root/test/data_type_gadt_test.ml:177\
-         \n  32: caml_program\
-         \n  33: caml_start_program\
-         \n  34: caml_startup_common\
-         \n             at /home/ubuntu/.opam/4.14.1/.opam-switch/build/ocaml-base-compiler.4.14.1/runtime/startup_nat.c:160:9\
-         \n  35: caml_startup_exn\
-         \n             at /home/ubuntu/.opam/4.14.1/.opam-switch/build/ocaml-base-compiler.4.14.1/runtime/startup_nat.c:167:10\
-         \n  36: caml_startup\
-         \n             at /home/ubuntu/.opam/4.14.1/.opam-switch/build/ocaml-base-compiler.4.14.1/runtime/startup_nat.c:172:15\
-         \n  37: caml_main\
-         \n             at /home/ubuntu/.opam/4.14.1/.opam-switch/build/ocaml-base-compiler.4.14.1/runtime/startup_nat.c:179:3\
-         \n  38: main\
-         \n             at /home/ubuntu/.opam/4.14.1/.opam-switch/build/ocaml-base-compiler.4.14.1/runtime/main.c:37:3\
-         \n  39: <unknown>\
-         \n  40: __libc_start_main\
-         \n  41: _start\
-         \n")
-        ("Raised by primitive operation at Polars_tests__Data_type_gadt_test.(fun) in file \"test/data_type_gadt_test.ml\", line 181, characters 19-63"
+          "Polars panicked: data types don't match: invalid series dtype: expected `Date`, got `i32`\
+         \nbacktrace not captured")
+        ("Raised by primitive operation at Polars__Series.T.get in file \"lib/series.ml\", line 195, characters 19-36"
+          "Called from Polars__Series.T.get_exn in file \"lib/series.ml\", line 198, characters 30-47"
+          "Called from Polars_tests__Data_type_gadt_test.(fun) in file \"test/data_type_gadt_test.ml\", line 196, characters 34-69"
+          "Called from Base__List.iteri.(fun) in file \"src/list.ml\", line 630, characters 7-12"
+          "Called from Base__List0.fold in file \"src/list0.ml\", line 37, characters 27-37"
+          "Called from Base__List.iteri in file \"src/list.ml\", line 629, characters 5-62"
+          "Called from Polars_tests__Data_type_gadt_test.(fun) in file \"test/data_type_gadt_test.ml\", line 194, characters 6-187"
           "Called from Base__Or_error.try_with in file \"src/or_error.ml\", line 99, characters 9-15"))))
   Raised at Base__Error.raise in file "src/error.ml" (inlined), line 9, characters 14-30
   Called from Base__Or_error.ok_exn in file "src/or_error.ml", line 107, characters 17-32
-  Called from Polars_tests__Data_type_gadt_test.(fun) in file "test/data_type_gadt_test.ml", line 178, characters 2-744
   Called from Expect_test_collector.Make.Instance_io.exec in file "collector/expect_test_collector.ml", line 234, characters 12-19 |}]
 ;;
 
@@ -312,7 +257,7 @@ module Series_createo = struct
     let open Quickcheck.Generator.Let_syntax in
     let%bind (T data_type) = Data_type.Typed.quickcheck_generator_packed in
     let%map values =
-      Quickcheck.Generator.list_non_empty
+      Quickcheck.Generator.list
         (Base_quickcheck.Generator.option (value_generator data_type))
     in
     Args (data_type, values)
@@ -335,16 +280,18 @@ module Series_createo = struct
   ;;
 end
 
-let%expect_test "Series.createo doesn't raise" =
+let%expect_test "Series.createo and Series.createo' doesn't raise" =
   Base_quickcheck.Test.run_exn
     (module Series_createo)
     ~f:(fun (Series_createo.Args (data_type, values) as args) ->
+      (* Test Series.createo *)
       let series = Series.createo data_type "series_name" values in
       let values' = Series.to_option_list data_type series in
       let args' = Series_createo.Args (data_type, values') in
       [%test_result: Series_createo.t] ~expect:args' args;
       List.iteri values' ~f:(fun i value ->
         let value_equal = Option.equal (Comparable.equal (value_compare data_type)) in
+        (* <<<<<<< HEAD
         assert (value_equal value (Series.get data_type series i))));
   [%expect.unreachable]
 [@@expect.uncaught_exn
@@ -367,5 +314,110 @@ let%expect_test "Series.createo doesn't raise" =
   Raised at Base__Error.raise in file "src/error.ml" (inlined), line 9, characters 14-30
   Called from Base__Or_error.ok_exn in file "src/or_error.ml", line 107, characters 17-32
   Called from Polars_tests__Data_type_gadt_test.(fun) in file "test/data_type_gadt_test.ml", line 339, characters 2-574
+  Called from Expect_test_collector.Make.Instance_io.exec in file "collector/expect_test_collector.ml", line 234, characters 12-19 |}]
+=======*)
+        assert (value_equal value (Series.get data_type series i)));
+      (* Test Series.createo' *)
+      let series =
+        Series.createo' data_type "series_name" (Uniform_array.of_list values)
+      in
+      let values' = Series.to_option_list data_type series in
+      let args' = Series_createo.Args (data_type, values') in
+      [%test_result: Series_createo.t] ~expect:args' args;
+      List.iteri values' ~f:(fun i value ->
+        let value_equal = Option.equal (Comparable.equal (value_compare data_type)) in
+        assert (value_equal value (Series.get data_type series i))))
+[@@expect.uncaught_exn
+  {|
+  (* CR expect_test_collector: This test expectation appears to contain a backtrace.
+     This is strongly discouraged as backtraces are fragile.
+     Please change this test to not include a backtrace. *)
+
+  ("Base_quickcheck.Test.run: test failed"
+    (input ((List Date) (((0624-03-26)))))
+    (error
+      ((Failure
+          "Polars panicked: data types don't match: invalid series dtype: expected `Date`, got `i32`\
+         \nbacktrace not captured")
+        ("Raised by primitive operation at Polars__Series.T.get in file \"lib/series.ml\", line 195, characters 19-36"
+          "Called from Polars_tests__Data_type_gadt_test.(fun) in file \"test/data_type_gadt_test.ml\", line 319, characters 34-65"
+          "Called from Base__List.iteri.(fun) in file \"src/list.ml\", line 630, characters 7-12"
+          "Called from Base__List0.fold in file \"src/list0.ml\", line 37, characters 27-37"
+          "Called from Base__List.iteri in file \"src/list.ml\", line 629, characters 5-62"
+          "Called from Polars_tests__Data_type_gadt_test.(fun) in file \"test/data_type_gadt_test.ml\", line 292, characters 6-1023"
+          "Called from Base__Or_error.try_with in file \"src/or_error.ml\", line 99, characters 9-15"))))
+  Raised at Base__Error.raise in file "src/error.ml" (inlined), line 9, characters 14-30
+  Called from Base__Or_error.ok_exn in file "src/or_error.ml", line 107, characters 17-32
+  Called from Expect_test_collector.Make.Instance_io.exec in file "collector/expect_test_collector.ml", line 234, characters 12-19 |}]
+;;
+
+module Expr_lit = struct
+  type t = Args : 'a Data_type.Typed.t * 'a -> t
+
+  let compare (Args (data_type1, value1)) (Args (data_type2, value2)) =
+    match Data_type.Typed.strict_type_equal data_type1 data_type2 with
+    | None ->
+      [%compare: Data_type.t]
+        (Data_type.Typed.to_untyped data_type1)
+        (Data_type.Typed.to_untyped data_type1)
+    | Some T -> (value_compare data_type1) value1 value2
+  ;;
+
+  let sexp_of_t (Args (data_type, value)) =
+    let sexp_of_value = value_to_sexp data_type in
+    [%sexp_of: Data_type.Typed.packed * value] (Data_type.Typed.T data_type, value)
+  ;;
+
+  let quickcheck_generator =
+    let open Quickcheck.Generator.Let_syntax in
+    let%bind (T data_type) = Data_type.Typed.quickcheck_generator_packed in
+    let%map value = value_generator data_type in
+    Args (data_type, value)
+  ;;
+
+  let quickcheck_shrinker =
+    Quickcheck.Shrinker.create (fun (Args (data_type, value)) ->
+      let value_shrinker = value_shrinker data_type in
+      Quickcheck.Shrinker.shrink value_shrinker value
+      |> Sequence.map ~f:(fun value -> Args (data_type, value)))
+  ;;
+
+  let quickcheck_observer =
+    Quickcheck.Observer.unmap
+      Data_type.Typed.quickcheck_observer_packed
+      ~f:(fun (Args (data_type, _value)) -> T data_type)
+  ;;
+end
+
+let%expect_test "Expr.lit roundtrip" =
+  Base_quickcheck.Test.run_exn
+    (module Expr_lit)
+    ~f:(fun (Expr_lit.Args (data_type, value) as args) ->
+      let value' =
+        Data_frame.create_exn []
+        |> Data_frame.select_exn ~exprs:Expr.[ lit data_type value |> alias ~name:"col" ]
+        |> Data_frame.column_exn ~name:"col"
+        |> Series.to_list data_type
+      in
+      assert (List.length value' = 1);
+      let args' = Expr_lit.Args (data_type, List.hd_exn value') in
+      [%test_result: Expr_lit.t] ~expect:args' args)
+[@@expect.uncaught_exn
+  {|
+  (* CR expect_test_collector: This test expectation appears to contain a backtrace.
+     This is strongly discouraged as backtraces are fragile.
+     Please change this test to not include a backtrace. *)
+
+  ("Base_quickcheck.Test.run: test failed"
+    (input ((Custom (Custom Date)) 1057-01-11))
+    (error
+      ((Failure
+          "Polars panicked: data types don't match: invalid series dtype: expected `Date`, got `datetime[\206\188s]`\
+         \nbacktrace not captured")
+        ("Raised by primitive operation at Polars__Series.T.to_list in file \"lib/series.ml\", line 173, characters 48-67"
+          "Called from Polars_tests__Data_type_gadt_test.(fun) in file \"test/data_type_gadt_test.ml\", line 397, characters 8-203"
+          "Called from Base__Or_error.try_with in file \"src/or_error.ml\", line 99, characters 9-15"))))
+  Raised at Base__Error.raise in file "src/error.ml" (inlined), line 9, characters 14-30
+  Called from Base__Or_error.ok_exn in file "src/or_error.ml", line 107, characters 17-32
   Called from Expect_test_collector.Make.Instance_io.exec in file "collector/expect_test_collector.ml", line 234, characters 12-19 |}]
 ;;

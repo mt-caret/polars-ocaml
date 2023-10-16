@@ -3,11 +3,54 @@ on:
   pull_request:
   push:
     branches:
-      - master
+      - main
+
+  # Since cargo and opam dependencies change over time, we schedule a build of
+  # the container every week so we can catch issues early on
+  schedule:
+      # Run at 1AM UTC every Saturday; this translates to 9AM HKT and 9PM EST
+      # (new york outside of DST)
+      - cron: '0 1 * * 6'
+
 env:
   CARGO_TERM_COLOR: always
+
 jobs:
-  build-rust:
+  # In the past we tried to support building this on 32bit architectures,[1] but
+  # some of polars' crates clearly don't support it[2] and getting both the
+  # OCaml and Rust compilers to work on 32bit is a pain, so we are leaving
+  # this comment as a reminder so that we do not try this without sufficient
+  # motivation again.
+  #
+  # [1]: https://github.com/mt-caret/polars-ocaml/pull/64
+  # [2]: https://github.com/pola-rs/polars/blob/c4fdbfe2c7f7ce7616ad9301981bc5d616c3beef/crates/polars-row/src/row.rs#L21
+  build:
+    runs-on: self-hosted
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout (GitHub)
+        uses: actions/checkout@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v2 
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and run Dev Container task
+        uses: devcontainers/ci@v0.3
+        with:
+          imageName: ghcr.io/mt-caret/polars-ocaml
+          cacheFrom: ghcr.io/mt-caret/polars-ocaml
+          push: always
+          runCmd: |
+            opam exec -- dune build
+            opam exec -- dune runtest
+
+  rust-checks:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -19,14 +62,6 @@ jobs:
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
 
-      - name: OCaml/opam cache
-        id: polars-ocaml-opam-cache
-        uses: actions/cache@v3
-        with:
-          path: "~/.opam"
-          # TODO: this should actually should be keyed by variables as done in
-          # https://github.com/zshipko/ocaml-rs/blob/3e73b04764e1e633874be029e1626bdbe1640135/.github/workflows/ocaml.yml
-          key: polars-ocaml-opam-4.14.x-ubuntu-latest
       - uses: ocaml/setup-ocaml@v2
         with:
           ocaml-compiler: 4.14.x
@@ -37,73 +72,27 @@ jobs:
       - name: Add opam switch to PATH
         run: opam var bin >> $GITHUB_PATH
 
-      - uses: rui314/setup-mold@v1
-      # By default setup-mold replaces the default linker with mold, so we don't
-      # need the config.toml file in github actions.
-      - run: rm ./rust/.cargo/config.toml
+      - name: Install mold
+        run: sudo apt install --yes mold
 
       - name: Check
         run: cargo check --verbose
         working-directory: ./rust
-      - name: Build
-        run: cargo build --verbose
+      - name: Clippy
+        run: cargo clippy -- --deny warnings
+        working-directory: ./rust
+      - name: Rust format
+        run: cargo fmt --all -- --check
         working-directory: ./rust
       - name: Run tests
         run: cargo test --verbose
         working-directory: ./rust
-      - name: Clippy
-        uses: giraffate/clippy-action@v1
-        with:
-          reporter: "github-pr-review"
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Rust format
-        run: cargo fmt --all -- --check
-        working-directory: ./rust
 
-  build-ocaml:
+  ocaml-checks:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
 
-      - uses: dtolnay/rust-toolchain@nightly
-        with:
-          components: clippy, rustfmt
-      - uses: Swatinem/rust-cache@v2
-
-      - name: OCaml/opam cache
-        id: polars-ocaml-opam-cache
-        uses: actions/cache@v3
-        with:
-          path: "~/.opam"
-          key: polars-ocaml-opam-4.14.x-ubuntu-latest
-      - uses: ocaml/setup-ocaml@v2
-        with:
-          ocaml-compiler: 4.14.x
-      - name: Set opam env
-        run: opam env | tr '\n' ' ' >> $GITHUB_ENV
-      - name: Add opam switch to PATH
-        run: opam var bin >> $GITHUB_PATH
-
-      - uses: rui314/setup-mold@v1
-      - run: rm ./rust/.cargo/config.toml
-      - run: sed -i '/.*mold.*/d' test/dune
-
-      - run: opam install . --deps-only --with-doc --with-test
-
-      - run: opam exec -- dune build
-      - run: opam exec -- dune runtest
-
-  format-ocaml:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: OCaml/opam cache
-        id: polars-ocaml-opam-cache
-        uses: actions/cache@v3
-        with:
-          path: "~/.opam"
-          key: polars-ocaml-opam-4.14.x-ubuntu-latest
       - uses: ocaml/setup-ocaml@v2
         with:
           ocaml-compiler: 4.14.x

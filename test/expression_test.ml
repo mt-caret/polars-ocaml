@@ -54,6 +54,33 @@ let%expect_test "Rounding" =
     └────────┴──────┴───────┘ |}]
 ;;
 
+let%expect_test "Exponents" =
+  let df =
+    Data_frame.create_exn [ Series.float "floats" [ -2.; -1.5; 0.; 1.5; 2. ] ]
+    |> Data_frame.with_columns_exn
+         ~exprs:
+           Expr.
+             [ col "floats" |> Fn.flip pow (float 2.) |> alias ~name:"square"
+             ; col "floats" |> Fn.flip pow (float 0.5) |> alias ~name:"sqrt"
+             ]
+  in
+  Data_frame.print df;
+  [%expect
+    {|
+    shape: (5, 3)
+    ┌────────┬────────┬──────────┐
+    │ floats ┆ square ┆ sqrt     │
+    │ ---    ┆ ---    ┆ ---      │
+    │ f64    ┆ f64    ┆ f64      │
+    ╞════════╪════════╪══════════╡
+    │ -2.0   ┆ 4.0    ┆ NaN      │
+    │ -1.5   ┆ 2.25   ┆ NaN      │
+    │ 0.0    ┆ 0.0    ┆ 0.0      │
+    │ 1.5    ┆ 2.25   ┆ 1.224745 │
+    │ 2.0    ┆ 4.0    ┆ 1.414214 │
+    └────────┴────────┴──────────┘ |}]
+;;
+
 let%expect_test "Clamping" =
   let df =
     Data_frame.create_exn
@@ -93,22 +120,24 @@ let%expect_test "nan" =
          ~exprs:
            [ Expr.col "value" |> Expr.is_nan |> Expr.alias ~name:"is_nan"
            ; Expr.col "value" |> Expr.is_not_nan |> Expr.alias ~name:"is_not_nan"
+           ; Expr.col "value" |> Expr.is_finite |> Expr.alias ~name:"is_finite"
+           ; Expr.col "value" |> Expr.is_infinite |> Expr.alias ~name:"is_infinite"
            ]
   in
   Data_frame.print nan_df;
   [%expect
     {|
-    shape: (4, 3)
-    ┌───────┬────────┬────────────┐
-    │ value ┆ is_nan ┆ is_not_nan │
-    │ ---   ┆ ---    ┆ ---        │
-    │ f64   ┆ bool   ┆ bool       │
-    ╞═══════╪════════╪════════════╡
-    │ 1.0   ┆ false  ┆ true       │
-    │ NaN   ┆ true   ┆ false      │
-    │ NaN   ┆ true   ┆ false      │
-    │ 3.0   ┆ false  ┆ true       │
-    └───────┴────────┴────────────┘ |}]
+    shape: (4, 5)
+    ┌───────┬────────┬────────────┬───────────┬─────────────┐
+    │ value ┆ is_nan ┆ is_not_nan ┆ is_finite ┆ is_infinite │
+    │ ---   ┆ ---    ┆ ---        ┆ ---       ┆ ---         │
+    │ f64   ┆ bool   ┆ bool       ┆ bool      ┆ bool        │
+    ╞═══════╪════════╪════════════╪═══════════╪═════════════╡
+    │ 1.0   ┆ false  ┆ true       ┆ true      ┆ false       │
+    │ NaN   ┆ true   ┆ false      ┆ false     ┆ false       │
+    │ NaN   ┆ true   ┆ false      ┆ false     ┆ false       │
+    │ 3.0   ┆ false  ┆ true       ┆ true      ┆ false       │
+    └───────┴────────┴────────────┴───────────┴─────────────┘ |}]
 ;;
 
 let%expect_test "join_asof" =

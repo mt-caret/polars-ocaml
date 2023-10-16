@@ -6,7 +6,7 @@ module T = struct
   external col : string -> t = "rust_expr_col"
   external cols : string list -> t = "rust_expr_cols"
   external all : unit -> t = "rust_expr_all"
-  external exclude : string -> t = "rust_expr_exclude"
+  external exclude : t -> names:string list -> t = "rust_expr_exclude"
 
   let element () = col ""
 
@@ -14,13 +14,26 @@ module T = struct
 
   let cast ?(strict = true) t ~to_ = cast t ~to_ ~strict
 
+  external lit : 'a Data_type.Typed.t -> 'a -> t = "rust_expr_lit"
+
+  let lit (type a) (data_type : a Data_type.Typed.t) value =
+    match Data_type.Typed.flatten_custom data_type with
+    | Custom { data_type; f = _; f_inverse } -> lit data_type (f_inverse value)
+    | data_type -> lit data_type value
+  ;;
+
   external null : unit -> t = "rust_expr_null"
-  external int : int -> t = "rust_expr_int"
-  external float : float -> t = "rust_expr_float"
-  external bool : bool -> t = "rust_expr_bool"
-  external string : string -> t = "rust_expr_string"
+
+  let int = lit Int64
+  let float = lit Float64
+  let bool = lit Boolean
+  let string = lit Utf8
+
   external naive_date : Common.Naive_date.t -> t = "rust_expr_naive_date"
   external naive_datetime : Common.Naive_datetime.t -> t = "rust_expr_naive_datetime"
+
+  let time time = naive_datetime (Common.Naive_datetime.of_time_ns_exn time)
+
   external series : Series.t -> t = "rust_expr_series"
   external sort : t -> descending:bool -> t = "rust_expr_sort"
 
@@ -70,9 +83,11 @@ module T = struct
   external clip_max_float : t -> max:float -> t = "rust_expr_clip_max_float"
   external clip_min_int : t -> min:int -> t = "rust_expr_clip_min_int"
   external clip_max_int : t -> max:int -> t = "rust_expr_clip_max_int"
+  external pow : t -> t -> t = "rust_expr_pow"
   external sum : t -> t = "rust_expr_sum"
   external mean : t -> t = "rust_expr_mean"
   external median : t -> t = "rust_expr_median"
+  external mode : t -> t = "rust_expr_mode"
   external max : t -> t = "rust_expr_max"
   external min : t -> t = "rust_expr_min"
   external arg_max : t -> t = "rust_expr_arg_max"
@@ -80,7 +95,7 @@ module T = struct
   external count : t -> t = "rust_expr_count"
   external count_ : unit -> t = "rust_expr_count_"
   external n_unique : t -> t = "rust_expr_n_unique"
-  external approx_unique : t -> t = "rust_expr_approx_unique"
+  external approx_n_unique : t -> t = "rust_expr_approx_n_unique"
   external explode : t -> t = "rust_expr_explode"
 
   external over
@@ -109,6 +124,8 @@ module T = struct
   external is_not_null : t -> t = "rust_expr_is_not_null"
   external is_nan : t -> t = "rust_expr_is_nan"
   external is_not_nan : t -> t = "rust_expr_is_not_nan"
+  external is_finite : t -> t = "rust_expr_is_finite"
+  external is_infinite : t -> t = "rust_expr_is_infinite"
   external fill_null : t -> with_:t -> t = "rust_expr_fill_null"
 
   external fill_null'

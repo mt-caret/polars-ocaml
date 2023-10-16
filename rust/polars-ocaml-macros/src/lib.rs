@@ -8,9 +8,6 @@ struct MacroArgs {
     raise_on_err: bool,
 }
 
-// TODO: currently, the macro panicks all over the place which is not very nice.
-// We should instead emit compile_error! with the appropriate error messages.
-
 // TODO: a common mistake when using the attribute macro is to specify OCaml<_>
 // for arguments or OCamlRef<_> for return types, which should never happen.
 // In these cases, the macro should probably point out this issue and suggest
@@ -19,32 +16,42 @@ struct MacroArgs {
 // When `raise_on_err` is true, the macro will expect the function to return
 // `Result<OCaml<_>, String>` and will raise an OCaml exception if the function
 // returns an error.
-fn ocaml_interop_export_implementation(item_fn: syn::ItemFn, args: MacroArgs) -> TokenStream2 {
+fn try_ocaml_interop_export_implementation(
+    item_fn: syn::ItemFn,
+    args: MacroArgs,
+) -> Result<TokenStream2, String> {
     let mut inputs_iter = item_fn.sig.inputs.iter().map(|fn_arg| match fn_arg {
-        syn::FnArg::Receiver(_) => panic!("receiver not supported"),
-        syn::FnArg::Typed(pat_type) => pat_type.clone(),
+        syn::FnArg::Receiver(_) => {
+            Err("'self' arguments are not supported by ocaml_interop_export")
+        }
+        syn::FnArg::Typed(pat_type) => Ok(pat_type.clone()),
     });
 
+    let first_argument = inputs_iter
+        .next()
+        .ok_or("expected at least one argument")??;
+
     // The first argument to the function corresponds to the OCaml runtime.
-    let runtime_name = match *inputs_iter.next().unwrap().pat {
-        syn::Pat::Ident(pat_ident) => pat_ident.ident,
-        _ => panic!("expected ident"),
-    };
+    let runtime_name = match *first_argument.pat {
+        syn::Pat::Ident(pat_ident) => Ok(pat_ident.ident),
+        _ => Err("expected identifier corresponding to runtime for first argument"),
+    }?;
 
     // The remaining arguments are stripped of their types and converted to
     // `RawOCaml` values.
     let new_inputs: Punctuated<_, _> = inputs_iter
         .clone()
         .map(|pat_type| {
-            syn::FnArg::Typed(syn::PatType {
+            let pat_type = pat_type?;
+            Ok::<_, String>(syn::FnArg::Typed(syn::PatType {
                 ty: syn::parse2(quote! {
                     ::ocaml_interop::RawOCaml
                 })
                 .unwrap(),
                 ..pat_type
-            })
+            }))
         })
-        .collect();
+        .collect::<Result<_, _>>()?;
     let number_of_arguments = new_inputs.len();
 
     let signature = syn::Signature {
@@ -58,18 +65,23 @@ fn ocaml_interop_export_implementation(item_fn: syn::ItemFn, args: MacroArgs) ->
 
     // We take each non-runtime argument to the function and convert them to the
     // appropriate Rust type.
-    let locals = inputs_iter.map(|pat_type| match *pat_type.pat {
-        syn::Pat::Ident(pat_ident) => {
-            let ident = pat_ident.ident;
-            let ty = pat_type.ty;
-            quote! {
-                let #ident: #ty = &::ocaml_interop::BoxRoot::new(unsafe {
-                    OCaml::new(cr, #ident)
-                });
+    let locals = inputs_iter
+        .map(|pat_type| {
+            let pat_type = pat_type?;
+            match *pat_type.pat {
+                syn::Pat::Ident(pat_ident) => {
+                    let ident = pat_ident.ident;
+                    let ty = pat_type.ty;
+                    Ok(quote! {
+                        let #ident: #ty = &::ocaml_interop::BoxRoot::new(unsafe {
+                            OCaml::new(cr, #ident)
+                        });
+                    })
+                }
+                _ => Err("expected ident"),
             }
-        }
-        _ => panic!("expected ident"),
-    });
+        })
+        .collect::<Result<Vec<_>, _>>()?;
 
     let return_type = match item_fn.sig.output.clone() {
         syn::ReturnType::Default => panic!("functions with no return type are not supported"),
@@ -163,23 +175,35 @@ fn ocaml_interop_export_implementation(item_fn: syn::ItemFn, args: MacroArgs) ->
             }
         });
 
-        quote! {
+        Ok(quote! {
             #native_function
 
             #[no_mangle]
             pub extern "C" fn #bytecode_function_name(
-            argv: &[::ocaml_interop::RawOCaml],
+            argv: *const ::ocaml_interop::RawOCaml,
             argn: isize,
             ) -> ::ocaml_interop::RawOCaml {
                 if argn as usize != #number_of_arguments {
                     panic!("expected {} arguments, got {}", #number_of_arguments, argn);
                 }
 
+                let argv = unsafe { ::std::slice::from_raw_parts(argv, argn as usize) };
+
                 #native_function_name(#( #arguments ),*)
             }
-        }
+        })
     } else {
-        native_function
+        Ok(native_function)
+    }
+}
+
+fn ocaml_interop_export_implementation(
+    item_fn: syn::ItemFn,
+    macro_args: MacroArgs,
+) -> TokenStream2 {
+    match try_ocaml_interop_export_implementation(item_fn, macro_args) {
+        Ok(expanded) => expanded,
+        Err(error_message) => quote! { compile_error!(#error_message); },
     }
 }
 
@@ -429,31 +453,55 @@ mod tests {
     }
 
     #[test]
-    fn test_bytecode_generation() {
+    fn test_invalid_function() {
         let macro_output = apply_macro_and_pretty_print(
             quote! {
-            fn rust_expr_sample_n(
-                cr: &mut &mut OCamlRuntime,
-                expr: OCamlRef<DynBox<Expr>>,
-                n: OCamlRef<OCamlInt>,
-                with_replacement: OCamlRef<bool>,
-                shuffle: OCamlRef<bool>,
-                seed: OCamlRef<Option<OCamlInt>>,
-                fixed_seed: OCamlRef<bool>
-            ) -> OCaml<DynBox<Expr>> {
-                let Abstract(expr) = expr.to_rust(cr);
-                let n = n.to_rust::<Coerce<_, i64, usize>>(cr).get();
-                let with_replacement: bool = with_replacement.to_rust(cr);
-                let shuffle: bool = shuffle.to_rust(cr);
-                let seed = seed.to_rust::<Coerce<_, Option<i64>, Option<u64>>>(cr).get();
-                let fixed_seed = fixed_seed.to_rust(cr);
-
-                Abstract(expr.sample_n(n, with_replacement, shuffle, seed, fixed_seed)).to_ocaml(cr)
-            }
+                fn rust_expr_col(
+                    self,
+                    cr: &mut &mut OCamlRuntime,
+                    name: OCamlRef<String>
+                ) -> OCaml<DynBox<Expr>> {
+                    let name: String = name.to_rust(cr);
+                    OCaml::box_value(cr, col(&name))
+                }
             },
             MacroArgs {
                 raise_on_err: false,
             },
+        );
+
+        expect![[r#"
+            compile_error!("'self' arguments are not supported by ocaml_interop_export");
+        "#]]
+        .assert_eq(&macro_output);
+    }
+
+    #[test]
+    fn test_bytecode_generation() {
+        let macro_output = apply_macro_and_pretty_print(
+            quote! {
+                fn rust_expr_sample_n(
+                    cr: &mut &mut OCamlRuntime,
+                    expr: OCamlRef<DynBox<Expr>>,
+                    n: OCamlRef<OCamlInt>,
+                    with_replacement: OCamlRef<bool>,
+                    shuffle: OCamlRef<bool>,
+                    seed: OCamlRef<Option<OCamlInt>>,
+                    fixed_seed: OCamlRef<bool>,
+                ) -> OCaml<DynBox<Expr>> {
+                    let Abstract(expr) = expr.to_rust(cr);
+                    let n = n.to_rust::<Coerce<_, i64, usize>>(cr).get()?;
+                    let with_replacement: bool = with_replacement.to_rust(cr);
+                    let shuffle: bool = shuffle.to_rust(cr);
+                    let seed = seed
+                        .to_rust::<Coerce<_, Option<i64>, Option<u64>>>(cr)
+                        .get()?;
+                    let fixed_seed = fixed_seed.to_rust(cr);
+
+                    Abstract(expr.sample_n(n, with_replacement, shuffle, seed, fixed_seed)).to_ocaml(cr)
+                }
+            },
+            MacroArgs { raise_on_err: true },
         );
 
         expect![[r##"
@@ -489,18 +537,24 @@ mod tests {
                     {
                         let return_value: OCaml<DynBox<Expr>> = {
                             let Abstract(expr) = expr.to_rust(cr);
-                            let n = n.to_rust::<Coerce<_, i64, usize>>(cr).get();
+                            let n = n.to_rust::<Coerce<_, i64, usize>>(cr).get()?;
                             let with_replacement: bool = with_replacement.to_rust(cr);
                             let shuffle: bool = shuffle.to_rust(cr);
-                            let seed = seed.to_rust::<Coerce<_, Option<i64>, Option<u64>>>(cr).get();
+                            let seed = seed
+                                .to_rust::<Coerce<_, Option<i64>, Option<u64>>>(cr)
+                                .get()?;
                             let fixed_seed = fixed_seed.to_rust(cr);
                             Abstract(expr.sample_n(n, with_replacement, shuffle, seed, fixed_seed))
                                 .to_ocaml(cr)
                         };
-                        unsafe { return_value.raw() }
+                        Ok(unsafe { return_value.raw() })
                     }
                 }) {
-                    Ok(value) => value,
+                    Ok(Ok(value)) => value,
+                    Ok(Err(error)) => {
+                        let cr = unsafe { &mut ::ocaml_interop::OCamlRuntime::recover_handle() };
+                        unsafe { raise_ocaml_exception(cr, error) }
+                    }
                     Err(cause) => {
                         let cr = unsafe { &mut ::ocaml_interop::OCamlRuntime::recover_handle() };
                         unsafe { raise_ocaml_exception_from_panic(cr, cause) }
@@ -509,12 +563,13 @@ mod tests {
             }
             #[no_mangle]
             pub extern "C" fn rust_expr_sample_n_bytecode(
-                argv: &[::ocaml_interop::RawOCaml],
+                argv: *const ::ocaml_interop::RawOCaml,
                 argn: isize,
             ) -> ::ocaml_interop::RawOCaml {
                 if argn as usize != 6usize {
                     panic!("expected {} arguments, got {}", 6usize, argn);
                 }
+                let argv = unsafe { ::std::slice::from_raw_parts(argv, argn as usize) };
                 rust_expr_sample_n(
                     argv[0usize],
                     argv[1usize],

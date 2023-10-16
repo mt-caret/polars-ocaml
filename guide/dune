@@ -1,6 +1,6 @@
 (library
  (name polars_guide)
- (libraries core expect_test_helpers_core shell.filename_extended polars)
+ (libraries core expect_test_helpers_core re2 shell.filename_extended polars)
  (inline_tests
   ; see ../test/dune for why this is commented out
   ; (modes native byte)

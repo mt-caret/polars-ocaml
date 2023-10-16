@@ -87,7 +87,7 @@ external groupby
   -> t
   = "rust_lazy_frame_groupby"
 
-let groupby ?(is_stable = false) t ~by ~agg = groupby t ~is_stable ~by ~agg
+let groupby ?(is_stable = true) t ~by ~agg = groupby t ~is_stable ~by ~agg
 
 external groupby_dynamic
   :  t
@@ -110,7 +110,7 @@ external groupby_dynamic
        | `Saturday
        | `Sunday
        ]
-       option
+         option
   -> check_sorted:bool option
   -> agg:Expr.t list
   -> t

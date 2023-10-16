@@ -4,6 +4,8 @@ type t
 
 val create : 'a Data_type.Typed.t -> string -> 'a list -> t
 val createo : 'a Data_type.Typed.t -> string -> 'a option list -> t
+val create' : 'a Data_type.Typed.t -> string -> 'a Uniform_array.t -> t
+val createo' : 'a Data_type.Typed.t -> string -> 'a option Uniform_array.t -> t
 val int : string -> int list -> t
 val into : string -> int option list -> t
 val float : string -> float list -> t
@@ -13,8 +15,13 @@ val boolo : string -> bool option list -> t
 val string : string -> string list -> t
 val stringo : string -> string option list -> t
 val date : string -> Date.t list -> t
+val date_option : string -> Date.t option list -> t
 val datetime : string -> Common.Naive_datetime.t list -> t
+val datetime_option : string -> Common.Naive_datetime.t option list -> t
 val datetime' : string -> Date.t list -> t
+val datetime_option' : string -> Date.t option list -> t
+val time : string -> Time_ns.t list -> t
+val time_option : string -> Time_ns.t option list -> t
 
 val date_range
   :  ?every:string
@@ -52,7 +59,7 @@ val to_option_list : 'a Data_type.Typed.t -> t -> 'a option list
 val get : 'a Data_type.Typed.t -> t -> int -> 'a option
 val get_exn : 'a Data_type.Typed.t -> t -> int -> 'a
 val name : t -> string
-val rename : t -> name:string -> t
+val rename : t -> name:string -> unit
 val dtype : t -> Data_type.t
 val to_data_frame : t -> Data_frame0.t
 val sort : ?descending:bool -> t -> t

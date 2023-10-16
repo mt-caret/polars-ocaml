@@ -198,11 +198,25 @@ let%expect_test "Multiple" =
       for i = 0 to 4 do
         Data_frame.write_csv_exn df (temp_dir ^/ [%string "my_many_files_%{i#Int}.csv"])
       done;
-      Data_frame.read_csv_exn (temp_dir ^/ "my_many_files_*.csv") |> Data_frame.print));
+      try
+        Data_frame.read_csv_exn (temp_dir ^/ "my_many_files_*.csv") |> Data_frame.print
+      with
+      | exn ->
+        let exn =
+          Exn.to_string exn
+          (* We truncate the directory portion of the path since it is unstable. *)
+          |> Re2.replace_exn
+               ~f:(fun _ -> "my_many_files")
+               (Re2.create_exn "/.*my_many_files")
+          |> Failure
+        in
+        raise exn));
   (* Globs are currently not supported in polars-ocaml, so passing glob patterns
      in read/scan functions do not work. *)
-  [%expect {|
-    "No such file or directory (os error 2)" |}]
+  [%expect
+    {|
+    (Failure
+     "\"error open file: my_many_files_*.csv, No such file or directory (os error 2)\"") |}]
 ;;
 
 (* Implementation of database, AWS, and BigQuery IO are blocked by a good OCaml

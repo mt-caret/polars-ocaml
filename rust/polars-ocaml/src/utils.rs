@@ -1,7 +1,7 @@
 use ocaml_interop::{
     impl_from_ocaml_variant, ocaml_alloc_polymorphic_variant, ocaml_alloc_tagged_block,
     ocaml_alloc_variant, ocaml_unpack_polymorphic_variant, ocaml_unpack_variant,
-    polymorphic_variant_tag_hash, BoxRoot, DynBox, FromOCaml, OCaml, OCamlInt, OCamlList,
+    polymorphic_variant_tag_hash, BoxRoot, DynBox, FromOCaml, OCaml, OCamlInt, OCamlList, OCamlRef,
     OCamlRuntime, ToOCaml,
 };
 use polars::series::IsSorted;
@@ -11,6 +11,139 @@ use std::any::type_name;
 use std::borrow::Borrow;
 use std::fmt::Debug;
 use std::marker::PhantomData;
+
+pub fn dyn_box<'a, T, F, R>(
+    cr: &'a mut OCamlRuntime,
+    var: OCamlRef<DynBox<T>>,
+    body: F,
+) -> OCaml<'a, DynBox<R>>
+where
+    F: FnOnce(T) -> R,
+    T: Clone + 'static,
+    R: 'static,
+{
+    let Abstract(rust) = var.to_rust(cr);
+    OCaml::box_value(cr, body(rust))
+}
+
+pub fn dyn_box2<'a, T1, T2, F, R>(
+    cr: &'a mut OCamlRuntime,
+    var1: OCamlRef<DynBox<T1>>,
+    var2: OCamlRef<DynBox<T2>>,
+    body: F,
+) -> OCaml<'a, DynBox<R>>
+where
+    F: FnOnce(T1, T2) -> R,
+    T1: Clone + 'static,
+    T2: Clone + 'static,
+    R: 'static,
+{
+    let Abstract(t1) = var1.to_rust(cr);
+    let Abstract(t2) = var2.to_rust(cr);
+    OCaml::box_value(cr, body(t1, t2))
+}
+
+pub fn dyn_box_result<'a, T, F, R, E>(
+    cr: &'a mut OCamlRuntime,
+    var: OCamlRef<DynBox<T>>,
+    body: F,
+) -> OCaml<'a, Result<DynBox<R>, String>>
+where
+    F: FnOnce(T) -> Result<R, E>,
+    T: Clone + 'static,
+    R: 'static,
+    E: std::string::ToString,
+    Result<Abstract<R>, String>: ToOCaml<Result<DynBox<R>, String>>,
+{
+    let Abstract(rust) = var.to_rust(cr);
+    body(rust)
+        .map(Abstract)
+        .map_err(|err| err.to_string())
+        .to_ocaml(cr)
+}
+
+pub fn dyn_box_result_with_cr<'a, T, F, R, E>(
+    cr: &'a mut OCamlRuntime,
+    var: OCamlRef<DynBox<T>>,
+    body: F,
+) -> OCaml<'a, Result<DynBox<R>, String>>
+where
+    F: FnOnce(&mut OCamlRuntime, T) -> Result<R, E>,
+    T: Clone + 'static,
+    R: 'static,
+    E: std::string::ToString,
+    Result<Abstract<R>, String>: ToOCaml<Result<DynBox<R>, String>>,
+{
+    let Abstract(rust) = var.to_rust(cr);
+    body(cr, rust)
+        .map(Abstract)
+        .map_err(|err| err.to_string())
+        .to_ocaml(cr)
+}
+
+pub fn dyn_box_result2<'a, T1, T2, F, R, E>(
+    cr: &'a mut OCamlRuntime,
+    v1: OCamlRef<DynBox<T1>>,
+    v2: OCamlRef<DynBox<T2>>,
+    body: F,
+) -> OCaml<'a, Result<DynBox<R>, String>>
+where
+    F: FnOnce(T1, T2) -> Result<R, E>,
+    T1: Clone + 'static,
+    T2: Clone + 'static,
+    R: 'static,
+    E: std::string::ToString,
+    Result<Abstract<R>, String>: ToOCaml<Result<DynBox<R>, String>>,
+{
+    let Abstract(rust1) = v1.to_rust(cr);
+    let Abstract(rust2) = v2.to_rust(cr);
+    body(rust1, rust2)
+        .map(Abstract)
+        .map_err(|err| err.to_string())
+        .to_ocaml(cr)
+}
+
+macro_rules! dyn_box_op {
+    ($name:ident, $type:ty, |$($var:ident),+| $body:expr) => {
+        #[ocaml_interop_export]
+        fn $name(
+            cr: &mut &mut OCamlRuntime,
+            $(
+                $var: OCamlRef<DynBox<$type>>,
+            )+
+        ) -> OCaml<DynBox<$type>> {
+        {
+            $(
+                let Abstract($var) = $var.to_rust(cr);
+            )+
+
+            OCaml::box_value(cr, $body)
+        }
+        }
+    }
+}
+macro_rules! dyn_box_op_result {
+    ($name:ident, $type:ty, |$($var:ident),+| $body:expr) => {
+        #[ocaml_interop_export]
+        fn $name(
+            cr: &mut &mut OCamlRuntime,
+            $(
+                $var: OCamlRef<DynBox<$type>>,
+            )+
+        ) -> OCaml<Result<DynBox<$type>, String>> {
+        {
+            $(
+                let Abstract($var) = $var.to_rust(cr);
+            )+
+
+            $body.map(Abstract).map_err(|err| err.to_string()).to_ocaml(cr)
+        }
+        }
+    }
+}
+
+pub(crate) use dyn_box_op;
+pub(crate) use dyn_box_op_result;
 
 // This function is actually quite unsafe; as a general rule, additional use of
 // this is strongly discouraged. See comment for `raise_ocaml_exception` in the
@@ -29,6 +162,51 @@ pub unsafe fn ocaml_failwith(error_message: &str) -> ! {
 }
 
 polars_ocaml_macros::ocaml_interop_backtrace_support!();
+
+// TODO: add this to ocaml-interop?
+pub struct OCamlUniformArray<A> {
+    _marker: PhantomData<A>,
+}
+
+unsafe impl<A, OCamlA> FromOCaml<OCamlUniformArray<OCamlA>> for Vec<A>
+where
+    A: FromOCaml<OCamlA>,
+{
+    fn from_ocaml(v: OCaml<OCamlUniformArray<OCamlA>>) -> Self {
+        let size = unsafe { ocaml_sys::wosize_val(v.raw()) };
+
+        // tuple/record/array tag, note that we do not expect a double array
+        // tag, since uniform array guarantee boxing.
+        assert_eq!(v.tag_value(), 0);
+
+        let mut vec = Vec::with_capacity(size);
+        for i in 0..size {
+            vec.push(OCaml::<_>::to_rust(&unsafe { v.field(i) }));
+        }
+        vec
+    }
+}
+
+pub struct OCamlInt63(pub i64);
+
+unsafe impl FromOCaml<OCamlInt63> for OCamlInt63 {
+    fn from_ocaml(v: OCaml<OCamlInt63>) -> Self {
+        if v.is_block() {
+            let int64 = {
+                let val = unsafe { ocaml_sys::field(v.raw(), 1) };
+                unsafe { *(val as *const i64) }
+            };
+
+            // Base's implementation of `Int63.t` on 32bit platforms is `Int64.t`
+            // (a block holding an i64) shifted left with lower bit 0 to match
+            // the semantics of `int` on 64bit platforms.
+            OCamlInt63(int64 >> 1)
+        } else {
+            // On 64bit platforms, `Int63.t` is just a regular old OCaml integer.
+            OCamlInt63(unsafe { ocaml_sys::int_val(v.raw()) as i64 })
+        }
+    }
+}
 
 pub struct PolarsTimeUnit(pub TimeUnit);
 
@@ -106,7 +284,7 @@ unsafe impl FromOCaml<DataType> for PolarsDataType {
     }
 }
 
-unsafe fn ocaml_value<T>(cr: &mut OCamlRuntime, n: i32) -> OCaml<T> {
+unsafe fn ocaml_value<T>(cr: &OCamlRuntime, n: i32) -> OCaml<T> {
     unsafe { OCaml::new(cr, OCaml::of_i32(n).raw()) }
 }
 
@@ -195,6 +373,28 @@ impl_from_ocaml_variant! {
         GADTDataType::Binary,
         GADTDataType::Date,
         GADTDataType::List(data_type: GADTDataType),
+    }
+}
+
+impl GADTDataType {
+    pub fn to_data_type(&self) -> DataType {
+        match self {
+            GADTDataType::Boolean => DataType::Boolean,
+            GADTDataType::UInt8 => DataType::UInt8,
+            GADTDataType::UInt16 => DataType::UInt16,
+            GADTDataType::UInt32 => DataType::UInt32,
+            GADTDataType::UInt64 => DataType::UInt64,
+            GADTDataType::Int8 => DataType::Int8,
+            GADTDataType::Int16 => DataType::Int16,
+            GADTDataType::Int32 => DataType::Int32,
+            GADTDataType::Int64 => DataType::Int64,
+            GADTDataType::Float32 => DataType::Float32,
+            GADTDataType::Float64 => DataType::Float64,
+            GADTDataType::Utf8 => DataType::Utf8,
+            GADTDataType::Binary => DataType::Binary,
+            GADTDataType::Date => DataType::Date,
+            GADTDataType::List(data_type) => DataType::List(Box::new(data_type.to_data_type())),
+        }
     }
 }
 
@@ -527,6 +727,13 @@ unsafe impl FromOCaml<IsSorted> for PolarsIsSorted {
 }
 
 pub struct Abstract<T>(pub T);
+
+impl<T> Abstract<T> {
+    pub fn get(self) -> T {
+        self.0
+    }
+}
+
 unsafe impl<T: 'static + Clone> FromOCaml<DynBox<T>> for Abstract<T> {
     fn from_ocaml(v: OCaml<DynBox<T>>) -> Self {
         Abstract(Borrow::<T>::borrow(&v).clone())
@@ -564,7 +771,7 @@ unsafe impl ToOCaml<DummyBoxRoot> for DummyBoxRoot {
 }
 
 impl DummyBoxRoot {
-    pub unsafe fn new<'a, T>(boxroot: BoxRoot<T>) -> Self {
+    pub unsafe fn new<T>(boxroot: BoxRoot<T>) -> Self {
         // It's quite unfortunate that we have to transmute here. Ideally we
         // would coerce the type like we do in `interpret` below, but there is
         // no such interface for BoxRoots so we can't do that.

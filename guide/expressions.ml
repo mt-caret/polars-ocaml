@@ -141,7 +141,7 @@ let%expect_test "Functions" =
       ~exprs:
         Expr.
           [ col "names" |> n_unique |> alias ~name:"unique"
-          ; col "names" |> approx_unique |> alias ~name:"approx_unique"
+          ; col "names" |> approx_n_unique |> alias ~name:"approx_unique"
           ]
   in
   Data_frame.print df_alias;
@@ -609,7 +609,6 @@ let%expect_test "Aggregation" =
   let df =
     Data_frame.lazy_ dataset
     |> Lazy_frame.groupby
-         ~is_stable:true
          ~by:Expr.[ col "first_name" ]
          ~agg:
            Expr.
@@ -639,7 +638,6 @@ let%expect_test "Aggregation" =
   let df =
     Data_frame.lazy_ dataset
     |> Lazy_frame.groupby
-         ~is_stable:true
          ~by:Expr.[ col "state" ]
          ~agg:
            Expr.
@@ -668,7 +666,6 @@ let%expect_test "Aggregation" =
   let df =
     Data_frame.lazy_ dataset
     |> Lazy_frame.groupby
-         ~is_stable:true
          ~by:Expr.[ col "state"; col "party" ]
          ~agg:Expr.[ col "party" |> count |> alias ~name:"count" ]
     |> Lazy_frame.filter
@@ -705,7 +702,6 @@ let%expect_test "Aggregation" =
   let df =
     Data_frame.lazy_ dataset
     |> Lazy_frame.groupby
-         ~is_stable:true
          ~by:Expr.[ col "state" ]
          ~agg:
            Expr.
@@ -737,7 +733,6 @@ let%expect_test "Aggregation" =
     Data_frame.lazy_ dataset
     |> Lazy_frame.sort ~by_column:"birthday" ~descending:true ~nulls_last:true
     |> Lazy_frame.groupby
-         ~is_stable:true
          ~by:Expr.[ col "state" ]
          ~agg:
            Expr.
@@ -766,7 +761,6 @@ let%expect_test "Aggregation" =
     Data_frame.lazy_ dataset
     |> Lazy_frame.sort ~by_column:"birthday" ~descending:true ~nulls_last:true
     |> Lazy_frame.groupby
-         ~is_stable:true
          ~by:Expr.[ col "state" ]
          ~agg:
            Expr.
@@ -796,7 +790,6 @@ let%expect_test "Aggregation" =
     Data_frame.lazy_ dataset
     |> Lazy_frame.sort ~by_column:"birthday" ~descending:true ~nulls_last:true
     |> Lazy_frame.groupby
-         ~is_stable:true
          ~by:Expr.[ col "state" ]
          ~agg:
            Expr.
@@ -1342,11 +1335,15 @@ let%expect_test "Lists and Arrays" =
   in
   Data_frame.with_columns_exn
     weather_by_day
-    ~exprs:Expr.[ concat_list [ exclude "station" ] |> alias ~name:"all_temps" ]
+    ~exprs:
+      Expr.
+        [ concat_list [ all () |> exclude ~names:[ "station" ] ]
+          |> alias ~name:"all_temps"
+        ]
   |> Data_frame.select_exn
        ~exprs:
          Expr.
-           [ exclude "all_temps"
+           [ all () |> exclude ~names:[ "all_temps" ]
            ; col "all_temps" |> List.eval ~expr:rank_pct |> alias ~name:"temps_rank"
            ]
   |> Data_frame.print;

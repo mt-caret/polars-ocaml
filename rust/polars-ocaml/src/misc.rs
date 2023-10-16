@@ -73,6 +73,36 @@ fn rust_naive_datetime_to_string(
 }
 
 #[ocaml_interop_export]
+fn rust_time_ns_to_naive_datetime(
+    cr: &mut &mut OCamlRuntime,
+    time_ns: OCamlRef<OCamlInt63>,
+) -> OCaml<Option<DynBox<NaiveDateTime>>> {
+    let OCamlInt63(ns_since_epoch) = time_ns.to_rust(cr);
+
+    // We use Euclidean division here instead of the usual div (/) and mod (%)
+    // operations since we need the remainder to be non-negative.
+    NaiveDateTime::from_timestamp_opt(
+        ns_since_epoch.div_euclid(1_000_000_000),
+        ns_since_epoch.rem_euclid(1_000_000_000) as u32,
+    )
+    .map(Abstract)
+    .to_ocaml(cr)
+}
+
+#[ocaml_interop_export(raise_on_err)]
+fn rust_naive_datetime_to_timestamp_nanos(
+    cr: &mut &mut OCamlRuntime,
+    datetime: OCamlRef<DynBox<NaiveDateTime>>,
+) -> OCaml<OCamlInt> {
+    let Abstract(datetime) = datetime.to_rust(cr);
+
+    datetime
+        .timestamp_nanos_opt()
+        .ok_or_else(|| format!("out of range datetime: {:?}", datetime))?
+        .to_ocaml(cr)
+}
+
+#[ocaml_interop_export]
 fn rust_schema_create(
     cr: &mut &mut OCamlRuntime,
     fields: OCamlRef<OCamlList<(String, DataType)>>,
