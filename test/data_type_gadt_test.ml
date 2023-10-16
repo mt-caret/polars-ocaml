@@ -4,7 +4,8 @@ open Polars
 let%expect_test "unit tests" =
   let series = Series.createo Int64 "series_name" [ Some 1; None; Some 2 ] in
   Series.to_option_list Int64 series |> [%sexp_of: int option list] |> print_s;
-  [%expect {| ((1) () (2)) |}];
+  [%expect {|
+    ((1) () (2)) |}];
   (* Trying to convert to non-null list when there are nulls should raise *)
   Expect_test_helpers_core.require_does_raise [%here] (fun () ->
     Series.to_list Int64 series);
@@ -178,6 +179,8 @@ module Series_create = struct
 end
 
 let%expect_test "Series.create and Series.create' doesn't raise" =
+  Common.For_testing.clear_panic_hook ();
+  Common.record_panic_backtraces ();
   Base_quickcheck.Test.run_exn
     (module Series_create)
     ~f:(fun (Series_create.Args (data_type, values) as args) ->
@@ -191,7 +194,15 @@ let%expect_test "Series.create and Series.create' doesn't raise" =
           (data_type, Series.to_option_list data_type series |> List.filter_opt)
       in
       [%test_result: Series_create.t] ~expect:args' args;
+      let sexp_of_value = value_to_sexp data_type in
       List.iteri values' ~f:(fun i value ->
+        print_s
+          [%message
+            ""
+              (List.length values : int)
+              (i : int)
+              (T data_type : Data_type.Typed.packed)
+              (values : value list)];
         let value_equal = Comparable.equal (value_compare data_type) in
         assert (value_equal value (Series.get_exn data_type series i)));
       (* Test Series.create' *)
@@ -222,15 +233,24 @@ let%expect_test "Series.create and Series.create' doesn't raise" =
          \nbacktrace not captured")
         ("Raised by primitive operation at Polars__Series.T.get in file \"lib/series.ml\", line 195, characters 19-36"
           "Called from Polars__Series.T.get_exn in file \"lib/series.ml\", line 198, characters 30-47"
-          "Called from Polars_tests__Data_type_gadt_test.(fun) in file \"test/data_type_gadt_test.ml\", line 196, characters 34-69"
+          "Called from Polars_tests__Data_type_gadt_test.(fun) in file \"test/data_type_gadt_test.ml\", line 207, characters 34-69"
           "Called from Base__List.iteri.(fun) in file \"src/list.ml\", line 630, characters 7-12"
           "Called from Base__List0.fold in file \"src/list0.ml\", line 37, characters 27-37"
           "Called from Base__List.iteri in file \"src/list.ml\", line 629, characters 5-62"
-          "Called from Polars_tests__Data_type_gadt_test.(fun) in file \"test/data_type_gadt_test.ml\", line 194, characters 6-187"
+          "Called from Polars_tests__Data_type_gadt_test.(fun) in file \"test/data_type_gadt_test.ml\", line 198, characters 6-394"
           "Called from Base__Or_error.try_with in file \"src/or_error.ml\", line 99, characters 9-15"))))
   Raised at Base__Error.raise in file "src/error.ml" (inlined), line 9, characters 14-30
   Called from Base__Or_error.ok_exn in file "src/or_error.ml", line 107, characters 17-32
-  Called from Expect_test_collector.Make.Instance_io.exec in file "collector/expect_test_collector.ml", line 234, characters 12-19 |}]
+  Called from Expect_test_collector.Make.Instance_io.exec in file "collector/expect_test_collector.ml", line 234, characters 12-19
+
+  Trailing output
+  ---------------
+  (("List.length values" 1) (i 0) ("T data_type" (Custom (List Int8)))
+   (values (())))
+  (("List.length values" 2) (i 0) ("T data_type" UInt8) (values (221 112)))
+  (("List.length values" 2) (i 1) ("T data_type" UInt8) (values (221 112)))
+  (("List.length values" 2) (i 0) ("T data_type" (List Date)) (values (() ())))
+  (("List.length values" 1) (i 0) ("T data_type" (List Date)) (values (()))) |}]
 ;;
 
 (* TODO: there's a *lot* of duplication with the Series_create module; perhaps
@@ -315,11 +335,11 @@ let%expect_test "Series.createo and Series.createo' doesn't raise" =
           "Polars panicked: data types don't match: invalid series dtype: expected `Date`, got `i32`\
          \nbacktrace not captured")
         ("Raised by primitive operation at Polars__Series.T.get in file \"lib/series.ml\", line 195, characters 19-36"
-          "Called from Polars_tests__Data_type_gadt_test.(fun) in file \"test/data_type_gadt_test.ml\", line 294, characters 34-65"
+          "Called from Polars_tests__Data_type_gadt_test.(fun) in file \"test/data_type_gadt_test.ml\", line 314, characters 34-65"
           "Called from Base__List.iteri.(fun) in file \"src/list.ml\", line 630, characters 7-12"
           "Called from Base__List0.fold in file \"src/list0.ml\", line 37, characters 27-37"
           "Called from Base__List.iteri in file \"src/list.ml\", line 629, characters 5-62"
-          "Called from Polars_tests__Data_type_gadt_test.(fun) in file \"test/data_type_gadt_test.ml\", line 292, characters 6-198"
+          "Called from Polars_tests__Data_type_gadt_test.(fun) in file \"test/data_type_gadt_test.ml\", line 312, characters 6-198"
           "Called from Base__Or_error.try_with in file \"src/or_error.ml\", line 99, characters 9-15"))))
   Raised at Base__Error.raise in file "src/error.ml" (inlined), line 9, characters 14-30
   Called from Base__Or_error.ok_exn in file "src/or_error.ml", line 107, characters 17-32
@@ -390,7 +410,7 @@ let%expect_test "Expr.lit roundtrip" =
           "Polars panicked: data types don't match: invalid series dtype: expected `Date`, got `datetime[\206\188s]`\
          \nbacktrace not captured")
         ("Raised by primitive operation at Polars__Series.T.to_list in file \"lib/series.ml\", line 173, characters 48-67"
-          "Called from Polars_tests__Data_type_gadt_test.(fun) in file \"test/data_type_gadt_test.ml\", line 372, characters 8-203"
+          "Called from Polars_tests__Data_type_gadt_test.(fun) in file \"test/data_type_gadt_test.ml\", line 392, characters 8-203"
           "Called from Base__Or_error.try_with in file \"src/or_error.ml\", line 99, characters 9-15"))))
   Raised at Base__Error.raise in file "src/error.ml" (inlined), line 9, characters 14-30
   Called from Base__Or_error.ok_exn in file "src/or_error.ml", line 107, characters 17-32

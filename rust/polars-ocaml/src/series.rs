@@ -385,6 +385,8 @@ fn series_to_boxrooted_ocaml_list(
         }};
     }
 
+    // println!("series_to_boxrooted_ocaml_list: {:?} {}", data_type, series);
+
     match data_type {
         GADTDataType::Boolean => {
             let ca = series.bool().map_err(|err| err.to_string())?;
@@ -644,6 +646,8 @@ fn rust_series_get(
     let Abstract(series) = series.to_rust(cr);
     let series = series.borrow();
     let index = index.to_rust::<Coerce<_, i64, usize>>(cr).get()?;
+
+    // println!("rust_series_get: {:?}, {}, {}", data_type, series, index);
 
     series_get(cr, &data_type, &series, index)?.to_ocaml(cr)
 }

@@ -51,6 +51,38 @@ mod tests {
                 	2023-01-01
                 ]"#]],
         );
+
+        let empty_date_vec: Vec<NaiveDate> = vec![];
+        let empty_date_series = Series::new("test", empty_date_vec);
+        let series = Series::new("date", vec![empty_date_series]);
+
+        check(
+            series.clone(),
+            expect![[r#"
+                shape: (1,)
+                Series: 'date' [list[date]]
+                [
+                	[]
+                ]"#]],
+        );
+
+        check(
+            series.get(0).unwrap(),
+            expect![[r#"
+                List(shape: (0,)
+                Series: '' [date]
+                [
+                ])"#]],
+        );
+
+        check(
+            series.list().unwrap().get(0).unwrap(),
+            expect![[r#"
+                shape: (0,)
+                Series: 'date' [i32]
+                [
+                ]"#]],
+        );
     }
 
     #[test]
