@@ -100,10 +100,16 @@ fn rust_expr_lit(
         GADTDataType::Float64 => lit(value.interpret::<OCamlFloat>(cr).to_rust::<f64>()),
         GADTDataType::Utf8 => lit(value.interpret::<String>(cr).to_rust::<String>()),
         GADTDataType::Binary => lit(value.interpret::<OCamlBytes>(cr).to_rust::<Vec<u8>>()),
-        GADTDataType::Date => lit(value
-            .interpret::<DynBox<NaiveDate>>(cr)
-            .to_rust::<Abstract<NaiveDate>>()
-            .get()),
+        GADTDataType::Date => {
+            // This cast is a hack to work around the bug (demonstrated in lib.rs)
+            // where passing a date directly to lit() results in the dtype of the
+            // literal getting converted into a datetime[ns].
+            let date = value
+                .interpret::<DynBox<NaiveDate>>(cr)
+                .to_rust::<Abstract<NaiveDate>>()
+                .get();
+            lit(Series::new("literal", [date]))
+        }
         GADTDataType::List(data_type) => {
             // Since there is no direct way to create a List-based literal, we
             // create a one-element series instead, and use that.
