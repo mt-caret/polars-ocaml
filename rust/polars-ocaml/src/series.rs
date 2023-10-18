@@ -501,36 +501,15 @@ fn series_to_boxrooted_ocaml_list(
             create_boxrooted_ocaml_list_handle_nulls!(
                 DummyBoxRoot,
                 DummyBoxRoot,
-                {
-                    ca.into_iter()
-                        .map(|serieso| match serieso {
-                            None => Ok(None),
-                            Some(series) => {
-                                // when iterating over a series containing lists of dates, the series found have dtype i32 instead of
-                                // the expected date (this clearly seems like a bug in polars), so we need a hack to convert the i32
-                                // to a date.
-                                let requires_date_hack =
-                                    match (series.dtype(), (**data_type).clone()) {
-                                        (DataType::Int32, GADTDataType::Date) => true,
-                                        _ => false,
-                                    };
-
-                                let series = if requires_date_hack {
-                                    series
-                                        .i32()
-                                        .map_err(|err| err.to_string())?
-                                        .cast(&DataType::Date)
-                                        .map_err(|err| err.to_string())?
-                                } else {
-                                    series
-                                };
-                                // See comment on similar recursive call in series_new on why allow_nulls=false
-                                series_to_boxrooted_ocaml_list(cr, data_type, &series, false)
-                                    .map(Some)
-                            }
-                        })
-                        .collect::<Result<_, _>>()?
-                },
+                ca.into_iter()
+                    .map(|serieso| match serieso {
+                        None => Ok(None),
+                        Some(series) => {
+                            // See comment on similar recursive call in series_new on why allow_nulls=false
+                            series_to_boxrooted_ocaml_list(cr, data_type, &series, false).map(Some)
+                        }
+                    })
+                    .collect::<Result<_, _>>()?,
                 {
                     let mut buf = Vec::with_capacity(ca.len());
 
