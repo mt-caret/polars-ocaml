@@ -41,6 +41,11 @@ module Naive_date = struct
     Date.create_exn ~y:year ~m:(Month.of_int_exn month) ~d:day
   ;;
 
+  let%expect_test "roundtrip" =
+    Quickcheck.test Date.quickcheck_generator ~f:(fun date ->
+      of_date date |> to_date_exn |> [%test_result: Date.t] ~expect:date)
+  ;;
+
   let of_string str = Date.of_string str |> of_date
 end
 

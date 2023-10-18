@@ -74,5 +74,6 @@ module Typed : sig
 
     val to_untyped : 'a t -> untyped
     val of_untyped : untyped -> packed option
+    val date : Date.t t
   end
   with type untyped := t

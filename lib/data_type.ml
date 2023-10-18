@@ -197,4 +197,12 @@ module Typed = struct
   let quickcheck_observer_packed =
     Quickcheck.Observer.unmap quickcheck_observer ~f:(fun (T t) -> to_untyped t)
   ;;
+
+  let date =
+    Custom
+      { data_type = Date
+      ; f = Common.Naive_date.to_date_exn
+      ; f_inverse = Common.Naive_date.of_date
+      }
+  ;;
 end
