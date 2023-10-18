@@ -260,33 +260,6 @@ fn rust_series_new_datetime_option(
 }
 
 #[ocaml_interop_export]
-fn rust_series_new_date(
-    cr: &mut &mut OCamlRuntime,
-    name: OCamlRef<String>,
-    values: OCamlRef<OCamlList<DynBox<NaiveDate>>>,
-) -> OCaml<DynBox<PolarsSeries>> {
-    let name: String = name.to_rust(cr);
-    let values = unwrap_abstract_vec(values.to_rust(cr));
-    OCaml::box_value(cr, Rc::new(RefCell::new(Series::new(&name, values))))
-}
-
-#[ocaml_interop_export]
-fn rust_series_new_date_option(
-    cr: &mut &mut OCamlRuntime,
-    name: OCamlRef<String>,
-    values: OCamlRef<OCamlList<Option<DynBox<NaiveDate>>>>,
-) -> OCaml<DynBox<PolarsSeries>> {
-    let name: String = name.to_rust(cr);
-    let values: Vec<Option<NaiveDate>> = values
-        .to_rust::<Vec<Option<_>>>(cr)
-        .into_iter()
-        .map(|o| o.map(|Abstract(v)| v))
-        .collect();
-
-    OCaml::box_value(cr, Rc::new(RefCell::new(Series::new(&name, values))))
-}
-
-#[ocaml_interop_export]
 fn rust_series_date_range(
     cr: &mut &mut OCamlRuntime,
     name: OCamlRef<String>,

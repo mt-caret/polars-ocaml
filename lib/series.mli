@@ -15,7 +15,7 @@ val boolo : string -> bool option list -> t
 val string : string -> string list -> t
 val stringo : string -> string option list -> t
 val date : string -> Date.t list -> t
-val date_option : string -> Date.t option list -> t
+val dateo : string -> Date.t option list -> t
 val datetime : string -> Common.Naive_datetime.t list -> t
 val datetime_option : string -> Common.Naive_datetime.t option list -> t
 val datetime' : string -> Date.t list -> t
