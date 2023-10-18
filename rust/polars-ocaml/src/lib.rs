@@ -18,6 +18,7 @@ mod tests {
         expect.assert_eq(&actual);
     }
 
+    // https://github.com/pola-rs/polars/issues/11806
     #[test]
     fn date_lit_dtype_silent_conversion_bug() {
         let date = NaiveDate::from_ymd_opt(2023, 1, 1).unwrap();
@@ -55,8 +56,7 @@ mod tests {
 
     #[test]
     fn list_date_series_creation_dtype_confusion() {
-        let empty_date_vec: Vec<NaiveDate> = vec![];
-        let empty_date_series = Series::new("test", empty_date_vec);
+        let empty_date_series = Series::new_empty("test", &DataType::Date);
         let series = Series::new("date", vec![empty_date_series]);
 
         check(
