@@ -19,7 +19,7 @@ mod tests {
     }
 
     #[test]
-    fn date_creation() {
+    fn date_lit_dtype_silent_conversion_bug() {
         let date = NaiveDate::from_ymd_opt(2023, 1, 1).unwrap();
 
         let df = DataFrame::new::<Series>(vec![])
@@ -51,7 +51,10 @@ mod tests {
                 	2023-01-01
                 ]"#]],
         );
+    }
 
+    #[test]
+    fn list_date_series_creation_dtype_confusion() {
         let empty_date_vec: Vec<NaiveDate> = vec![];
         let empty_date_series = Series::new("test", empty_date_vec);
         let series = Series::new("date", vec![empty_date_series]);
@@ -87,7 +90,7 @@ mod tests {
 
     #[test]
     #[should_panic]
-    fn date_creation_panic() {
+    fn list_date_series_creation_panic() {
         let empty_series = Series::new_empty("test", &DataType::List(Box::new(DataType::Date)));
         let _series = Series::new("test", vec![empty_series]);
     }
