@@ -86,6 +86,13 @@ mod tests {
     }
 
     #[test]
+    #[should_panic]
+    fn date_creation_panic() {
+        let empty_series = Series::new_empty("test", &DataType::List(Box::new(DataType::Date)));
+        let _series = Series::new("test", vec![empty_series]);
+    }
+
+    #[test]
     fn check_div() {
         std::env::set_var("POLARS_TABLE_WIDTH", "100");
 

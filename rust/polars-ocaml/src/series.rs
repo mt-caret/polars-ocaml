@@ -385,8 +385,6 @@ fn series_to_boxrooted_ocaml_list(
         }};
     }
 
-    // println!("series_to_boxrooted_ocaml_list: {:?} {}", data_type, series);
-
     match data_type {
         GADTDataType::Boolean => {
             let ca = series.bool().map_err(|err| err.to_string())?;
@@ -458,22 +456,44 @@ fn series_to_boxrooted_ocaml_list(
             })
         }
         GADTDataType::Date => {
-            let ca = series.date().map_err(|err| err.to_string())?;
+            if matches!(series.dtype(), DataType::Int32) {
+                let ca = series.i32().map_err(|err| err.to_string())?;
 
-            create_boxrooted_ocaml_list_handle_nulls!(
-                Abstract<NaiveDate>,
-                DynBox<NaiveDate>,
-                ca.as_date_iter().map(|o| o.map(Abstract)).collect(),
-                {
-                    let mut buf = Vec::with_capacity(ca.len());
-                    for arr in ca.downcast_iter() {
-                        buf.extend(arr.values_iter().map(|date| {
-                            Abstract(arrow2::temporal_conversions::date32_to_date(*date))
-                        }))
+                create_boxrooted_ocaml_list_handle_nulls!(
+                    Abstract<NaiveDate>,
+                    DynBox<NaiveDate>,
+                    ca.into_iter()
+                        .map(|o| o
+                            .map(|i32| Abstract(arrow2::temporal_conversions::date32_to_date(i32))))
+                        .collect(),
+                    {
+                        let mut buf = Vec::with_capacity(ca.len());
+                        for arr in ca.downcast_iter() {
+                            buf.extend(arr.values_iter().map(|date| {
+                                Abstract(arrow2::temporal_conversions::date32_to_date(*date))
+                            }))
+                        }
+                        buf
                     }
-                    buf
-                }
-            )
+                )
+            } else {
+                let ca = series.date().map_err(|err| err.to_string())?;
+
+                create_boxrooted_ocaml_list_handle_nulls!(
+                    Abstract<NaiveDate>,
+                    DynBox<NaiveDate>,
+                    ca.as_date_iter().map(|o| o.map(Abstract)).collect(),
+                    {
+                        let mut buf = Vec::with_capacity(ca.len());
+                        for arr in ca.downcast_iter() {
+                            buf.extend(arr.values_iter().map(|date| {
+                                Abstract(arrow2::temporal_conversions::date32_to_date(*date))
+                            }))
+                        }
+                        buf
+                    }
+                )
+            }
         }
         GADTDataType::List(data_type) => {
             let ca = series.list().map_err(|err| err.to_string())?;
@@ -481,15 +501,36 @@ fn series_to_boxrooted_ocaml_list(
             create_boxrooted_ocaml_list_handle_nulls!(
                 DummyBoxRoot,
                 DummyBoxRoot,
-                ca.into_iter()
-                    .map(|serieso| match serieso {
-                        None => Ok(None),
-                        Some(series) => {
-                            // See comment on similar recursive call in series_new on why allow_nulls=false
-                            series_to_boxrooted_ocaml_list(cr, data_type, &series, false).map(Some)
-                        }
-                    })
-                    .collect::<Result<_, _>>()?,
+                {
+                    ca.into_iter()
+                        .map(|serieso| match serieso {
+                            None => Ok(None),
+                            Some(series) => {
+                                // when iterating over a series containing lists of dates, the series found have dtype i32 instead of
+                                // the expected date (this clearly seems like a bug in polars), so we need a hack to convert the i32
+                                // to a date.
+                                let requires_date_hack =
+                                    match (series.dtype(), (**data_type).clone()) {
+                                        (DataType::Int32, GADTDataType::Date) => true,
+                                        _ => false,
+                                    };
+
+                                let series = if requires_date_hack {
+                                    series
+                                        .i32()
+                                        .map_err(|err| err.to_string())?
+                                        .cast(&DataType::Date)
+                                        .map_err(|err| err.to_string())?
+                                } else {
+                                    series
+                                };
+                                // See comment on similar recursive call in series_new on why allow_nulls=false
+                                series_to_boxrooted_ocaml_list(cr, data_type, &series, false)
+                                    .map(Some)
+                            }
+                        })
+                        .collect::<Result<_, _>>()?
+                },
                 {
                     let mut buf = Vec::with_capacity(ca.len());
 
@@ -646,8 +687,6 @@ fn rust_series_get(
     let Abstract(series) = series.to_rust(cr);
     let series = series.borrow();
     let index = index.to_rust::<Coerce<_, i64, usize>>(cr).get()?;
-
-    // println!("rust_series_get: {:?}, {}, {}", data_type, series, index);
 
     series_get(cr, &data_type, &series, index)?.to_ocaml(cr)
 }
