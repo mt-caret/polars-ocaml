@@ -10,6 +10,7 @@ val int : string -> int list -> t
 val into : string -> int option list -> t
 val float : string -> float list -> t
 val floato : string -> float option list -> t
+val float' : string -> floatarray -> t
 val bool : string -> bool list -> t
 val boolo : string -> bool option list -> t
 val string : string -> string list -> t
