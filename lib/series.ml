@@ -28,49 +28,75 @@ module T = struct
     | data_type -> createo data_type name values
   ;;
 
-  (* TODO: the astute reader will realize that this is quite terrible when
-     trying to passing float arrays! Unfortunately it's not clear to me how
-     to pass regular arrays safely to Rust, whereas this is definitely safe
-     since [Uniform_array.t] guarantees elements are boxed.
+  (* [create'] actually lies about its signature; if a [float array] is passed
+     and it happens to be unboxed, the Rust-side function does not know how to
+     properly handle it and will crash. So, instead of exposing it directly we
+     branch on the tag that indicates whether the array is boxed or not and
+     switch implementations between it and [float'], which takes a [floatarray]
+     (which is guaranteed to always be unboxed).
 
-     Conversely, [float'] can pass a [floatarray] which is guaranteed unboxed.
-
-     See https://github.com/mt-caret/polars-ocaml/pull/67 for how naively trying to
-     transmute on the Rust side doesn't work. *)
+     Converting from an [float array] to an [floatarray] via [Obj.magic] is
+     safe, since on the Rust side we immediately copy the values into a
+     [Vec<f64>]. *)
   external create'
     :  'a Data_type.Typed.t
     -> string
-    -> 'a Uniform_array.t
+    -> 'a array
     -> t
     = "rust_series_new_array"
 
-  let create' (type a) (data_type : a Data_type.Typed.t) name values =
-    match Data_type.Typed.flatten_custom data_type with
-    | Custom { data_type; f = _; f_inverse } ->
-      create' data_type name (Uniform_array.map values ~f:f_inverse)
-    | data_type -> create' data_type name values
+  external float'
+    :  string
+    -> floatarray
+    -> downcast_to_f32:bool
+    -> t
+    = "rust_series_new_float_array"
+
+  let%expect_test "floatarrays have double array tags" =
+    let floatarray = Stdlib.Float.Array.of_list [ 1.; 2.; 3. ] in
+    assert (Obj.tag (Obj.repr floatarray) = Obj.double_array_tag)
+  ;;
+
+  let create' =
+    let rec go : type a. a Data_type.Typed.t -> string -> a array -> t =
+      fun data_type name values ->
+      let has_double_array_tag = Obj.tag (Obj.repr values) = Obj.double_array_tag in
+      match Data_type.Typed.flatten_custom data_type with
+      | Custom { data_type; f = _; f_inverse } ->
+        let values = Array.map values ~f:f_inverse in
+        go data_type name values
+      | Float32 ->
+        if has_double_array_tag
+        then float' name (Obj.magic values) ~downcast_to_f32:true
+        else create' data_type name values
+      | Float64 ->
+        if has_double_array_tag
+        then float' name (Obj.magic values) ~downcast_to_f32:false
+        else create' data_type name values
+      | data_type -> create' data_type name values
+    in
+    go
   ;;
 
   external createo'
     :  'a Data_type.Typed.t
     -> string
-    -> 'a option Uniform_array.t
+    -> 'a option array
     -> t
     = "rust_series_new_option_array"
 
   let createo' (type a) (data_type : a Data_type.Typed.t) name values =
     match Data_type.Typed.flatten_custom data_type with
     | Custom { data_type; f = _; f_inverse } ->
-      createo' data_type name (Uniform_array.map values ~f:(Option.map ~f:f_inverse))
+      createo' data_type name (Array.map values ~f:(Option.map ~f:f_inverse))
     | data_type -> createo' data_type name values
   ;;
-
-  external float' : string -> floatarray -> t = "rust_series_new_float_array"
 
   let int = create Int64
   let into = createo Int64
   let float = create Float64
   let floato = createo Float64
+  let float' name values = float' name values ~downcast_to_f32:false
   let bool = create Boolean
   let boolo = createo Boolean
 
