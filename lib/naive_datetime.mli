@@ -9,3 +9,7 @@ val of_string : string -> t
 val of_time_ns : Time_ns.t -> t option
 val of_time_ns_exn : Time_ns.t -> t
 val to_time_ns : t -> Time_ns.t
+
+module For_testing : sig
+  val round_to_time_unit : t -> time_unit:Time_unit.t -> t
+end

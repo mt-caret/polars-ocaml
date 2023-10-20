@@ -122,6 +122,34 @@ pub fn series_new(
                 Ok(Series::new(name, values))
             }
         }
+        GADTDataType::Datetime(PolarsTimeUnit(time_unit), time_zone) => {
+            if are_values_options {
+                let values = values
+                    .into_iter()
+                    .map(|v| v.interpret::<Option<DynBox<NaiveDateTime>>>(cr).to_rust())
+                    .map(|v: Option<Abstract<NaiveDateTime>>| {
+                        v.map(|Abstract(naive_datetime)| naive_datetime)
+                    });
+
+                let mut logical = Logical::from_naive_datetime_options(name, values, *time_unit);
+
+                match time_zone {
+                    None => (),
+                    Some(time_zone) => logical
+                        .set_time_zone(time_zone.clone().get().name().to_string())
+                        .map_err(|err| err.to_string())?,
+                };
+
+                Ok(logical.into())
+            } else {
+                let values = values
+                    .into_iter()
+                    .map(|v| v.interpret::<DynBox<NaiveDateTime>>(cr).to_rust())
+                    .map(|Abstract(naive_datetime)| naive_datetime);
+
+                Ok(Logical::from_naive_datetime(name, values, *time_unit).into())
+            }
+        }
         GADTDataType::List(data_type) => {
             // Series creation doesn't work for empty lists and use of
             // `Series::new_empty` is suggested instead.
@@ -494,6 +522,71 @@ fn series_to_boxrooted_ocaml_list(
                 )
             }
         }
+        GADTDataType::Datetime(PolarsTimeUnit(time_unit), _time_zone) => {
+            if matches!(series.dtype(), DataType::Int64) {
+                let ca = series.i64().map_err(|err| err.to_string())?;
+
+                let timestamp_to_datetime = match time_unit {
+                    TimeUnit::Nanoseconds => arrow2::temporal_conversions::timestamp_ns_to_datetime,
+                    TimeUnit::Microseconds => {
+                        arrow2::temporal_conversions::timestamp_us_to_datetime
+                    }
+                    TimeUnit::Milliseconds => {
+                        arrow2::temporal_conversions::timestamp_ms_to_datetime
+                    }
+                };
+
+                create_boxrooted_ocaml_list_handle_nulls!(
+                    Abstract<NaiveDateTime>,
+                    DynBox<NaiveDateTime>,
+                    ca.into_iter()
+                        .map(|o| o.map(|i64| { Abstract(timestamp_to_datetime(i64)) }))
+                        .collect(),
+                    {
+                        let mut buf = Vec::with_capacity(ca.len());
+
+                        for arr in ca.downcast_iter() {
+                            buf.extend(
+                                arr.values_iter()
+                                    .map(|timestamp| Abstract(timestamp_to_datetime(*timestamp))),
+                            )
+                        }
+                        buf
+                    }
+                )
+            } else {
+                let ca = series.datetime().map_err(|err| err.to_string())?;
+
+                create_boxrooted_ocaml_list_handle_nulls!(
+                    Abstract<NaiveDateTime>,
+                    DynBox<NaiveDateTime>,
+                    ca.as_datetime_iter().map(|o| o.map(Abstract)).collect(),
+                    {
+                        let mut buf = Vec::with_capacity(ca.len());
+
+                        let timestamp_to_datetime = match time_unit {
+                            TimeUnit::Nanoseconds => {
+                                arrow2::temporal_conversions::timestamp_ns_to_datetime
+                            }
+                            TimeUnit::Microseconds => {
+                                arrow2::temporal_conversions::timestamp_us_to_datetime
+                            }
+                            TimeUnit::Milliseconds => {
+                                arrow2::temporal_conversions::timestamp_ms_to_datetime
+                            }
+                        };
+
+                        for arr in ca.downcast_iter() {
+                            buf.extend(
+                                arr.values_iter()
+                                    .map(|timestamp| Abstract(timestamp_to_datetime(*timestamp))),
+                            )
+                        }
+                        buf
+                    }
+                )
+            }
+        }
         GADTDataType::List(data_type) => {
             let ca = series.list().map_err(|err| err.to_string())?;
 
@@ -640,6 +733,28 @@ fn series_get(
                 .map_err(|err| err.to_string())?
                 .get(index)
                 .map(|date| Abstract(arrow2::temporal_conversions::date32_to_date(date)))
+        ),
+        GADTDataType::Datetime(PolarsTimeUnit(time_unit), _time_zone) => extract_value!(
+            Abstract<NaiveDateTime>,
+            DynBox<NaiveDateTime>,
+            series
+                .datetime()
+                .map_err(|err| err.to_string())?
+                .get(index)
+                .map(|datetime| {
+                    let timestamp_to_datetime = match time_unit {
+                        TimeUnit::Nanoseconds => {
+                            arrow2::temporal_conversions::timestamp_ns_to_datetime
+                        }
+                        TimeUnit::Microseconds => {
+                            arrow2::temporal_conversions::timestamp_us_to_datetime
+                        }
+                        TimeUnit::Milliseconds => {
+                            arrow2::temporal_conversions::timestamp_ms_to_datetime
+                        }
+                    };
+                    Abstract(timestamp_to_datetime(datetime))
+                })
         ),
         GADTDataType::List(data_type) => extract_value!(
             DummyBoxRoot,

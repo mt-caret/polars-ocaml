@@ -77,3 +77,11 @@ let%expect_test "roundtrip" =
   Quickcheck.test Time_ns_unix.quickcheck_generator ~f:(fun time_ns ->
     of_time_ns_exn time_ns |> to_time_ns |> [%test_result: Time_ns_unix.t] ~expect:time_ns)
 ;;
+
+module For_testing = struct
+  external round_to_time_unit
+    :  t
+    -> time_unit:Time_unit.t
+    -> t
+    = "rust_naive_datetime_round_to_time_unit"
+end

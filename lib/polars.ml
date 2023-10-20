@@ -10,3 +10,5 @@ module Naive_datetime = Naive_datetime
 module Schema = Schema
 module Series = Series
 module Sql_context = Sql_context
+module Time_unit = Time_unit
+module Tz = Tz

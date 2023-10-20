@@ -103,6 +103,65 @@ fn rust_naive_datetime_to_timestamp_nanos(
 }
 
 #[ocaml_interop_export]
+fn rust_naive_datetime_round_to_time_unit(
+    cr: &mut &mut OCamlRuntime,
+    datetime: OCamlRef<DynBox<NaiveDateTime>>,
+    time_unit: OCamlRef<TimeUnit>,
+) -> OCaml<DynBox<NaiveDateTime>> {
+    let Abstract(datetime) = datetime.to_rust(cr);
+    let PolarsTimeUnit(time_unit) = time_unit.to_rust(cr);
+
+    let datetime = match time_unit {
+        TimeUnit::Nanoseconds => datetime,
+        TimeUnit::Microseconds => {
+            arrow2::temporal_conversions::timestamp_us_to_datetime(datetime.timestamp_micros())
+        }
+        TimeUnit::Milliseconds => {
+            arrow2::temporal_conversions::timestamp_ms_to_datetime(datetime.timestamp_millis())
+        }
+    };
+
+    Abstract(datetime).to_ocaml(cr)
+}
+
+#[ocaml_interop_export]
+fn rust_all_tzs(
+    cr: &mut &mut OCamlRuntime,
+    unit: OCamlRef<()>,
+) -> OCaml<OCamlList<DynBox<chrono_tz::Tz>>> {
+    let () = unit.to_rust(cr);
+
+    let tzs: Vec<Abstract<chrono_tz::Tz>> =
+        chrono_tz::TZ_VARIANTS.into_iter().map(Abstract).collect();
+
+    tzs.to_ocaml(cr)
+}
+
+#[ocaml_interop_export]
+fn rust_tz_to_string(
+    cr: &mut &mut OCamlRuntime,
+    tz: OCamlRef<DynBox<chrono_tz::Tz>>,
+) -> OCaml<String> {
+    let Abstract(tz) = tz.to_rust(cr);
+
+    tz.name().to_ocaml(cr)
+}
+
+#[ocaml_interop_export]
+fn rust_tz_parse(
+    cr: &mut &mut OCamlRuntime,
+    tz_str: OCamlRef<String>,
+) -> OCaml<Option<DynBox<chrono_tz::Tz>>> {
+    let tz_str: String = tz_str.to_rust(cr);
+
+    tz_str
+        .parse::<chrono_tz::Tz>()
+        .ok()
+        .map(Abstract)
+        .to_ocaml(cr)
+}
+
+#[ocaml_interop_export]
 fn rust_schema_create(
     cr: &mut &mut OCamlRuntime,
     fields: OCamlRef<OCamlList<(String, DataType)>>,

@@ -110,6 +110,24 @@ fn rust_expr_lit(
                 .get();
             lit(Series::new("literal", [date]))
         }
+        GADTDataType::Datetime(PolarsTimeUnit(time_unit), time_zone) => {
+            let datetime = value
+                .interpret::<DynBox<NaiveDateTime>>(cr)
+                .to_rust::<Abstract<NaiveDateTime>>()
+                .get();
+
+            let timestamp = match time_unit {
+                TimeUnit::Nanoseconds => datetime
+                    .timestamp_nanos_opt()
+                    .ok_or_else(|| format!("out of range datetime: {:?}", datetime))?,
+                TimeUnit::Microseconds => datetime.timestamp_micros(),
+                TimeUnit::Milliseconds => datetime.timestamp_millis(),
+            };
+
+            let time_zone = time_zone.map(|time_zone| time_zone.get().name().to_string());
+
+            lit(LiteralValue::DateTime(timestamp, time_unit, time_zone))
+        }
         GADTDataType::List(data_type) => {
             // Since there is no direct way to create a List-based literal, we
             // create a one-element series instead, and use that.

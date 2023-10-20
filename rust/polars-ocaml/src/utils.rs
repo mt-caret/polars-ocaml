@@ -229,6 +229,7 @@ unsafe impl FromOCaml<OCamlInt63> for OCamlInt63 {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct PolarsTimeUnit(pub TimeUnit);
 
 unsafe impl FromOCaml<TimeUnit> for PolarsTimeUnit {
@@ -277,9 +278,10 @@ unsafe impl FromOCaml<DataType> for PolarsDataType {
                 DataType::Utf8,
                 DataType::Binary,
                 DataType::Date,
-                DataType::Datetime(timeunit: TimeUnit, timezone: Option<String>) => {
+                DataType::Datetime(timeunit: TimeUnit, timezone: Option<DynBox<chrono_tz::Tz>>) => {
                     let PolarsTimeUnit(timeunit) = timeunit;
-                    DataType::Datetime(timeunit, timezone)},
+                    let timezone: Option<Abstract<chrono_tz::Tz>> = timezone;
+                    DataType::Datetime(timeunit, timezone.map(|tz| tz.get().name().to_string()))},
                 DataType::Duration(timeunit: TimeUnit) => {
                     let PolarsTimeUnit(timeunit) = timeunit;
                     DataType::Duration(timeunit)},
@@ -332,8 +334,15 @@ unsafe impl ToOCaml<DataType> for PolarsDataType {
                 DataType::Date => ocaml_value(cr, 13),
                 DataType::Datetime(timeunit, timezone) => {
                     let timeunit = PolarsTimeUnit(*timeunit);
-                    let timezone = timezone.clone();
-                    ocaml_alloc_tagged_block!(cr, 0, timeunit: TimeUnit, timezone: Option<String>)
+                    let timezone = timezone.clone().map(|timezone| {
+                        Abstract(
+                            timezone
+                                .parse::<chrono_tz::Tz>()
+                                .expect("unexpected timezone"),
+                        )
+                    });
+
+                    ocaml_alloc_tagged_block!(cr, 0, timeunit: TimeUnit, timezone: Option<DynBox<chrono_tz::Tz>>)
                 }
                 DataType::Duration(timeunit) => {
                     let timeunit = PolarsTimeUnit(*timeunit);
@@ -372,8 +381,9 @@ pub enum GADTDataType {
     Float32,
     Float64,
     Utf8,
-    Date,
     Binary,
+    Date,
+    Datetime(PolarsTimeUnit, Option<Abstract<chrono_tz::Tz>>),
     List(Box<GADTDataType>),
 }
 
@@ -393,6 +403,7 @@ impl_from_ocaml_variant! {
         GADTDataType::Utf8,
         GADTDataType::Binary,
         GADTDataType::Date,
+        GADTDataType::Datetime(time_unit: TimeUnit, time_zone: Option<DynBox<chrono_tz::Tz>>),
         GADTDataType::List(data_type: GADTDataType),
     }
 }
@@ -414,6 +425,12 @@ impl GADTDataType {
             GADTDataType::Utf8 => DataType::Utf8,
             GADTDataType::Binary => DataType::Binary,
             GADTDataType::Date => DataType::Date,
+            GADTDataType::Datetime(time_unit, time_zone) => DataType::Datetime(
+                time_unit.0,
+                time_zone
+                    .clone()
+                    .map(|time_zone| time_zone.get().name().to_string()),
+            ),
             GADTDataType::List(data_type) => DataType::List(Box::new(data_type.to_data_type())),
         }
     }
@@ -747,6 +764,7 @@ unsafe impl FromOCaml<IsSorted> for PolarsIsSorted {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Abstract<T>(pub T);
 
 impl<T> Abstract<T> {
