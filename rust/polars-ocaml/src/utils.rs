@@ -53,7 +53,6 @@ where
     T: Clone + 'static,
     R: 'static,
     E: std::string::ToString,
-    Result<Abstract<R>, String>: ToOCaml<Result<DynBox<R>, String>>,
 {
     let Abstract(rust) = var.to_rust(cr);
     body(rust)
@@ -72,7 +71,6 @@ where
     T: Clone + 'static,
     R: 'static,
     E: std::string::ToString,
-    Result<Abstract<R>, String>: ToOCaml<Result<DynBox<R>, String>>,
 {
     let Abstract(rust) = var.to_rust(cr);
     body(cr, rust)
@@ -93,7 +91,6 @@ where
     T2: Clone + 'static,
     R: 'static,
     E: std::string::ToString,
-    Result<Abstract<R>, String>: ToOCaml<Result<DynBox<R>, String>>,
 {
     let Abstract(rust1) = v1.to_rust(cr);
     let Abstract(rust2) = v2.to_rust(cr);
@@ -244,8 +241,8 @@ unsafe impl FromOCaml<TimeUnit> for PolarsTimeUnit {
     }
 }
 
-unsafe impl ToOCaml<TimeUnit> for PolarsTimeUnit {
-    fn to_ocaml<'a>(&self, cr: &'a mut OCamlRuntime) -> OCaml<'a, TimeUnit> {
+unsafe impl ToOCaml<TimeUnit> for &PolarsTimeUnit {
+    fn to_ocaml<'a>(self, cr: &'a mut OCamlRuntime) -> OCaml<'a, TimeUnit> {
         let PolarsTimeUnit(timeunit) = self;
         ocaml_alloc_variant! {
             cr, timeunit => {
@@ -309,8 +306,8 @@ unsafe fn ocaml_value<T>(cr: &OCamlRuntime, n: i32) -> OCaml<T> {
     unsafe { OCaml::new(cr, OCaml::of_i32(n).raw()) }
 }
 
-unsafe impl ToOCaml<DataType> for PolarsDataType {
-    fn to_ocaml<'a>(&self, cr: &'a mut OCamlRuntime) -> OCaml<'a, DataType> {
+unsafe impl ToOCaml<DataType> for &PolarsDataType {
+    fn to_ocaml<'a>(self, cr: &'a mut OCamlRuntime) -> OCaml<'a, DataType> {
         let PolarsDataType(datatype) = self;
         // We expand out the macro here since we need to do some massaging of the
         // values to get things into the right shape to convert to OCaml values
@@ -453,8 +450,8 @@ unsafe impl FromOCaml<FillNullStrategy> for PolarsFillNullStrategy {
     }
 }
 
-unsafe impl ToOCaml<FillNullStrategy> for PolarsFillNullStrategy {
-    fn to_ocaml<'a>(&self, cr: &'a mut OCamlRuntime) -> OCaml<'a, FillNullStrategy> {
+unsafe impl ToOCaml<FillNullStrategy> for &PolarsFillNullStrategy {
+    fn to_ocaml<'a>(self, cr: &'a mut OCamlRuntime) -> OCaml<'a, FillNullStrategy> {
         let PolarsFillNullStrategy(fill_null_strategy) = self;
 
         // We expand out the macro here since we need to do some massaging of the
@@ -495,8 +492,8 @@ unsafe impl FromOCaml<InterpolationMethod> for PolarsInterpolationMethod {
     }
 }
 
-unsafe impl ToOCaml<InterpolationMethod> for PolarsInterpolationMethod {
-    fn to_ocaml<'a>(&self, cr: &'a mut OCamlRuntime) -> OCaml<'a, InterpolationMethod> {
+unsafe impl ToOCaml<InterpolationMethod> for &PolarsInterpolationMethod {
+    fn to_ocaml<'a>(self, cr: &'a mut OCamlRuntime) -> OCaml<'a, InterpolationMethod> {
         let PolarsInterpolationMethod(interpolation_method) = self;
 
         ocaml_alloc_polymorphic_variant! {
@@ -523,8 +520,8 @@ unsafe impl FromOCaml<WindowMapping> for PolarsWindowMapping {
     }
 }
 
-unsafe impl ToOCaml<WindowMapping> for PolarsWindowMapping {
-    fn to_ocaml<'a>(&self, cr: &'a mut OCamlRuntime) -> OCaml<'a, WindowMapping> {
+unsafe impl ToOCaml<WindowMapping> for &PolarsWindowMapping {
+    fn to_ocaml<'a>(self, cr: &'a mut OCamlRuntime) -> OCaml<'a, WindowMapping> {
         let PolarsWindowMapping(window_mapping) = self;
 
         unsafe {
@@ -557,8 +554,8 @@ unsafe impl FromOCaml<RankMethod> for PolarsRankMethod {
     }
 }
 
-unsafe impl ToOCaml<RankMethod> for PolarsRankMethod {
-    fn to_ocaml<'a>(&self, cr: &'a mut OCamlRuntime) -> OCaml<'a, RankMethod> {
+unsafe impl ToOCaml<RankMethod> for &PolarsRankMethod {
+    fn to_ocaml<'a>(self, cr: &'a mut OCamlRuntime) -> OCaml<'a, RankMethod> {
         let PolarsRankMethod(rank_method) = self;
         ocaml_alloc_polymorphic_variant! {
             cr, rank_method => {
@@ -751,11 +748,11 @@ unsafe impl<T: 'static + Clone> FromOCaml<DynBox<T>> for Abstract<T> {
     }
 }
 
-unsafe impl<T: 'static + Clone> ToOCaml<DynBox<T>> for Abstract<T> {
-    fn to_ocaml<'a>(&self, cr: &'a mut OCamlRuntime) -> OCaml<'a, DynBox<T>> {
+unsafe impl<T: 'static> ToOCaml<DynBox<T>> for Abstract<T> {
+    fn to_ocaml<'a>(self, cr: &'a mut OCamlRuntime) -> OCaml<'a, DynBox<T>> {
         // TODO: I don't fully understand why ToOCaml takes a &self, since that
         // prevents us from using box_value without a clone() call.
-        OCaml::box_value(cr, self.0.clone())
+        OCaml::box_value(cr, self.0)
     }
 }
 
@@ -775,8 +772,8 @@ unsafe impl FromOCaml<DummyBoxRoot> for DummyBoxRoot {
     }
 }
 
-unsafe impl ToOCaml<DummyBoxRoot> for DummyBoxRoot {
-    fn to_ocaml<'a>(&self, cr: &'a mut OCamlRuntime) -> OCaml<'a, DummyBoxRoot> {
+unsafe impl ToOCaml<DummyBoxRoot> for &DummyBoxRoot {
+    fn to_ocaml<'a>(self, cr: &'a mut OCamlRuntime) -> OCaml<'a, DummyBoxRoot> {
         self.0.get(cr)
     }
 }
@@ -802,12 +799,12 @@ impl DummyBoxRoot {
 
 pub struct OCamlIntable<T>(pub T);
 
-unsafe impl<T> ToOCaml<OCamlInt> for OCamlIntable<T>
+unsafe impl<T> ToOCaml<OCamlInt> for &OCamlIntable<T>
 where
     T: TryInto<i64> + Copy,
     <T as TryInto<i64>>::Error: Debug,
 {
-    fn to_ocaml<'a>(&self, _cr: &'a mut OCamlRuntime) -> OCaml<'a, OCamlInt> {
+    fn to_ocaml<'a>(self, _cr: &'a mut OCamlRuntime) -> OCaml<'a, OCamlInt> {
         OCaml::of_i64(self.0.try_into().expect("Couldn't convert to i64"))
             .expect("Number couldn't fit in OCaml integer")
     }

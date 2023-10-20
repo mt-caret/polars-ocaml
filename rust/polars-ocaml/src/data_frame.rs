@@ -266,7 +266,7 @@ fn rust_data_frame_columns(
     let Abstract(data_frame) = data_frame.to_rust(cr);
     let names: Vec<String> = names.to_rust(cr);
     let data_frame = data_frame.borrow();
-    data_frame
+    (data_frame
         .columns(&names)
         .map(|series| {
             series
@@ -274,8 +274,8 @@ fn rust_data_frame_columns(
                 .map(|series| Abstract(Rc::new(RefCell::new(series.clone()))))
                 .collect::<Vec<Abstract<_>>>()
         })
-        .map_err(|err| err.to_string())
-        .to_ocaml(cr)
+        .map_err(|err| err.to_string()))
+    .to_ocaml(cr)
 }
 
 #[ocaml_interop_export]
@@ -285,7 +285,7 @@ fn rust_data_frame_get_column_names(
 ) -> OCaml<OCamlList<String>> {
     let Abstract(data_frame) = data_frame.to_rust(cr);
     let data_frame = data_frame.borrow();
-    data_frame.get_column_names().to_ocaml(cr)
+    (&data_frame.get_column_names()).to_ocaml(cr)
 }
 
 #[ocaml_interop_export]
