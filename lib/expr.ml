@@ -215,7 +215,7 @@ include Common.Make_numeric (T)
 module Dt = struct
   external strftime : t -> format:string -> t = "rust_expr_dt_strftime"
 
-  (* TODO: consider supporting Time_ns.Zone.t *)
+  (* TODO: switch to using [Tz.t]s *)
   external convert_time_zone : t -> to_:string -> t = "rust_expr_dt_convert_time_zone"
 
   external replace_time_zone
