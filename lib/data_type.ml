@@ -65,7 +65,7 @@ module Typed = struct
     | Float64 : float t
     | Utf8 : string t
     | Binary : string t
-    | Date : Common.Naive_date.t t
+    | Date : Naive_date.t t
     | List : 'a t -> 'a list t
     | Custom :
         { data_type : 'a t
@@ -200,9 +200,6 @@ module Typed = struct
 
   let date =
     Custom
-      { data_type = Date
-      ; f = Common.Naive_date.to_date_exn
-      ; f_inverse = Common.Naive_date.of_date
-      }
+      { data_type = Date; f = Naive_date.to_date_exn; f_inverse = Naive_date.of_date }
   ;;
 end

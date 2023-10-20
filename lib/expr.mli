@@ -341,8 +341,8 @@ val int : int -> t
 val float : float -> t
 val bool : bool -> t
 val string : string -> t
-val naive_date : Common.Naive_date.t -> t
-val naive_datetime : Common.Naive_datetime.t -> t
+val naive_date : Naive_date.t -> t
+val naive_datetime : Naive_datetime.t -> t
 val time : Time_ns.t -> t
 val series : Series.t -> t
 

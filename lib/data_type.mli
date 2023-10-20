@@ -51,7 +51,7 @@ module Typed : sig
       | Float64 : float t
       | Utf8 : string t
       | Binary : string t
-      | Date : Common.Naive_date.t t
+      | Date : Naive_date.t t
       | List : 'a t -> 'a list t
       | Custom :
           { data_type : 'a t

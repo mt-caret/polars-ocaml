@@ -29,10 +29,10 @@ module T = struct
   let bool = lit Boolean
   let string = lit Utf8
 
-  external naive_date : Common.Naive_date.t -> t = "rust_expr_naive_date"
-  external naive_datetime : Common.Naive_datetime.t -> t = "rust_expr_naive_datetime"
+  external naive_date : Naive_date.t -> t = "rust_expr_naive_date"
+  external naive_datetime : Naive_datetime.t -> t = "rust_expr_naive_datetime"
 
-  let time time = naive_datetime (Common.Naive_datetime.of_time_ns_exn time)
+  let time time = naive_datetime (Naive_datetime.of_time_ns_exn time)
 
   external series : Series.t -> t = "rust_expr_series"
   external sort : t -> descending:bool -> t = "rust_expr_sort"
