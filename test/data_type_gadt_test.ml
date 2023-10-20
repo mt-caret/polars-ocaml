@@ -207,9 +207,7 @@ let%expect_test "Series.create and Series.create' doesn't raise" =
           let value_equal = Comparable.equal (value_compare data_type) in
           assert (value_equal value (Series.get_exn data_type series i)));
         (* Test Series.create' *)
-        let series =
-          Series.create' data_type "series_name" (Uniform_array.of_list values)
-        in
+        let series = Series.create' data_type "series_name" (Array.of_list values) in
         let values' = Series.to_list data_type series in
         let args' = Series_create.Args (data_type, values') in
         [%test_result: Series_create.t] ~expect:args' args;
@@ -286,9 +284,7 @@ let%expect_test "Series.createo and Series.createo' doesn't raise" =
           let value_equal = Option.equal (Comparable.equal (value_compare data_type)) in
           assert (value_equal value (Series.get data_type series i)));
         (* Test Series.createo' *)
-        let series =
-          Series.createo' data_type "series_name" (Uniform_array.of_list values)
-        in
+        let series = Series.createo' data_type "series_name" (Array.of_list values) in
         let values' = Series.to_option_list data_type series in
         let args' = Series_createo.Args (data_type, values') in
         [%test_result: Series_createo.t] ~expect:args' args;
