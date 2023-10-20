@@ -122,6 +122,13 @@ module Naive_datetime = struct
   external to_timestamp_nanos : t -> int = "rust_naive_datetime_to_timestamp_nanos"
 
   let to_time_ns t = to_timestamp_nanos t |> Time_ns.of_int_ns_since_epoch
+
+  let%expect_test "roundtrip" =
+    Quickcheck.test Time_ns_unix.quickcheck_generator ~f:(fun time_ns ->
+      of_time_ns_exn time_ns
+      |> to_time_ns
+      |> [%test_result: Time_ns_unix.t] ~expect:time_ns)
+  ;;
 end
 
 external record_panic_backtraces : unit -> unit = "rust_record_panic_backtraces"
