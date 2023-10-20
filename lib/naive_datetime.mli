@@ -1,5 +1,9 @@
 open Core
 
+(** [Naive_datetime.t] is an *unzoned* date and time type used by polars.
+
+    The underlying Rust type is chrono::naive::NaiveDateTime
+    (https://docs.rs/chrono/latest/chrono/naive/struct.NaiveDateTime.html). *)
 type t
 
 val of_naive_date : ?hour:int -> ?min:int -> ?sec:int -> Naive_date.t -> t
