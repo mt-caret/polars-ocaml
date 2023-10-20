@@ -4,12 +4,13 @@ type t
 
 val create : 'a Data_type.Typed.t -> string -> 'a list -> t
 val createo : 'a Data_type.Typed.t -> string -> 'a option list -> t
-val create' : 'a Data_type.Typed.t -> string -> 'a Uniform_array.t -> t
-val createo' : 'a Data_type.Typed.t -> string -> 'a option Uniform_array.t -> t
+val create' : 'a Data_type.Typed.t -> string -> 'a array -> t
+val createo' : 'a Data_type.Typed.t -> string -> 'a option array -> t
 val int : string -> int list -> t
 val into : string -> int option list -> t
 val float : string -> float list -> t
 val floato : string -> float option list -> t
+val float' : string -> floatarray -> t
 val bool : string -> bool list -> t
 val boolo : string -> bool option list -> t
 val string : string -> string list -> t

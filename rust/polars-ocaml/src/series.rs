@@ -213,6 +213,32 @@ fn rust_series_new_option_array(
     OCaml::box_value(cr, Rc::new(RefCell::new(series)))
 }
 
+#[ocaml_interop_export(raise_on_err)]
+fn rust_series_new_float_array(
+    cr: &mut &mut OCamlRuntime,
+    name: OCamlRef<String>,
+    values: OCamlRef<OCamlFloatArray>,
+    downcast_to_f32: OCamlRef<bool>,
+) -> OCaml<DynBox<PolarsSeries>> {
+    let name: String = name.to_rust(cr);
+    let values: Vec<f64> = values.to_rust(cr);
+    let downcast_to_f32: bool = downcast_to_f32.to_rust(cr);
+
+    let series = if downcast_to_f32 {
+        Series::new(
+            &name,
+            values
+                .into_iter()
+                .map(|f64| f64 as f32)
+                .collect::<Vec<f32>>(),
+        )
+    } else {
+        Series::new(&name, values)
+    };
+
+    OCaml::box_value(cr, Rc::new(RefCell::new(series)))
+}
+
 #[ocaml_interop_export]
 fn rust_series_new_datetime(
     cr: &mut &mut OCamlRuntime,

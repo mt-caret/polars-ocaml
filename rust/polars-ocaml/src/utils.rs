@@ -187,6 +187,27 @@ where
     }
 }
 
+// TODO: add this to ocaml-interop?
+pub struct OCamlFloatArray {}
+
+unsafe impl FromOCaml<OCamlFloatArray> for Vec<f64> {
+    fn from_ocaml(v: OCaml<OCamlFloatArray>) -> Self {
+        let size = unsafe { ocaml_sys::wosize_val(v.raw()) };
+
+        // an empty floatarray doesn't have the double array tag, but otherwise
+        // we always expect an unboxed float array.
+        if size > 0 {
+            assert_eq!(v.tag_value(), ocaml_sys::DOUBLE_ARRAY)
+        };
+
+        let mut vec = Vec::with_capacity(size);
+        for i in 0..size {
+            vec.push(unsafe { ocaml_sys::caml_sys_double_field(v.raw(), i) });
+        }
+        vec
+    }
+}
+
 pub struct OCamlInt63(pub i64);
 
 unsafe impl FromOCaml<OCamlInt63> for OCamlInt63 {
