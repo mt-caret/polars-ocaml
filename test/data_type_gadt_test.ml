@@ -64,6 +64,10 @@ let rec value_generator : type a. a Data_type.Typed.t -> a Quickcheck.Generator.
     |> Generator.map ~f:(fun time_ns ->
       Naive_datetime.of_time_ns_exn time_ns
       |> Naive_datetime.For_testing.round_to_time_unit ~time_unit)
+  | Duration time_unit ->
+    Time_ns.Span.quickcheck_generator
+    |> Generator.map ~f:(fun span ->
+      Duration.of_span span |> Duration.For_testing.round_to_time_unit ~time_unit)
   | List t -> value_generator t |> Generator.list
   | Custom { data_type; f; f_inverse = _ } ->
     value_generator data_type |> Generator.map ~f
@@ -92,6 +96,9 @@ let rec value_shrinker : type a. a Data_type.Typed.t -> a Quickcheck.Shrinker.t 
   | Datetime (_time_unit, _time_zone) ->
     Time_ns.quickcheck_shrinker
     |> Shrinker.map ~f:Naive_datetime.of_time_ns_exn ~f_inverse:Naive_datetime.to_time_ns
+  | Duration _time_unit ->
+    Time_ns.Span.quickcheck_shrinker
+    |> Shrinker.map ~f:Duration.of_span ~f_inverse:Duration.to_span
   | List t ->
     value_shrinker t |> Shrinker.list |> Shrinker.filter ~f:(Fn.non List.is_empty)
   | Custom { data_type; f; f_inverse } ->
@@ -118,6 +125,8 @@ let rec value_to_sexp : type a. a Data_type.Typed.t -> a -> Sexp.t =
   | Datetime (time_unit, time_zone) ->
     [%sexp_of: Time_ns.Alternate_sexp.t * Time_unit.t * Tz.t option]
       (Naive_datetime.to_time_ns a, time_unit, time_zone)
+  | Duration time_unit ->
+    [%sexp_of: Time_ns.Span.t * Time_unit.t] (Duration.to_span a, time_unit)
   | List t ->
     let sexp_of_value = value_to_sexp t in
     [%sexp_of: value list] a
@@ -143,6 +152,8 @@ let rec value_compare : type a. a Data_type.Typed.t -> a -> a -> int =
   | Date -> Comparable.lift [%compare: Date.t] ~f:Naive_date.to_date_exn a b
   | Datetime (_time_unit, _time_zone) ->
     Comparable.lift [%compare: Time_ns.t] ~f:Naive_datetime.to_time_ns a b
+  | Duration _time_unit ->
+    Comparable.lift [%compare: Time_ns.Span.t] ~f:Duration.to_span a b
   | List t -> List.compare (value_compare t) a b
   | Custom { data_type; f = _; f_inverse } ->
     Comparable.lift (value_compare data_type) ~f:f_inverse a b

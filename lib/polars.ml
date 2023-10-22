@@ -1,6 +1,7 @@
 module Common = Common
 module Data_frame = Data_frame
 module Data_type = Data_type
+module Duration = Duration
 module Env = Env
 module Expr = Expr
 module Fill_null_strategy = Fill_null_strategy

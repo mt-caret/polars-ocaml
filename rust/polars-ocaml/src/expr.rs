@@ -1,4 +1,4 @@
-use chrono::{NaiveDate, NaiveDateTime};
+use chrono::{Duration, NaiveDate, NaiveDateTime};
 use ocaml_interop::{
     DynBox, OCaml, OCamlBytes, OCamlFloat, OCamlInt, OCamlList, OCamlRef, OCamlRuntime, ToOCaml,
 };
@@ -127,6 +127,25 @@ fn rust_expr_lit(
             let time_zone = time_zone.map(|time_zone| time_zone.get().name().to_string());
 
             lit(LiteralValue::DateTime(timestamp, time_unit, time_zone))
+        }
+        GADTDataType::Duration(PolarsTimeUnit(time_unit)) => {
+            let duration = value
+                .interpret::<DynBox<Duration>>(cr)
+                .to_rust::<Abstract<Duration>>()
+                .get();
+
+            let duration = match time_unit {
+                TimeUnit::Nanoseconds => duration
+                    .num_nanoseconds()
+                    .ok_or_else(|| format!("out of range duration: {:?}", duration))?,
+                TimeUnit::Microseconds => duration
+                    .num_microseconds()
+                    .ok_or_else(|| format!("out of range duration: {:?}", duration))?,
+
+                TimeUnit::Milliseconds => duration.num_milliseconds(),
+            };
+
+            lit(LiteralValue::Duration(duration, time_unit))
         }
         GADTDataType::List(data_type) => {
             // Since there is no direct way to create a List-based literal, we
