@@ -1,4 +1,4 @@
-use chrono::{Duration, NaiveDate, NaiveDateTime};
+use chrono::{Duration, NaiveDate, NaiveDateTime, NaiveTime};
 use ocaml_interop::{
     DynBox, OCaml, OCamlBytes, OCamlFloat, OCamlInt, OCamlList, OCamlRef, OCamlRuntime, ToOCaml,
 };
@@ -146,6 +146,14 @@ fn rust_expr_lit(
             };
 
             lit(LiteralValue::Duration(duration, time_unit))
+        }
+        GADTDataType::Time => {
+            let time = value
+                .interpret::<DynBox<NaiveTime>>(cr)
+                .to_rust::<Abstract<NaiveTime>>()
+                .get();
+
+            lit(LiteralValue::Time(crate::misc::time_to_time64ns(&time)))
         }
         GADTDataType::List(data_type) => {
             // Since there is no direct way to create a List-based literal, we

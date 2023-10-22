@@ -8,6 +8,7 @@ module Fill_null_strategy = Fill_null_strategy
 module Lazy_frame = Lazy_frame
 module Naive_date = Naive_date
 module Naive_datetime = Naive_datetime
+module Naive_time = Naive_time
 module Schema = Schema
 module Series = Series
 module Sql_context = Sql_context

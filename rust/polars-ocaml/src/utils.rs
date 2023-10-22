@@ -385,6 +385,7 @@ pub enum GADTDataType {
     Date,
     Datetime(PolarsTimeUnit, Option<Abstract<chrono_tz::Tz>>),
     Duration(PolarsTimeUnit),
+    Time,
     List(Box<GADTDataType>),
 }
 
@@ -406,6 +407,7 @@ impl_from_ocaml_variant! {
         GADTDataType::Date,
         GADTDataType::Datetime(time_unit: TimeUnit, time_zone: Option<DynBox<chrono_tz::Tz>>),
         GADTDataType::Duration(time_unit: TimeUnit),
+        GADTDataType::Time,
         GADTDataType::List(data_type: GADTDataType),
     }
 }
@@ -434,6 +436,7 @@ impl GADTDataType {
                     .map(|time_zone| time_zone.get().name().to_string()),
             ),
             GADTDataType::Duration(time_unit) => DataType::Duration(time_unit.0),
+            GADTDataType::Time => DataType::Time,
             GADTDataType::List(data_type) => DataType::List(Box::new(data_type.to_data_type())),
         }
     }

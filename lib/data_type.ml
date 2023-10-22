@@ -55,6 +55,7 @@ module Typed = struct
     | Date : Naive_date.t t
     | Datetime : Time_unit.t * Tz.t option -> Naive_datetime.t t
     | Duration : Time_unit.t -> Duration.t t
+    | Time : Naive_time.t t
     | List : 'a t -> 'a list t
     | Custom :
         { data_type : 'a t
@@ -86,6 +87,7 @@ module Typed = struct
       else None
     | Duration tu1, Duration tu2 ->
       if [%compare.equal: Time_unit.t] tu1 tu2 then Some Type_equal.T else None
+    | Time, Time -> Some Type_equal.T
     | List t1, List t2 ->
       (match strict_type_equal t1 t2 with
        | None -> None
@@ -131,6 +133,7 @@ module Typed = struct
     | Date -> Date
     | Datetime (time_unit, time_zone) -> Datetime (time_unit, time_zone)
     | Duration time_unit -> Duration time_unit
+    | Time -> Time
     | List t -> List (to_untyped t)
     | Custom { data_type; f = _; f_inverse = _ } -> to_untyped data_type
   ;;
@@ -216,5 +219,10 @@ module Typed = struct
       ; f = Duration.to_span
       ; f_inverse = Duration.of_span
       }
+  ;;
+
+  let ofday =
+    Custom
+      { data_type = Time; f = Naive_time.to_ofday; f_inverse = Naive_time.of_ofday_exn }
   ;;
 end
