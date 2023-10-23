@@ -1,5 +1,5 @@
 use crate::utils::*;
-use chrono::naive::{NaiveDate, NaiveDateTime};
+use chrono::naive::{NaiveDate, NaiveDateTime, NaiveTime};
 use chrono::Duration;
 use ocaml_interop::{
     BoxRoot, DynBox, OCaml, OCamlBytes, OCamlFloat, OCamlInt, OCamlList, OCamlRef, OCamlRuntime,
@@ -166,6 +166,23 @@ pub fn series_new(
                     .map(|Abstract(duration)| duration);
 
                 Ok(Logical::from_duration(name, values, *time_unit).into())
+            }
+        }
+        GADTDataType::Time => {
+            if are_values_options {
+                let values = values
+                    .into_iter()
+                    .map(|v| v.interpret::<Option<DynBox<NaiveTime>>>(cr).to_rust())
+                    .map(|v: Option<Abstract<NaiveTime>>| v.map(|Abstract(time)| time));
+
+                Ok(Logical::from_naive_time_options(name, values).into())
+            } else {
+                let values = values
+                    .into_iter()
+                    .map(|v| v.interpret::<DynBox<NaiveTime>>(cr).to_rust())
+                    .map(|Abstract(time)| time);
+
+                Ok(Logical::from_naive_time(name, values).into())
             }
         }
         GADTDataType::List(data_type) => {
@@ -639,6 +656,48 @@ fn series_to_boxrooted_ocaml_list(
                 )
             }
         }
+        GADTDataType::Time => {
+            if matches!(series.dtype(), DataType::Int64) {
+                let ca = series.i64().map_err(|err| err.to_string())?;
+
+                create_boxrooted_ocaml_list_handle_nulls!(
+                    Abstract<NaiveTime>,
+                    DynBox<NaiveTime>,
+                    ca.into_iter()
+                        .map(|o| o.map(|i64| {
+                            Abstract(arrow2::temporal_conversions::time64ns_to_time(i64))
+                        }))
+                        .collect(),
+                    {
+                        let mut buf = Vec::with_capacity(ca.len());
+
+                        for arr in ca.downcast_iter() {
+                            buf.extend(arr.values_iter().map(|timestamp| {
+                                Abstract(arrow2::temporal_conversions::time64ns_to_time(*timestamp))
+                            }))
+                        }
+                        buf
+                    }
+                )
+            } else {
+                let ca = series.time().map_err(|err| err.to_string())?;
+
+                create_boxrooted_ocaml_list_handle_nulls!(
+                    Abstract<NaiveTime>,
+                    DynBox<NaiveTime>,
+                    ca.as_time_iter().map(|o| o.map(Abstract)).collect(),
+                    {
+                        let mut buf = Vec::with_capacity(ca.len());
+                        for arr in ca.downcast_iter() {
+                            buf.extend(arr.values_iter().map(|time| {
+                                Abstract(arrow2::temporal_conversions::time64ns_to_time(*time))
+                            }))
+                        }
+                        buf
+                    }
+                )
+            }
+        }
         GADTDataType::List(data_type) => {
             let ca = series.list().map_err(|err| err.to_string())?;
 
@@ -828,6 +887,17 @@ fn series_get(
                         }
                     };
                     Abstract(duration_conversion(duration))
+                })
+        ),
+        GADTDataType::Time => extract_value!(
+            Abstract<NaiveTime>,
+            DynBox<NaiveTime>,
+            series
+                .time()
+                .map_err(|err| err.to_string())?
+                .get(index)
+                .map(|duration| {
+                    Abstract(arrow2::temporal_conversions::time64ns_to_time(duration))
                 })
         ),
         GADTDataType::List(data_type) => extract_value!(

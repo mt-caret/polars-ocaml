@@ -68,6 +68,8 @@ let rec value_generator : type a. a Data_type.Typed.t -> a Quickcheck.Generator.
     Time_ns.Span.quickcheck_generator
     |> Generator.map ~f:(fun span ->
       Duration.of_span span |> Duration.For_testing.round_to_time_unit ~time_unit)
+  | Time ->
+    Time_ns.Ofday.quickcheck_generator |> Generator.filter_map ~f:Naive_time.of_ofday
   | List t -> value_generator t |> Generator.list
   | Custom { data_type; f; f_inverse = _ } ->
     value_generator data_type |> Generator.map ~f
@@ -99,6 +101,9 @@ let rec value_shrinker : type a. a Data_type.Typed.t -> a Quickcheck.Shrinker.t 
   | Duration _time_unit ->
     Time_ns.Span.quickcheck_shrinker
     |> Shrinker.map ~f:Duration.of_span ~f_inverse:Duration.to_span
+  | Time ->
+    Time_ns.Ofday.quickcheck_shrinker
+    |> Shrinker.map ~f:Naive_time.of_ofday_exn ~f_inverse:Naive_time.to_ofday
   | List t ->
     value_shrinker t |> Shrinker.list |> Shrinker.filter ~f:(Fn.non List.is_empty)
   | Custom { data_type; f; f_inverse } ->
@@ -125,6 +130,7 @@ let rec value_to_sexp : type a. a Data_type.Typed.t -> a -> Sexp.t =
   | Datetime (time_unit, time_zone) ->
     [%sexp_of: Time_ns.Alternate_sexp.t * Time_unit.t * Tz.t option]
       (Naive_datetime.to_time_ns a, time_unit, time_zone)
+  | Time -> [%sexp_of: Time_ns.Ofday.t] (Naive_time.to_ofday a)
   | Duration time_unit ->
     [%sexp_of: Time_ns.Span.t * Time_unit.t] (Duration.to_span a, time_unit)
   | List t ->
@@ -154,6 +160,7 @@ let rec value_compare : type a. a Data_type.Typed.t -> a -> a -> int =
     Comparable.lift [%compare: Time_ns.t] ~f:Naive_datetime.to_time_ns a b
   | Duration _time_unit ->
     Comparable.lift [%compare: Time_ns.Span.t] ~f:Duration.to_span a b
+  | Time -> Comparable.lift [%compare: Time_ns.Ofday.t] ~f:Naive_time.to_ofday a b
   | List t -> List.compare (value_compare t) a b
   | Custom { data_type; f = _; f_inverse } ->
     Comparable.lift (value_compare data_type) ~f:f_inverse a b

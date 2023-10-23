@@ -1,7 +1,6 @@
 use crate::utils::PolarsDataType;
 use crate::utils::*;
-use chrono::naive::{NaiveDate, NaiveDateTime};
-use chrono::{Datelike, Duration};
+use chrono::{Datelike, Duration, NaiveDate, NaiveDateTime, NaiveTime, Timelike};
 use ocaml_interop::{DynBox, OCaml, OCamlInt, OCamlList, OCamlRef, ToOCaml};
 use polars::prelude::*;
 use polars_ocaml_macros::ocaml_interop_export;
@@ -171,6 +170,41 @@ fn rust_duration_round_to_time_unit(
     };
 
     Abstract(duration).to_ocaml(cr)
+}
+
+#[ocaml_interop_export]
+fn rust_time_ns_ofday_to_time(
+    cr: &mut &mut OCamlRuntime,
+    time_ns_ofday: OCamlRef<OCamlInt63>,
+) -> OCaml<Option<DynBox<NaiveTime>>> {
+    let OCamlInt63(time_ns_ofday) = time_ns_ofday.to_rust(cr);
+
+    arrow2::temporal_conversions::time64ns_to_time_opt(time_ns_ofday)
+        .map(Abstract)
+        .to_ocaml(cr)
+}
+
+// TODO: should probably quickcheck roundtrip!
+// Taken from
+// https://github.com/pola-rs/polars/blob/b3f6c828fcdc51de75edeb22f39327b2c6b39624/crates/polars-core/src/chunked_array/temporal/time.rs#L9C1-L18C2
+const SECONDS_IN_MINUTE: i64 = 60;
+const SECONDS_IN_HOUR: i64 = 3_600;
+pub fn time_to_time64ns(time: &NaiveTime) -> i64 {
+    (time.hour() as i64 * SECONDS_IN_HOUR
+        + time.minute() as i64 * SECONDS_IN_MINUTE
+        + time.second() as i64)
+        * arrow2::temporal_conversions::NANOSECONDS
+        + time.nanosecond() as i64
+}
+
+#[ocaml_interop_export]
+fn rust_time_to_nanoseconds(
+    cr: &mut &mut OCammlRuntime,
+    time: OCamlRef<DynBox<NaiveTime>>,
+) -> OCaml<OCamlInt> {
+    let Abstract(time) = time.to_rust(cr);
+
+    time_to_time64ns(&time).to_ocaml(cr)
 }
 
 #[ocaml_interop_export]
