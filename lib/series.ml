@@ -105,54 +105,37 @@ module T = struct
   let string = create Utf8
   let stringo = createo Utf8
 
-  external datetime
-    :  string
-    -> Common.Naive_datetime.t list
-    -> t
-    = "rust_series_new_datetime"
+  external datetime : string -> Naive_datetime.t list -> t = "rust_series_new_datetime"
 
   external datetime_option
     :  string
-    -> Common.Naive_datetime.t option list
+    -> Naive_datetime.t option list
     -> t
     = "rust_series_new_datetime_option"
 
-  let datetime' name dates =
-    datetime name (List.map dates ~f:Common.Naive_datetime.of_date)
-  ;;
+  let datetime' name dates = datetime name (List.map dates ~f:Naive_datetime.of_date)
 
   let datetime_option' name dates =
-    datetime_option name (List.map dates ~f:(Option.map ~f:Common.Naive_datetime.of_date))
+    datetime_option name (List.map dates ~f:(Option.map ~f:Naive_datetime.of_date))
   ;;
 
   let time string times =
-    datetime string (List.map times ~f:Common.Naive_datetime.of_time_ns_exn)
+    datetime string (List.map times ~f:Naive_datetime.of_time_ns_exn)
   ;;
 
   let time_option string times =
     datetime_option
       string
-      (List.map times ~f:(Option.map ~f:Common.Naive_datetime.of_time_ns_exn))
+      (List.map times ~f:(Option.map ~f:Naive_datetime.of_time_ns_exn))
   ;;
 
-  external date : string -> Common.Naive_date.t list -> t = "rust_series_new_date"
-
-  let date name dates = date name (List.map dates ~f:Common.Naive_date.of_date)
-
-  external date_option
-    :  string
-    -> Common.Naive_date.t option list
-    -> t
-    = "rust_series_new_date_option"
-
-  let date_option name dates =
-    date_option name (List.map dates ~f:(Option.map ~f:Common.Naive_date.of_date))
-  ;;
+  let date = create Data_type.Typed.date
+  let dateo = createo Data_type.Typed.date
 
   external date_range
     :  string
-    -> Common.Naive_datetime.t
-    -> Common.Naive_datetime.t
+    -> Naive_datetime.t
+    -> Naive_datetime.t
     -> every:string option
     -> cast_to_date:bool
     -> (t, string) result
@@ -166,8 +149,8 @@ module T = struct
     date_range_castable
       ?every
       name
-      ~start:(Common.Naive_datetime.of_date start)
-      ~stop:(Common.Naive_datetime.of_date stop)
+      ~start:(Naive_datetime.of_date start)
+      ~stop:(Naive_datetime.of_date stop)
       ~cast_to_date:true
   ;;
 
@@ -187,8 +170,8 @@ module T = struct
     date_range_castable
       ?every
       name
-      ~start:(Common.Naive_datetime.of_date start)
-      ~stop:(Common.Naive_datetime.of_date stop)
+      ~start:(Naive_datetime.of_date start)
+      ~stop:(Naive_datetime.of_date stop)
       ~cast_to_date:false
   ;;
 

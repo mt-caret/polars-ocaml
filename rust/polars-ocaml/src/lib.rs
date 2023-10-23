@@ -8,6 +8,7 @@ mod utils;
 
 #[cfg(test)]
 mod tests {
+    use chrono::NaiveDate;
     use expect_test::{expect, Expect};
     use polars::prelude::*;
     use std::fmt::Debug;
@@ -15,6 +16,83 @@ mod tests {
     fn check<T: Debug>(actual: T, expect: Expect) {
         let actual = format!("{:?}", actual);
         expect.assert_eq(&actual);
+    }
+
+    // https://github.com/pola-rs/polars/issues/11806
+    #[test]
+    fn date_lit_dtype_silent_conversion_bug() {
+        let date = NaiveDate::from_ymd_opt(2023, 1, 1).unwrap();
+
+        let df = DataFrame::new::<Series>(vec![])
+            .unwrap()
+            .lazy()
+            .select([lit(date)])
+            .collect()
+            .unwrap();
+
+        check(
+            df.clone(),
+            expect![[r#"
+                shape: (1, 1)
+                ┌─────────────────────┐
+                │ literal             │
+                │ ---                 │
+                │ datetime[ns]        │
+                ╞═════════════════════╡
+                │ 2023-01-01 00:00:00 │
+                └─────────────────────┘"#]],
+        );
+
+        check(
+            Series::new("date", [date]),
+            expect![[r#"
+                shape: (1,)
+                Series: 'date' [date]
+                [
+                	2023-01-01
+                ]"#]],
+        );
+    }
+
+    #[test]
+    fn list_date_series_creation_dtype_confusion() {
+        let empty_date_series = Series::new_empty("test", &DataType::Date);
+        let series = Series::new("date", vec![empty_date_series]);
+
+        check(
+            series.clone(),
+            expect![[r#"
+                shape: (1,)
+                Series: 'date' [list[date]]
+                [
+                	[]
+                ]"#]],
+        );
+
+        check(
+            series.get(0).unwrap(),
+            expect![[r#"
+                List(shape: (0,)
+                Series: '' [date]
+                [
+                ])"#]],
+        );
+
+        check(
+            series.list().unwrap().get(0).unwrap(),
+            expect![[r#"
+                shape: (0,)
+                Series: 'date' [i32]
+                [
+                ]"#]],
+        );
+    }
+
+    #[test]
+    #[should_panic]
+    fn list_date_series_creation_panic() {
+        let empty_series = Series::new_empty("test", &DataType::List(Box::new(DataType::Date)));
+        let _series = Series::new("test", vec![empty_series]);
     }
 
     #[test]

@@ -16,6 +16,8 @@ ocaml-sys = "0.23.0"
 polars-sql = "0.32.1"
 smartstring = "1.0.1"
 polars-ocaml-macros = { path = "../polars-ocaml-macros" }
+arrow2 = "0.18.0"
+chrono-tz = "0.8.3"
 
 [dependencies.polars]
 version = "0.32.1"

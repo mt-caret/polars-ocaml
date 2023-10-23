@@ -1,4 +1,4 @@
-use chrono::{NaiveDate, NaiveDateTime};
+use chrono::{Duration, NaiveDate, NaiveDateTime, NaiveTime};
 use ocaml_interop::{
     DynBox, OCaml, OCamlBytes, OCamlFloat, OCamlInt, OCamlList, OCamlRef, OCamlRuntime, ToOCaml,
 };
@@ -100,6 +100,61 @@ fn rust_expr_lit(
         GADTDataType::Float64 => lit(value.interpret::<OCamlFloat>(cr).to_rust::<f64>()),
         GADTDataType::Utf8 => lit(value.interpret::<String>(cr).to_rust::<String>()),
         GADTDataType::Binary => lit(value.interpret::<OCamlBytes>(cr).to_rust::<Vec<u8>>()),
+        GADTDataType::Date => {
+            // This cast is a hack to work around the bug (demonstrated in lib.rs)
+            // where passing a date directly to lit() results in the dtype of the
+            // literal getting converted into a datetime[ns].
+            let date = value
+                .interpret::<DynBox<NaiveDate>>(cr)
+                .to_rust::<Abstract<NaiveDate>>()
+                .get();
+            lit(Series::new("literal", [date]))
+        }
+        GADTDataType::Datetime(PolarsTimeUnit(time_unit), time_zone) => {
+            let datetime = value
+                .interpret::<DynBox<NaiveDateTime>>(cr)
+                .to_rust::<Abstract<NaiveDateTime>>()
+                .get();
+
+            let timestamp = match time_unit {
+                TimeUnit::Nanoseconds => datetime
+                    .timestamp_nanos_opt()
+                    .ok_or_else(|| format!("out of range datetime: {:?}", datetime))?,
+                TimeUnit::Microseconds => datetime.timestamp_micros(),
+                TimeUnit::Milliseconds => datetime.timestamp_millis(),
+            };
+
+            let time_zone = time_zone.map(|time_zone| time_zone.get().name().to_string());
+
+            lit(LiteralValue::DateTime(timestamp, time_unit, time_zone))
+        }
+        GADTDataType::Duration(PolarsTimeUnit(time_unit)) => {
+            let duration = value
+                .interpret::<DynBox<Duration>>(cr)
+                .to_rust::<Abstract<Duration>>()
+                .get();
+
+            let duration = match time_unit {
+                TimeUnit::Nanoseconds => duration
+                    .num_nanoseconds()
+                    .ok_or_else(|| format!("out of range duration: {:?}", duration))?,
+                TimeUnit::Microseconds => duration
+                    .num_microseconds()
+                    .ok_or_else(|| format!("out of range duration: {:?}", duration))?,
+
+                TimeUnit::Milliseconds => duration.num_milliseconds(),
+            };
+
+            lit(LiteralValue::Duration(duration, time_unit))
+        }
+        GADTDataType::Time => {
+            let time = value
+                .interpret::<DynBox<NaiveTime>>(cr)
+                .to_rust::<Abstract<NaiveTime>>()
+                .get();
+
+            lit(LiteralValue::Time(crate::misc::time_to_time64ns(&time)))
+        }
         GADTDataType::List(data_type) => {
             // Since there is no direct way to create a List-based literal, we
             // create a one-element series instead, and use that.
