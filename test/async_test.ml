@@ -264,7 +264,7 @@ let%expect_test "Joins (with async collections)" =
                ; "2020-01-01 09:03:00"
                ; "2020-01-01 09:06:00"
                ]
-               ~f:Common.Naive_datetime.of_string)
+               ~f:Naive_datetime.of_string)
         ; string "stock" [ "A"; "B"; "B"; "C" ]
         ; int "trade" [ 101; 299; 301; 500 ]
         ]
@@ -294,7 +294,7 @@ let%expect_test "Joins (with async collections)" =
                ; "2020-01-01 09:04:00"
                ; "2020-01-01 09:06:00"
                ]
-               ~f:Common.Naive_datetime.of_string)
+               ~f:Naive_datetime.of_string)
         ; string "stock" [ "A"; "B"; "C"; "A" ]
         ; int "trade" [ 100; 300; 501; 102 ]
         ]

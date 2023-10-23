@@ -29,10 +29,10 @@ module T = struct
   let bool = lit Boolean
   let string = lit Utf8
 
-  external naive_date : Common.Naive_date.t -> t = "rust_expr_naive_date"
-  external naive_datetime : Common.Naive_datetime.t -> t = "rust_expr_naive_datetime"
+  external naive_date : Naive_date.t -> t = "rust_expr_naive_date"
+  external naive_datetime : Naive_datetime.t -> t = "rust_expr_naive_datetime"
 
-  let time time = naive_datetime (Common.Naive_datetime.of_time_ns_exn time)
+  let time time = naive_datetime (Naive_datetime.of_time_ns_exn time)
 
   external series : Series.t -> t = "rust_expr_series"
   external sort : t -> descending:bool -> t = "rust_expr_sort"
@@ -215,7 +215,7 @@ include Common.Make_numeric (T)
 module Dt = struct
   external strftime : t -> format:string -> t = "rust_expr_dt_strftime"
 
-  (* TODO: consider supporting Time_ns.Zone.t *)
+  (* TODO: switch to using [Tz.t]s *)
   external convert_time_zone : t -> to_:string -> t = "rust_expr_dt_convert_time_zone"
 
   external replace_time_zone
