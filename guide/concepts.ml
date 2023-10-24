@@ -23,7 +23,7 @@ let%expect_test "Data Structures" =
         ; List.map
             [ "2022-01-01"; "2022-01-02"; "2022-01-03"; "2022-01-04"; "2022-01-05" ]
             ~f:Date.of_string
-          |> date "date"
+          |> date' "date"
         ; float "float" [ 4.; 5.; 6.; 7.; 8. ]
         ]
   in

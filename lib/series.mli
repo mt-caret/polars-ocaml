@@ -15,14 +15,22 @@ val bool : string -> bool list -> t
 val boolo : string -> bool option list -> t
 val string : string -> string list -> t
 val stringo : string -> string option list -> t
-val date : string -> Date.t list -> t
-val dateo : string -> Date.t option list -> t
+val date : string -> Naive_date.t list -> t
+val dateo : string -> Naive_date.t option list -> t
+val date' : string -> Date.t list -> t
+val dateo' : string -> Date.t option list -> t
 val datetime : string -> Naive_datetime.t list -> t
-val datetime_option : string -> Naive_datetime.t option list -> t
-val datetime' : string -> Date.t list -> t
-val datetime_option' : string -> Date.t option list -> t
-val time : string -> Time_ns.t list -> t
-val time_option : string -> Time_ns.t option list -> t
+val datetimeo : string -> Naive_datetime.t option list -> t
+val datetime' : string -> Time_ns.t list -> t
+val datetimeo' : string -> Time_ns.t option list -> t
+val duration : string -> Duration.t list -> t
+val durationo : string -> Duration.t option list -> t
+val duration' : string -> Time_ns.Span.t list -> t
+val durationo' : string -> Time_ns.Span.t option list -> t
+val time : string -> Naive_time.t list -> t
+val timeo : string -> Naive_time.t option list -> t
+val time' : string -> Time_ns.Ofday.t list -> t
+val timeo' : string -> Time_ns.Ofday.t option list -> t
 
 val date_range
   :  ?every:string
