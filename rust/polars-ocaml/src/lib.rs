@@ -1,11 +1,12 @@
 mod data_frame;
 mod expr;
+mod interop;
 mod lazy_frame;
 mod misc;
+mod polars_types;
 mod series;
 mod sql_context;
 mod time;
-mod utils;
 
 #[cfg(test)]
 mod tests {

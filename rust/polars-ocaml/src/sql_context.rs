@@ -1,4 +1,4 @@
-use crate::utils::*;
+use crate::interop::*;
 use ocaml_interop::{DynBox, OCaml, OCamlList, OCamlRef, ToOCaml};
 use polars::prelude::*;
 use polars_ocaml_macros::ocaml_interop_export;

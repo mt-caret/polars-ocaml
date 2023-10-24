@@ -1,4 +1,5 @@
-use crate::utils::*;
+use crate::interop::*;
+use crate::polars_types::*;
 use chrono::{Datelike, Duration, NaiveDate, NaiveDateTime, NaiveTime, Timelike};
 use ocaml_interop::{DynBox, OCaml, OCamlInt, OCamlList, OCamlRef, ToOCaml};
 use polars::prelude::*;
