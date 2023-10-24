@@ -4,6 +4,7 @@ mod lazy_frame;
 mod misc;
 mod series;
 mod sql_context;
+mod time;
 mod utils;
 
 #[cfg(test)]

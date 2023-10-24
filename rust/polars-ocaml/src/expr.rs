@@ -153,7 +153,7 @@ fn rust_expr_lit(
                 .to_rust::<Abstract<NaiveTime>>()
                 .get();
 
-            lit(LiteralValue::Time(crate::misc::time_to_time64ns(&time)))
+            lit(LiteralValue::Time(crate::time::time_to_time64ns(&time)))
         }
         GADTDataType::List(data_type) => {
             // Since there is no direct way to create a List-based literal, we
