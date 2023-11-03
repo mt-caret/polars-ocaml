@@ -36,3 +36,10 @@ let quickcheck_shrinker = Quickcheck.Shrinker.empty ()
 let quickcheck_observer = Quickcheck.Observer.of_list (all ()) ~equal:[%compare.equal: t]
 let of_time_zone time_zone = Time_ns_unix.Zone.to_string time_zone |> parse
 let to_time_zone t = Time_ns_unix.Zone.find (to_string t)
+
+include Pretty_printer.Register (struct
+    type nonrec t = t
+
+    let module_name = "Polars.Tz"
+    let to_string = to_string
+  end)

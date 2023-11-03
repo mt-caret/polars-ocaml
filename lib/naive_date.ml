@@ -27,3 +27,12 @@ let%expect_test "roundtrip" =
 ;;
 
 let of_string str = Date.of_string str |> of_date
+
+external to_string : t -> string = "rust_naive_date_to_string"
+
+include Pretty_printer.Register (struct
+    type nonrec t = t
+
+    let module_name = "Polars.Naive_date"
+    let to_string = to_string
+  end)
