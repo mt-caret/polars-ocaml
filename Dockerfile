@@ -2,12 +2,12 @@ FROM ubuntu:22.04
 
 LABEL org.opencontainers.image.source=https://github.com/mt-caret/polars-ocaml
 
-# clang is required as a linker driver for mold (if using mold, which is recommended)
 RUN apt-get update && apt-get install -y \
     curl \
     opam \
-    clang \
     mold
+# Overwrite default linker with mold (this drastically speeds up builds)
+RUN sudo ln -sf /usr/local/bin/mold "$(realpath /usr/bin/ld)"
 RUN opam init --auto-setup --compiler=4.14.1 --disable-sandboxing
 
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
