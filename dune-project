@@ -29,13 +29,14 @@
   (odoc :with-doc)
   (re2 :with-test)
   (shell :with-test)
+  conf-rust-2021
   core
   core_kernel
+  core_unix
   dune
   ocaml
   ppx_jane
-  ppx_typed_fields
-  conf-rust-2021)
+  ppx_typed_fields)
  (tags
   (data-science polars rust)))
 

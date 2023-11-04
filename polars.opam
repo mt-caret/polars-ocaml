@@ -17,13 +17,14 @@ depends: [
   "odoc" {with-doc}
   "re2" {with-test}
   "shell" {with-test}
+  "conf-rust-2021"
   "core"
   "core_kernel"
+  "core_unix"
   "dune" {>= "3.8"}
   "ocaml"
   "ppx_jane"
   "ppx_typed_fields"
-  "conf-rust-2021"
 ]
 build: [
   ["dune" "subst"] {dev}
@@ -40,3 +41,6 @@ build: [
   ]
 ]
 dev-repo: "git+https://github.com/mt-caret/polars-ocaml.git"
+# 32bit is not supported, and the combination of macos+arm64 is known to not
+# work due to issues in DWARF unwinding in OCaml
+available: (os = "linux" & (arch = "x86_64" | arch = "arm64")) | (os = "macos" & arch = "x86_64")
