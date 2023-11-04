@@ -35,7 +35,6 @@
  (foreign_archives polars_ocaml)
  (libraries core core_kernel.nonempty_list core_unix core_unix.time_ns_unix)
  (inline_tests)
- (library_flags -ccopt -fuse-ld=mold)
  (preprocess
   (pps ppx_jane ppx_typed_fields)))
 

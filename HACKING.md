@@ -24,3 +24,9 @@ Running benchmarks:
 ```
 $ ./bench/runner.sh dataframe_builders_bench
 ```
+
+It is strongly recommended that you set up the mold linker, since builds
+often are bottlenecked on very long link times:
+
+1. Follow https://github.com/rui314/mold#how-to-use to configure the linker for Rust
+2. add `(library_flags -ccopt -fuse-ld=mold)` to the `library` stanza in various dune files
