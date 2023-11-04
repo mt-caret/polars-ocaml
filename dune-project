@@ -13,9 +13,6 @@
 
 (license MIT)
 
-; TODO: update below link once we start generating documentation
-; (https://github.com/mt-caret/polars-ocaml/issues/5)
-
 (documentation https://github.com/mt-caret/polars-ocaml)
 
 (using mdx 0.4)
@@ -37,7 +34,8 @@
   dune
   ocaml
   ppx_jane
-  ppx_typed_fields)
+  ppx_typed_fields
+  conf-rust-2021)
  (tags
   (data-science polars rust)))
 

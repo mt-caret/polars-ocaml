@@ -23,6 +23,7 @@ depends: [
   "ocaml"
   "ppx_jane"
   "ppx_typed_fields"
+  "conf-rust-2021"
 ]
 build: [
   ["dune" "subst"] {dev}
