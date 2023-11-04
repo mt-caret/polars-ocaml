@@ -9,7 +9,7 @@ edition = "2021"
 crate-type = ["staticlib", "cdylib"]
 
 [dependencies]
-chrono = "0.4.26"
+chrono = "^0.4.31"
 ocaml = "0.22.4"
 ocaml-interop = "0.9.2"
 ocaml-sys = "0.23.0"

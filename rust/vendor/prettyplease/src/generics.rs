@@ -154,7 +154,6 @@ impl Printer {
         use syn::{parenthesized, token, Token};
 
         enum TypeParamBoundVerbatim {
-            Ellipsis,
             TildeConst(TraitBound),
         }
 
@@ -166,19 +165,11 @@ impl Printer {
                 } else {
                     (None, input)
                 };
-                let lookahead = content.lookahead1();
-                if lookahead.peek(Token![~]) {
-                    content.parse::<Token![~]>()?;
-                    content.parse::<Token![const]>()?;
-                    let mut bound: TraitBound = content.parse()?;
-                    bound.paren_token = paren_token;
-                    Ok(TypeParamBoundVerbatim::TildeConst(bound))
-                } else if lookahead.peek(Token![...]) {
-                    content.parse::<Token![...]>()?;
-                    Ok(TypeParamBoundVerbatim::Ellipsis)
-                } else {
-                    Err(lookahead.error())
-                }
+                content.parse::<Token![~]>()?;
+                content.parse::<Token![const]>()?;
+                let mut bound: TraitBound = content.parse()?;
+                bound.paren_token = paren_token;
+                Ok(TypeParamBoundVerbatim::TildeConst(bound))
             }
         }
 
@@ -188,9 +179,6 @@ impl Printer {
         };
 
         match bound {
-            TypeParamBoundVerbatim::Ellipsis => {
-                self.word("...");
-            }
             TypeParamBoundVerbatim::TildeConst(trait_bound) => {
                 let tilde_const = true;
                 self.trait_bound(&trait_bound, tilde_const);

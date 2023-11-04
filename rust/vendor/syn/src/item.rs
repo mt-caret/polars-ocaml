@@ -893,190 +893,182 @@ pub(crate) mod parsing {
     use crate::ext::IdentExt;
     use crate::parse::discouraged::Speculative;
     use crate::parse::{Parse, ParseBuffer, ParseStream, Result};
+    use crate::token::Brace;
+    use proc_macro2::{Punct, Spacing, TokenTree};
+    use std::iter::FromIterator;
 
     #[cfg_attr(doc_cfg, doc(cfg(feature = "parsing")))]
     impl Parse for Item {
         fn parse(input: ParseStream) -> Result<Self> {
             let begin = input.fork();
-            let attrs = input.call(Attribute::parse_outer)?;
-            parse_rest_of_item(begin, attrs, input)
-        }
-    }
+            let mut attrs = input.call(Attribute::parse_outer)?;
+            let ahead = input.fork();
+            let vis: Visibility = ahead.parse()?;
 
-    pub(crate) fn parse_rest_of_item(
-        begin: ParseBuffer,
-        mut attrs: Vec<Attribute>,
-        input: ParseStream,
-    ) -> Result<Item> {
-        let ahead = input.fork();
-        let vis: Visibility = ahead.parse()?;
-
-        let lookahead = ahead.lookahead1();
-        let mut item = if lookahead.peek(Token![fn]) || peek_signature(&ahead) {
-            let vis: Visibility = input.parse()?;
-            let sig: Signature = input.parse()?;
-            if input.peek(Token![;]) {
-                input.parse::<Token![;]>()?;
-                Ok(Item::Verbatim(verbatim::between(&begin, input)))
-            } else {
-                parse_rest_of_fn(input, Vec::new(), vis, sig).map(Item::Fn)
-            }
-        } else if lookahead.peek(Token![extern]) {
-            ahead.parse::<Token![extern]>()?;
             let lookahead = ahead.lookahead1();
-            if lookahead.peek(Token![crate]) {
-                input.parse().map(Item::ExternCrate)
-            } else if lookahead.peek(token::Brace) {
-                input.parse().map(Item::ForeignMod)
-            } else if lookahead.peek(LitStr) {
-                ahead.parse::<LitStr>()?;
+            let mut item = if lookahead.peek(Token![fn]) || peek_signature(&ahead) {
+                let vis: Visibility = input.parse()?;
+                let sig: Signature = input.parse()?;
+                if input.peek(Token![;]) {
+                    input.parse::<Token![;]>()?;
+                    Ok(Item::Verbatim(verbatim::between(begin, input)))
+                } else {
+                    parse_rest_of_fn(input, Vec::new(), vis, sig).map(Item::Fn)
+                }
+            } else if lookahead.peek(Token![extern]) {
+                ahead.parse::<Token![extern]>()?;
                 let lookahead = ahead.lookahead1();
-                if lookahead.peek(token::Brace) {
+                if lookahead.peek(Token![crate]) {
+                    input.parse().map(Item::ExternCrate)
+                } else if lookahead.peek(token::Brace) {
                     input.parse().map(Item::ForeignMod)
+                } else if lookahead.peek(LitStr) {
+                    ahead.parse::<LitStr>()?;
+                    let lookahead = ahead.lookahead1();
+                    if lookahead.peek(token::Brace) {
+                        input.parse().map(Item::ForeignMod)
+                    } else {
+                        Err(lookahead.error())
+                    }
                 } else {
                     Err(lookahead.error())
                 }
-            } else {
-                Err(lookahead.error())
-            }
-        } else if lookahead.peek(Token![use]) {
-            let allow_crate_root_in_path = true;
-            match parse_item_use(input, allow_crate_root_in_path)? {
-                Some(item_use) => Ok(Item::Use(item_use)),
-                None => Ok(Item::Verbatim(verbatim::between(&begin, input))),
-            }
-        } else if lookahead.peek(Token![static]) {
-            let vis = input.parse()?;
-            let static_token = input.parse()?;
-            let mutability = input.parse()?;
-            let ident = input.parse()?;
-            if input.peek(Token![=]) {
-                input.parse::<Token![=]>()?;
-                input.parse::<Expr>()?;
-                input.parse::<Token![;]>()?;
-                Ok(Item::Verbatim(verbatim::between(&begin, input)))
-            } else {
-                let colon_token = input.parse()?;
-                let ty = input.parse()?;
-                if input.peek(Token![;]) {
+            } else if lookahead.peek(Token![use]) {
+                let allow_crate_root_in_path = true;
+                match parse_item_use(input, allow_crate_root_in_path)? {
+                    Some(item_use) => Ok(Item::Use(item_use)),
+                    None => Ok(Item::Verbatim(verbatim::between(begin, input))),
+                }
+            } else if lookahead.peek(Token![static]) {
+                let vis = input.parse()?;
+                let static_token = input.parse()?;
+                let mutability = input.parse()?;
+                let ident = input.parse()?;
+                if input.peek(Token![=]) {
+                    input.parse::<Token![=]>()?;
+                    input.parse::<Expr>()?;
                     input.parse::<Token![;]>()?;
-                    Ok(Item::Verbatim(verbatim::between(&begin, input)))
+                    Ok(Item::Verbatim(verbatim::between(begin, input)))
                 } else {
-                    Ok(Item::Static(ItemStatic {
-                        attrs: Vec::new(),
-                        vis,
-                        static_token,
-                        mutability,
-                        ident,
-                        colon_token,
-                        ty,
-                        eq_token: input.parse()?,
-                        expr: input.parse()?,
-                        semi_token: input.parse()?,
-                    }))
+                    let colon_token = input.parse()?;
+                    let ty = input.parse()?;
+                    if input.peek(Token![;]) {
+                        input.parse::<Token![;]>()?;
+                        Ok(Item::Verbatim(verbatim::between(begin, input)))
+                    } else {
+                        Ok(Item::Static(ItemStatic {
+                            attrs: Vec::new(),
+                            vis,
+                            static_token,
+                            mutability,
+                            ident,
+                            colon_token,
+                            ty,
+                            eq_token: input.parse()?,
+                            expr: input.parse()?,
+                            semi_token: input.parse()?,
+                        }))
+                    }
                 }
-            }
-        } else if lookahead.peek(Token![const]) {
-            let vis = input.parse()?;
-            let const_token: Token![const] = input.parse()?;
-            let lookahead = input.lookahead1();
-            let ident = if lookahead.peek(Ident) || lookahead.peek(Token![_]) {
-                input.call(Ident::parse_any)?
-            } else {
-                return Err(lookahead.error());
-            };
-            let mut generics: Generics = input.parse()?;
-            let colon_token = input.parse()?;
-            let ty = input.parse()?;
-            let value = if let Some(eq_token) = input.parse::<Option<Token![=]>>()? {
-                let expr: Expr = input.parse()?;
-                Some((eq_token, expr))
-            } else {
-                None
-            };
-            generics.where_clause = input.parse()?;
-            let semi_token: Token![;] = input.parse()?;
-            match value {
-                Some((eq_token, expr))
-                    if generics.lt_token.is_none() && generics.where_clause.is_none() =>
+            } else if lookahead.peek(Token![const]) {
+                ahead.parse::<Token![const]>()?;
+                let lookahead = ahead.lookahead1();
+                if lookahead.peek(Ident) || lookahead.peek(Token![_]) {
+                    let vis = input.parse()?;
+                    let const_token = input.parse()?;
+                    let ident = {
+                        let lookahead = input.lookahead1();
+                        if lookahead.peek(Ident) || lookahead.peek(Token![_]) {
+                            input.call(Ident::parse_any)?
+                        } else {
+                            return Err(lookahead.error());
+                        }
+                    };
+                    let colon_token = input.parse()?;
+                    let ty = input.parse()?;
+                    if input.peek(Token![;]) {
+                        input.parse::<Token![;]>()?;
+                        Ok(Item::Verbatim(verbatim::between(begin, input)))
+                    } else {
+                        Ok(Item::Const(ItemConst {
+                            attrs: Vec::new(),
+                            vis,
+                            const_token,
+                            ident,
+                            generics: Generics::default(),
+                            colon_token,
+                            ty,
+                            eq_token: input.parse()?,
+                            expr: input.parse()?,
+                            semi_token: input.parse()?,
+                        }))
+                    }
+                } else {
+                    Err(lookahead.error())
+                }
+            } else if lookahead.peek(Token![unsafe]) {
+                ahead.parse::<Token![unsafe]>()?;
+                let lookahead = ahead.lookahead1();
+                if lookahead.peek(Token![trait])
+                    || lookahead.peek(Token![auto]) && ahead.peek2(Token![trait])
                 {
-                    Ok(Item::Const(ItemConst {
-                        attrs: Vec::new(),
-                        vis,
-                        const_token,
-                        ident,
-                        generics,
-                        colon_token,
-                        ty,
-                        eq_token,
-                        expr: Box::new(expr),
-                        semi_token,
-                    }))
+                    input.parse().map(Item::Trait)
+                } else if lookahead.peek(Token![impl]) {
+                    let allow_verbatim_impl = true;
+                    if let Some(item) = parse_impl(input, allow_verbatim_impl)? {
+                        Ok(Item::Impl(item))
+                    } else {
+                        Ok(Item::Verbatim(verbatim::between(begin, input)))
+                    }
+                } else if lookahead.peek(Token![extern]) {
+                    input.parse().map(Item::ForeignMod)
+                } else if lookahead.peek(Token![mod]) {
+                    input.parse().map(Item::Mod)
+                } else {
+                    Err(lookahead.error())
                 }
-                _ => Ok(Item::Verbatim(verbatim::between(&begin, input))),
-            }
-        } else if lookahead.peek(Token![unsafe]) {
-            ahead.parse::<Token![unsafe]>()?;
-            let lookahead = ahead.lookahead1();
-            if lookahead.peek(Token![trait])
-                || lookahead.peek(Token![auto]) && ahead.peek2(Token![trait])
-            {
+            } else if lookahead.peek(Token![mod]) {
+                input.parse().map(Item::Mod)
+            } else if lookahead.peek(Token![type]) {
+                parse_item_type(begin, input)
+            } else if lookahead.peek(Token![struct]) {
+                input.parse().map(Item::Struct)
+            } else if lookahead.peek(Token![enum]) {
+                input.parse().map(Item::Enum)
+            } else if lookahead.peek(Token![union]) && ahead.peek2(Ident) {
+                input.parse().map(Item::Union)
+            } else if lookahead.peek(Token![trait]) {
+                input.call(parse_trait_or_trait_alias)
+            } else if lookahead.peek(Token![auto]) && ahead.peek2(Token![trait]) {
                 input.parse().map(Item::Trait)
-            } else if lookahead.peek(Token![impl]) {
+            } else if lookahead.peek(Token![impl])
+                || lookahead.peek(Token![default]) && !ahead.peek2(Token![!])
+            {
                 let allow_verbatim_impl = true;
                 if let Some(item) = parse_impl(input, allow_verbatim_impl)? {
                     Ok(Item::Impl(item))
                 } else {
-                    Ok(Item::Verbatim(verbatim::between(&begin, input)))
+                    Ok(Item::Verbatim(verbatim::between(begin, input)))
                 }
-            } else if lookahead.peek(Token![extern]) {
-                input.parse().map(Item::ForeignMod)
-            } else if lookahead.peek(Token![mod]) {
-                input.parse().map(Item::Mod)
+            } else if lookahead.peek(Token![macro]) {
+                input.advance_to(&ahead);
+                parse_macro2(begin, vis, input)
+            } else if vis.is_inherited()
+                && (lookahead.peek(Ident)
+                    || lookahead.peek(Token![self])
+                    || lookahead.peek(Token![super])
+                    || lookahead.peek(Token![crate])
+                    || lookahead.peek(Token![::]))
+            {
+                input.parse().map(Item::Macro)
             } else {
                 Err(lookahead.error())
-            }
-        } else if lookahead.peek(Token![mod]) {
-            input.parse().map(Item::Mod)
-        } else if lookahead.peek(Token![type]) {
-            parse_item_type(begin, input)
-        } else if lookahead.peek(Token![struct]) {
-            input.parse().map(Item::Struct)
-        } else if lookahead.peek(Token![enum]) {
-            input.parse().map(Item::Enum)
-        } else if lookahead.peek(Token![union]) && ahead.peek2(Ident) {
-            input.parse().map(Item::Union)
-        } else if lookahead.peek(Token![trait]) {
-            input.call(parse_trait_or_trait_alias)
-        } else if lookahead.peek(Token![auto]) && ahead.peek2(Token![trait]) {
-            input.parse().map(Item::Trait)
-        } else if lookahead.peek(Token![impl])
-            || lookahead.peek(Token![default]) && !ahead.peek2(Token![!])
-        {
-            let allow_verbatim_impl = true;
-            if let Some(item) = parse_impl(input, allow_verbatim_impl)? {
-                Ok(Item::Impl(item))
-            } else {
-                Ok(Item::Verbatim(verbatim::between(&begin, input)))
-            }
-        } else if lookahead.peek(Token![macro]) {
-            input.advance_to(&ahead);
-            parse_macro2(begin, vis, input)
-        } else if vis.is_inherited()
-            && (lookahead.peek(Ident)
-                || lookahead.peek(Token![self])
-                || lookahead.peek(Token![super])
-                || lookahead.peek(Token![crate])
-                || lookahead.peek(Token![::]))
-        {
-            input.parse().map(Item::Macro)
-        } else {
-            Err(lookahead.error())
-        }?;
+            }?;
 
-        attrs.extend(item.replace_attrs(Vec::new()));
-        item.replace_attrs(attrs);
-        Ok(item)
+            attrs.extend(item.replace_attrs(Vec::new()));
+            item.replace_attrs(attrs);
+            Ok(item)
+        }
     }
 
     struct FlexibleItemType {
@@ -1091,11 +1083,6 @@ pub(crate) mod parsing {
         semi_token: Token![;],
     }
 
-    enum TypeDefaultness {
-        Optional,
-        Disallowed,
-    }
-
     enum WhereClauseLocation {
         // type Ty<T> where T: 'static = T;
         BeforeEq,
@@ -1106,20 +1093,27 @@ pub(crate) mod parsing {
     }
 
     impl FlexibleItemType {
-        fn parse(
-            input: ParseStream,
-            allow_defaultness: TypeDefaultness,
-            where_clause_location: WhereClauseLocation,
-        ) -> Result<Self> {
+        fn parse(input: ParseStream, where_clause_location: WhereClauseLocation) -> Result<Self> {
             let vis: Visibility = input.parse()?;
-            let defaultness: Option<Token![default]> = match allow_defaultness {
-                TypeDefaultness::Optional => input.parse()?,
-                TypeDefaultness::Disallowed => None,
-            };
+            let defaultness: Option<Token![default]> = input.parse()?;
             let type_token: Token![type] = input.parse()?;
             let ident: Ident = input.parse()?;
             let mut generics: Generics = input.parse()?;
-            let (colon_token, bounds) = Self::parse_optional_bounds(input)?;
+            let colon_token: Option<Token![:]> = input.parse()?;
+
+            let mut bounds = Punctuated::new();
+            if colon_token.is_some() {
+                loop {
+                    if input.peek(Token![where]) || input.peek(Token![=]) || input.peek(Token![;]) {
+                        break;
+                    }
+                    bounds.push_value(input.parse::<TypeParamBound>()?);
+                    if input.peek(Token![where]) || input.peek(Token![=]) || input.peek(Token![;]) {
+                        break;
+                    }
+                    bounds.push_punct(input.parse::<Token![+]>()?);
+                }
+            }
 
             match where_clause_location {
                 WhereClauseLocation::BeforeEq | WhereClauseLocation::Both => {
@@ -1128,7 +1122,11 @@ pub(crate) mod parsing {
                 WhereClauseLocation::AfterEq => {}
             }
 
-            let ty = Self::parse_optional_definition(input)?;
+            let ty = if let Some(eq_token) = input.parse()? {
+                Some((eq_token, input.parse::<Type>()?))
+            } else {
+                None
+            };
 
             match where_clause_location {
                 WhereClauseLocation::AfterEq | WhereClauseLocation::Both
@@ -1153,38 +1151,6 @@ pub(crate) mod parsing {
                 semi_token,
             })
         }
-
-        fn parse_optional_bounds(
-            input: ParseStream,
-        ) -> Result<(Option<Token![:]>, Punctuated<TypeParamBound, Token![+]>)> {
-            let colon_token: Option<Token![:]> = input.parse()?;
-
-            let mut bounds = Punctuated::new();
-            if colon_token.is_some() {
-                loop {
-                    if input.peek(Token![where]) || input.peek(Token![=]) || input.peek(Token![;]) {
-                        break;
-                    }
-                    bounds.push_value(input.parse::<TypeParamBound>()?);
-                    if input.peek(Token![where]) || input.peek(Token![=]) || input.peek(Token![;]) {
-                        break;
-                    }
-                    bounds.push_punct(input.parse::<Token![+]>()?);
-                }
-            }
-
-            Ok((colon_token, bounds))
-        }
-
-        fn parse_optional_definition(input: ParseStream) -> Result<Option<(Token![=], Type)>> {
-            let eq_token: Option<Token![=]> = input.parse()?;
-            if let Some(eq_token) = eq_token {
-                let definition: Type = input.parse()?;
-                Ok(Some((eq_token, definition)))
-            } else {
-                Ok(None)
-            }
-        }
     }
 
     #[cfg_attr(doc_cfg, doc(cfg(feature = "parsing")))]
@@ -1193,11 +1159,7 @@ pub(crate) mod parsing {
             let attrs = input.call(Attribute::parse_outer)?;
             let path = input.call(Path::parse_mod_style)?;
             let bang_token: Token![!] = input.parse()?;
-            let ident: Option<Ident> = if input.peek(Token![try]) {
-                input.call(Ident::parse_any).map(Some)
-            } else {
-                input.parse()
-            }?;
+            let ident: Option<Ident> = input.parse()?;
             let (delimiter, tokens) = input.call(mac::parse_delimiter)?;
             let semi_token: Option<Token![;]> = if !delimiter.is_brace() {
                 Some(input.parse()?)
@@ -1238,7 +1200,7 @@ pub(crate) mod parsing {
             return Err(lookahead.error());
         }
 
-        Ok(Item::Verbatim(verbatim::between(&begin, input)))
+        Ok(Item::Verbatim(verbatim::between(begin, input)))
     }
 
     #[cfg_attr(doc_cfg, doc(cfg(feature = "parsing")))]
@@ -1359,28 +1321,22 @@ pub(crate) mod parsing {
             let content;
             let brace_token = braced!(content in input);
             let mut items = Punctuated::new();
-            let mut has_any_crate_root_in_path = false;
+            let mut has_crate_root_in_path = false;
             loop {
                 if content.is_empty() {
                     break;
                 }
-                let this_tree_starts_with_crate_root =
+                has_crate_root_in_path |=
                     allow_crate_root_in_path && content.parse::<Option<Token![::]>>()?.is_some();
-                has_any_crate_root_in_path |= this_tree_starts_with_crate_root;
-                match parse_use_tree(
-                    &content,
-                    allow_crate_root_in_path && !this_tree_starts_with_crate_root,
-                )? {
-                    Some(tree) => items.push_value(tree),
-                    None => has_any_crate_root_in_path = true,
-                }
+                let tree: UseTree = content.parse()?;
+                items.push_value(tree);
                 if content.is_empty() {
                     break;
                 }
                 let comma: Token![,] = content.parse()?;
                 items.push_punct(comma);
             }
-            if has_any_crate_root_in_path {
+            if has_crate_root_in_path {
                 Ok(None)
             } else {
                 Ok(Some(UseTree::Group(UseGroup { brace_token, items })))
@@ -1411,34 +1367,24 @@ pub(crate) mod parsing {
     #[cfg_attr(doc_cfg, doc(cfg(feature = "parsing")))]
     impl Parse for ItemConst {
         fn parse(input: ParseStream) -> Result<Self> {
-            let attrs = input.call(Attribute::parse_outer)?;
-            let vis: Visibility = input.parse()?;
-            let const_token: Token![const] = input.parse()?;
-
-            let lookahead = input.lookahead1();
-            let ident = if lookahead.peek(Ident) || lookahead.peek(Token![_]) {
-                input.call(Ident::parse_any)?
-            } else {
-                return Err(lookahead.error());
-            };
-
-            let colon_token: Token![:] = input.parse()?;
-            let ty: Type = input.parse()?;
-            let eq_token: Token![=] = input.parse()?;
-            let expr: Expr = input.parse()?;
-            let semi_token: Token![;] = input.parse()?;
-
             Ok(ItemConst {
-                attrs,
-                vis,
-                const_token,
-                ident,
+                attrs: input.call(Attribute::parse_outer)?,
+                vis: input.parse()?,
+                const_token: input.parse()?,
+                ident: {
+                    let lookahead = input.lookahead1();
+                    if lookahead.peek(Ident) || lookahead.peek(Token![_]) {
+                        input.call(Ident::parse_any)?
+                    } else {
+                        return Err(lookahead.error());
+                    }
+                },
                 generics: Generics::default(),
-                colon_token,
-                ty: Box::new(ty),
-                eq_token,
-                expr: Box::new(expr),
-                semi_token,
+                colon_token: input.parse()?,
+                ty: input.parse()?,
+                eq_token: input.parse()?,
+                expr: input.parse()?,
+                semi_token: input.parse()?,
             })
         }
     }
@@ -1788,7 +1734,7 @@ pub(crate) mod parsing {
                     content.call(Attribute::parse_inner)?;
                     content.call(Block::parse_within)?;
 
-                    Ok(ForeignItem::Verbatim(verbatim::between(&begin, input)))
+                    Ok(ForeignItem::Verbatim(verbatim::between(begin, input)))
                 } else {
                     Ok(ForeignItem::Fn(ForeignItemFn {
                         attrs: Vec::new(),
@@ -1808,7 +1754,7 @@ pub(crate) mod parsing {
                     input.parse::<Token![=]>()?;
                     input.parse::<Expr>()?;
                     input.parse::<Token![;]>()?;
-                    Ok(ForeignItem::Verbatim(verbatim::between(&begin, input)))
+                    Ok(ForeignItem::Verbatim(verbatim::between(begin, input)))
                 } else {
                     Ok(ForeignItem::Static(ForeignItemStatic {
                         attrs: Vec::new(),
@@ -1902,7 +1848,7 @@ pub(crate) mod parsing {
     fn parse_foreign_item_type(begin: ParseBuffer, input: ParseStream) -> Result<ForeignItem> {
         let FlexibleItemType {
             vis,
-            defaultness: _,
+            defaultness,
             type_token,
             ident,
             generics,
@@ -1910,14 +1856,10 @@ pub(crate) mod parsing {
             bounds: _,
             ty,
             semi_token,
-        } = FlexibleItemType::parse(
-            input,
-            TypeDefaultness::Disallowed,
-            WhereClauseLocation::Both,
-        )?;
+        } = FlexibleItemType::parse(input, WhereClauseLocation::Both)?;
 
-        if colon_token.is_some() || ty.is_some() {
-            Ok(ForeignItem::Verbatim(verbatim::between(&begin, input)))
+        if defaultness.is_some() || colon_token.is_some() || ty.is_some() {
+            Ok(ForeignItem::Verbatim(verbatim::between(begin, input)))
         } else {
             Ok(ForeignItem::Type(ForeignItemType {
                 attrs: Vec::new(),
@@ -1971,7 +1913,7 @@ pub(crate) mod parsing {
     fn parse_item_type(begin: ParseBuffer, input: ParseStream) -> Result<Item> {
         let FlexibleItemType {
             vis,
-            defaultness: _,
+            defaultness,
             type_token,
             ident,
             generics,
@@ -1979,27 +1921,23 @@ pub(crate) mod parsing {
             bounds: _,
             ty,
             semi_token,
-        } = FlexibleItemType::parse(
-            input,
-            TypeDefaultness::Disallowed,
-            WhereClauseLocation::BeforeEq,
-        )?;
+        } = FlexibleItemType::parse(input, WhereClauseLocation::BeforeEq)?;
 
-        let (eq_token, ty) = match ty {
-            Some(ty) if colon_token.is_none() => ty,
-            _ => return Ok(Item::Verbatim(verbatim::between(&begin, input))),
-        };
-
-        Ok(Item::Type(ItemType {
-            attrs: Vec::new(),
-            vis,
-            type_token,
-            ident,
-            generics,
-            eq_token,
-            ty: Box::new(ty),
-            semi_token,
-        }))
+        if defaultness.is_some() || colon_token.is_some() || ty.is_none() {
+            Ok(Item::Verbatim(verbatim::between(begin, input)))
+        } else {
+            let (eq_token, ty) = ty.unwrap();
+            Ok(Item::Type(ItemType {
+                attrs: Vec::new(),
+                vis,
+                type_token,
+                ident,
+                generics,
+                eq_token,
+                ty: Box::new(ty),
+                semi_token,
+            }))
+        }
     }
 
     #[cfg_attr(doc_cfg, doc(cfg(feature = "parsing")))]
@@ -2245,36 +2183,10 @@ pub(crate) mod parsing {
             let mut item = if lookahead.peek(Token![fn]) || peek_signature(&ahead) {
                 input.parse().map(TraitItem::Fn)
             } else if lookahead.peek(Token![const]) {
-                let const_token: Token![const] = ahead.parse()?;
+                ahead.parse::<Token![const]>()?;
                 let lookahead = ahead.lookahead1();
                 if lookahead.peek(Ident) || lookahead.peek(Token![_]) {
-                    input.advance_to(&ahead);
-                    let ident = input.call(Ident::parse_any)?;
-                    let mut generics: Generics = input.parse()?;
-                    let colon_token: Token![:] = input.parse()?;
-                    let ty: Type = input.parse()?;
-                    let default = if let Some(eq_token) = input.parse::<Option<Token![=]>>()? {
-                        let expr: Expr = input.parse()?;
-                        Some((eq_token, expr))
-                    } else {
-                        None
-                    };
-                    generics.where_clause = input.parse()?;
-                    let semi_token: Token![;] = input.parse()?;
-                    if generics.lt_token.is_none() && generics.where_clause.is_none() {
-                        Ok(TraitItem::Const(TraitItemConst {
-                            attrs: Vec::new(),
-                            const_token,
-                            ident,
-                            generics,
-                            colon_token,
-                            ty,
-                            default,
-                            semi_token,
-                        }))
-                    } else {
-                        return Ok(TraitItem::Verbatim(verbatim::between(&begin, input)));
-                    }
+                    input.parse().map(TraitItem::Const)
                 } else if lookahead.peek(Token![async])
                     || lookahead.peek(Token![unsafe])
                     || lookahead.peek(Token![extern])
@@ -2286,13 +2198,11 @@ pub(crate) mod parsing {
                 }
             } else if lookahead.peek(Token![type]) {
                 parse_trait_item_type(begin.fork(), input)
-            } else if vis.is_inherited()
-                && defaultness.is_none()
-                && (lookahead.peek(Ident)
-                    || lookahead.peek(Token![self])
-                    || lookahead.peek(Token![super])
-                    || lookahead.peek(Token![crate])
-                    || lookahead.peek(Token![::]))
+            } else if lookahead.peek(Ident)
+                || lookahead.peek(Token![self])
+                || lookahead.peek(Token![super])
+                || lookahead.peek(Token![crate])
+                || lookahead.peek(Token![::])
             {
                 input.parse().map(TraitItem::Macro)
             } else {
@@ -2301,7 +2211,7 @@ pub(crate) mod parsing {
 
             match (vis, defaultness) {
                 (Visibility::Inherited, None) => {}
-                _ => return Ok(TraitItem::Verbatim(verbatim::between(&begin, input))),
+                _ => return Ok(TraitItem::Verbatim(verbatim::between(begin, input))),
             }
 
             let item_attrs = match &mut item {
@@ -2320,36 +2230,30 @@ pub(crate) mod parsing {
     #[cfg_attr(doc_cfg, doc(cfg(feature = "parsing")))]
     impl Parse for TraitItemConst {
         fn parse(input: ParseStream) -> Result<Self> {
-            let attrs = input.call(Attribute::parse_outer)?;
-            let const_token: Token![const] = input.parse()?;
-
-            let lookahead = input.lookahead1();
-            let ident = if lookahead.peek(Ident) || lookahead.peek(Token![_]) {
-                input.call(Ident::parse_any)?
-            } else {
-                return Err(lookahead.error());
-            };
-
-            let colon_token: Token![:] = input.parse()?;
-            let ty: Type = input.parse()?;
-            let default = if input.peek(Token![=]) {
-                let eq_token: Token![=] = input.parse()?;
-                let default: Expr = input.parse()?;
-                Some((eq_token, default))
-            } else {
-                None
-            };
-            let semi_token: Token![;] = input.parse()?;
-
             Ok(TraitItemConst {
-                attrs,
-                const_token,
-                ident,
+                attrs: input.call(Attribute::parse_outer)?,
+                const_token: input.parse()?,
+                ident: {
+                    let lookahead = input.lookahead1();
+                    if lookahead.peek(Ident) || lookahead.peek(Token![_]) {
+                        input.call(Ident::parse_any)?
+                    } else {
+                        return Err(lookahead.error());
+                    }
+                },
                 generics: Generics::default(),
-                colon_token,
-                ty,
-                default,
-                semi_token,
+                colon_token: input.parse()?,
+                ty: input.parse()?,
+                default: {
+                    if input.peek(Token![=]) {
+                        let eq_token: Token![=] = input.parse()?;
+                        let default: Expr = input.parse()?;
+                        Some((eq_token, default))
+                    } else {
+                        None
+                    }
+                },
+                semi_token: input.parse()?,
             })
         }
     }
@@ -2390,10 +2294,30 @@ pub(crate) mod parsing {
             let type_token: Token![type] = input.parse()?;
             let ident: Ident = input.parse()?;
             let mut generics: Generics = input.parse()?;
-            let (colon_token, bounds) = FlexibleItemType::parse_optional_bounds(input)?;
-            let default = FlexibleItemType::parse_optional_definition(input)?;
+            let colon_token: Option<Token![:]> = input.parse()?;
+
+            let mut bounds = Punctuated::new();
+            if colon_token.is_some() {
+                while !input.peek(Token![where]) && !input.peek(Token![=]) && !input.peek(Token![;])
+                {
+                    if !bounds.is_empty() {
+                        bounds.push_punct(input.parse()?);
+                    }
+                    bounds.push_value(input.parse()?);
+                }
+            }
+
+            let default = if input.peek(Token![=]) {
+                let eq_token: Token![=] = input.parse()?;
+                let default: Type = input.parse()?;
+                Some((eq_token, default))
+            } else {
+                None
+            };
+
             generics.where_clause = input.parse()?;
             let semi_token: Token![;] = input.parse()?;
+
             Ok(TraitItemType {
                 attrs,
                 type_token,
@@ -2410,7 +2334,7 @@ pub(crate) mod parsing {
     fn parse_trait_item_type(begin: ParseBuffer, input: ParseStream) -> Result<TraitItem> {
         let FlexibleItemType {
             vis,
-            defaultness: _,
+            defaultness,
             type_token,
             ident,
             generics,
@@ -2418,14 +2342,10 @@ pub(crate) mod parsing {
             bounds,
             ty,
             semi_token,
-        } = FlexibleItemType::parse(
-            input,
-            TypeDefaultness::Disallowed,
-            WhereClauseLocation::AfterEq,
-        )?;
+        } = FlexibleItemType::parse(input, WhereClauseLocation::AfterEq)?;
 
-        if vis.is_some() {
-            Ok(TraitItem::Verbatim(verbatim::between(&begin, input)))
+        if defaultness.is_some() || vis.is_some() {
+            Ok(TraitItem::Verbatim(verbatim::between(begin, input)))
         } else {
             Ok(TraitItem::Type(TraitItemType {
                 attrs: Vec::new(),
@@ -2538,7 +2458,7 @@ pub(crate) mod parsing {
             self_ty = if polarity.is_none() {
                 first_ty
             } else {
-                Type::Verbatim(verbatim::between(&begin, input))
+                Type::Verbatim(verbatim::between(begin, input))
             };
         }
 
@@ -2588,52 +2508,36 @@ pub(crate) mod parsing {
             };
 
             let mut item = if lookahead.peek(Token![fn]) || peek_signature(&ahead) {
-                let allow_omitted_body = true;
-                if let Some(item) = parse_impl_item_fn(input, allow_omitted_body)? {
-                    Ok(ImplItem::Fn(item))
-                } else {
-                    Ok(ImplItem::Verbatim(verbatim::between(&begin, input)))
-                }
+                input.parse().map(ImplItem::Fn)
             } else if lookahead.peek(Token![const]) {
-                input.advance_to(&ahead);
-                let const_token: Token![const] = input.parse()?;
-                let lookahead = input.lookahead1();
-                let ident = if lookahead.peek(Ident) || lookahead.peek(Token![_]) {
-                    input.call(Ident::parse_any)?
-                } else {
-                    return Err(lookahead.error());
-                };
-                let mut generics: Generics = input.parse()?;
-                let colon_token: Token![:] = input.parse()?;
-                let ty: Type = input.parse()?;
-                let value = if let Some(eq_token) = input.parse::<Option<Token![=]>>()? {
-                    let expr: Expr = input.parse()?;
-                    Some((eq_token, expr))
-                } else {
-                    None
-                };
-                generics.where_clause = input.parse()?;
-                let semi_token: Token![;] = input.parse()?;
-                return match value {
-                    Some((eq_token, expr))
-                        if generics.lt_token.is_none() && generics.where_clause.is_none() =>
-                    {
-                        Ok(ImplItem::Const(ImplItemConst {
+                let const_token: Token![const] = ahead.parse()?;
+                let lookahead = ahead.lookahead1();
+                if lookahead.peek(Ident) || lookahead.peek(Token![_]) {
+                    input.advance_to(&ahead);
+                    let ident: Ident = input.call(Ident::parse_any)?;
+                    let colon_token: Token![:] = input.parse()?;
+                    let ty: Type = input.parse()?;
+                    if let Some(eq_token) = input.parse()? {
+                        return Ok(ImplItem::Const(ImplItemConst {
                             attrs,
                             vis,
                             defaultness,
                             const_token,
                             ident,
-                            generics,
+                            generics: Generics::default(),
                             colon_token,
                             ty,
                             eq_token,
-                            expr,
-                            semi_token,
-                        }))
+                            expr: input.parse()?,
+                            semi_token: input.parse()?,
+                        }));
+                    } else {
+                        input.parse::<Token![;]>()?;
+                        return Ok(ImplItem::Verbatim(verbatim::between(begin, input)));
                     }
-                    _ => Ok(ImplItem::Verbatim(verbatim::between(&begin, input))),
-                };
+                } else {
+                    Err(lookahead.error())
+                }
             } else if lookahead.peek(Token![type]) {
                 parse_impl_item_type(begin, input)
             } else if vis.is_inherited()
@@ -2668,36 +2572,25 @@ pub(crate) mod parsing {
     #[cfg_attr(doc_cfg, doc(cfg(feature = "parsing")))]
     impl Parse for ImplItemConst {
         fn parse(input: ParseStream) -> Result<Self> {
-            let attrs = input.call(Attribute::parse_outer)?;
-            let vis: Visibility = input.parse()?;
-            let defaultness: Option<Token![default]> = input.parse()?;
-            let const_token: Token![const] = input.parse()?;
-
-            let lookahead = input.lookahead1();
-            let ident = if lookahead.peek(Ident) || lookahead.peek(Token![_]) {
-                input.call(Ident::parse_any)?
-            } else {
-                return Err(lookahead.error());
-            };
-
-            let colon_token: Token![:] = input.parse()?;
-            let ty: Type = input.parse()?;
-            let eq_token: Token![=] = input.parse()?;
-            let expr: Expr = input.parse()?;
-            let semi_token: Token![;] = input.parse()?;
-
             Ok(ImplItemConst {
-                attrs,
-                vis,
-                defaultness,
-                const_token,
-                ident,
+                attrs: input.call(Attribute::parse_outer)?,
+                vis: input.parse()?,
+                defaultness: input.parse()?,
+                const_token: input.parse()?,
+                ident: {
+                    let lookahead = input.lookahead1();
+                    if lookahead.peek(Ident) || lookahead.peek(Token![_]) {
+                        input.call(Ident::parse_any)?
+                    } else {
+                        return Err(lookahead.error());
+                    }
+                },
                 generics: Generics::default(),
-                colon_token,
-                ty,
-                eq_token,
-                expr,
-                semi_token,
+                colon_token: input.parse()?,
+                ty: input.parse()?,
+                eq_token: input.parse()?,
+                expr: input.parse()?,
+                semi_token: input.parse()?,
             })
         }
     }
@@ -2705,42 +2598,41 @@ pub(crate) mod parsing {
     #[cfg_attr(doc_cfg, doc(cfg(feature = "parsing")))]
     impl Parse for ImplItemFn {
         fn parse(input: ParseStream) -> Result<Self> {
-            let allow_omitted_body = false;
-            parse_impl_item_fn(input, allow_omitted_body).map(Option::unwrap)
+            let mut attrs = input.call(Attribute::parse_outer)?;
+            let vis: Visibility = input.parse()?;
+            let defaultness: Option<Token![default]> = input.parse()?;
+            let sig: Signature = input.parse()?;
+
+            let block = if let Some(semi) = input.parse::<Option<Token![;]>>()? {
+                // Accept functions without a body in an impl block because
+                // rustc's *parser* does not reject them (the compilation error
+                // is emitted later than parsing) and it can be useful for macro
+                // DSLs.
+                let mut punct = Punct::new(';', Spacing::Alone);
+                punct.set_span(semi.span);
+                let tokens = TokenStream::from_iter(vec![TokenTree::Punct(punct)]);
+                Block {
+                    brace_token: Brace(semi.span),
+                    stmts: vec![Stmt::Item(Item::Verbatim(tokens))],
+                }
+            } else {
+                let content;
+                let brace_token = braced!(content in input);
+                attrs.extend(content.call(Attribute::parse_inner)?);
+                Block {
+                    brace_token,
+                    stmts: content.call(Block::parse_within)?,
+                }
+            };
+
+            Ok(ImplItemFn {
+                attrs,
+                vis,
+                defaultness,
+                sig,
+                block,
+            })
         }
-    }
-
-    fn parse_impl_item_fn(
-        input: ParseStream,
-        allow_omitted_body: bool,
-    ) -> Result<Option<ImplItemFn>> {
-        let mut attrs = input.call(Attribute::parse_outer)?;
-        let vis: Visibility = input.parse()?;
-        let defaultness: Option<Token![default]> = input.parse()?;
-        let sig: Signature = input.parse()?;
-
-        // Accept functions without a body in an impl block because rustc's
-        // *parser* does not reject them (the compilation error is emitted later
-        // than parsing) and it can be useful for macro DSLs.
-        if allow_omitted_body && input.parse::<Option<Token![;]>>()?.is_some() {
-            return Ok(None);
-        }
-
-        let content;
-        let brace_token = braced!(content in input);
-        attrs.extend(content.call(Attribute::parse_inner)?);
-        let block = Block {
-            brace_token,
-            stmts: content.call(Block::parse_within)?,
-        };
-
-        Ok(Some(ImplItemFn {
-            attrs,
-            vis,
-            defaultness,
-            sig,
-            block,
-        }))
     }
 
     #[cfg_attr(doc_cfg, doc(cfg(feature = "parsing")))]
@@ -2781,28 +2673,24 @@ pub(crate) mod parsing {
             bounds: _,
             ty,
             semi_token,
-        } = FlexibleItemType::parse(
-            input,
-            TypeDefaultness::Optional,
-            WhereClauseLocation::AfterEq,
-        )?;
+        } = FlexibleItemType::parse(input, WhereClauseLocation::AfterEq)?;
 
-        let (eq_token, ty) = match ty {
-            Some(ty) if colon_token.is_none() => ty,
-            _ => return Ok(ImplItem::Verbatim(verbatim::between(&begin, input))),
-        };
-
-        Ok(ImplItem::Type(ImplItemType {
-            attrs: Vec::new(),
-            vis,
-            defaultness,
-            type_token,
-            ident,
-            generics,
-            eq_token,
-            ty,
-            semi_token,
-        }))
+        if colon_token.is_some() || ty.is_none() {
+            Ok(ImplItem::Verbatim(verbatim::between(begin, input)))
+        } else {
+            let (eq_token, ty) = ty.unwrap();
+            Ok(ImplItem::Type(ImplItemType {
+                attrs: Vec::new(),
+                vis,
+                defaultness,
+                type_token,
+                ident,
+                generics,
+                eq_token,
+                ty,
+                semi_token,
+            }))
+        }
     }
 
     #[cfg_attr(doc_cfg, doc(cfg(feature = "parsing")))]
@@ -3240,6 +3128,14 @@ mod printing {
             self.vis.to_tokens(tokens);
             self.defaultness.to_tokens(tokens);
             self.sig.to_tokens(tokens);
+            if self.block.stmts.len() == 1 {
+                if let Stmt::Item(Item::Verbatim(verbatim)) = &self.block.stmts[0] {
+                    if verbatim.to_string() == ";" {
+                        verbatim.to_tokens(tokens);
+                        return;
+                    }
+                }
+            }
             self.block.brace_token.surround(tokens, |tokens| {
                 tokens.append_all(self.attrs.inner());
                 tokens.append_all(&self.block.stmts);

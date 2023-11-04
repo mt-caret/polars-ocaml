@@ -180,8 +180,7 @@ pub(crate) mod parsing {
     }
 
     fn parse_stmt(input: ParseStream, allow_nosemi: AllowNoSemi) -> Result<Stmt> {
-        let begin = input.fork();
-        let attrs = input.call(Attribute::parse_outer)?;
+        let mut attrs = input.call(Attribute::parse_outer)?;
 
         // brace-style macros; paren and bracket macros get parsed as
         // expression statements.
@@ -189,7 +188,7 @@ pub(crate) mod parsing {
         let mut is_item_macro = false;
         if let Ok(path) = ahead.call(Path::parse_mod_style) {
             if ahead.peek(Token![!]) {
-                if ahead.peek2(Ident) || ahead.peek2(Token![try]) {
+                if ahead.peek2(Ident) {
                     is_item_macro = true;
                 } else if ahead.peek2(token::Brace)
                     && !(ahead.peek3(Token![.]) || ahead.peek3(Token![?]))
@@ -239,7 +238,9 @@ pub(crate) mod parsing {
             || input.peek(Token![macro])
             || is_item_macro
         {
-            let item = item::parsing::parse_rest_of_item(begin, attrs, input)?;
+            let mut item: Item = input.parse()?;
+            attrs.extend(item.replace_attrs(Vec::new()));
+            item.replace_attrs(attrs);
             Ok(Stmt::Item(item))
         } else {
             stmt_expr(input, allow_nosemi, attrs)

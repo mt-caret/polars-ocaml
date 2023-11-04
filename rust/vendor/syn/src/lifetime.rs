@@ -113,12 +113,10 @@ impl Hash for Lifetime {
 }
 
 #[cfg(feature = "parsing")]
-pub_if_not_doc! {
-    #[doc(hidden)]
-    #[allow(non_snake_case)]
-    pub fn Lifetime(marker: lookahead::TokenMarker) -> Lifetime {
-        match marker {}
-    }
+#[doc(hidden)]
+#[allow(non_snake_case)]
+pub fn Lifetime(marker: lookahead::TokenMarker) -> Lifetime {
+    match marker {}
 }
 
 #[cfg(feature = "parsing")]

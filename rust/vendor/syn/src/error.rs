@@ -278,29 +278,8 @@ impl ErrorMessage {
             None => (Span::call_site(), Span::call_site()),
         };
 
-        // ::core::compile_error!($message)
+        // compile_error!($message)
         TokenStream::from_iter(vec![
-            TokenTree::Punct({
-                let mut punct = Punct::new(':', Spacing::Joint);
-                punct.set_span(start);
-                punct
-            }),
-            TokenTree::Punct({
-                let mut punct = Punct::new(':', Spacing::Alone);
-                punct.set_span(start);
-                punct
-            }),
-            TokenTree::Ident(Ident::new("core", start)),
-            TokenTree::Punct({
-                let mut punct = Punct::new(':', Spacing::Joint);
-                punct.set_span(start);
-                punct
-            }),
-            TokenTree::Punct({
-                let mut punct = Punct::new(':', Spacing::Alone);
-                punct.set_span(start);
-                punct
-            }),
             TokenTree::Ident(Ident::new("compile_error", start)),
             TokenTree::Punct({
                 let mut punct = Punct::new('!', Spacing::Alone);
@@ -385,7 +364,7 @@ impl Clone for Error {
 impl Clone for ErrorMessage {
     fn clone(&self) -> Self {
         ErrorMessage {
-            span: self.span,
+            span: self.span.clone(),
             message: self.message.clone(),
         }
     }

@@ -1,7 +1,6 @@
 #![allow(
     clippy::float_cmp,
     clippy::non_ascii_literal,
-    clippy::single_match_else,
     clippy::uninlined_format_args
 )]
 
@@ -14,13 +13,14 @@ use std::str::FromStr;
 use syn::{Lit, LitFloat, LitInt, LitStr};
 
 fn lit(s: &str) -> Lit {
-    let mut tokens = TokenStream::from_str(s).unwrap().into_iter();
-    match tokens.next().unwrap() {
-        TokenTree::Literal(lit) => {
-            assert!(tokens.next().is_none());
-            Lit::new(lit)
-        }
-        wrong => panic!("{:?}", wrong),
+    match TokenStream::from_str(s)
+        .unwrap()
+        .into_iter()
+        .next()
+        .unwrap()
+    {
+        TokenTree::Literal(lit) => Lit::new(lit),
+        _ => panic!(),
     }
 }
 

@@ -1,20 +1,15 @@
-use std::error::{Error, Request};
+use std::any::{Demand, Provider};
 
-#[doc(hidden)]
 pub trait ThiserrorProvide: Sealed {
-    fn thiserror_provide<'a>(&'a self, request: &mut Request<'a>);
+    fn thiserror_provide<'a>(&'a self, demand: &mut Demand<'a>);
 }
 
-impl<T> ThiserrorProvide for T
-where
-    T: Error + ?Sized,
-{
+impl<T: Provider + ?Sized> ThiserrorProvide for T {
     #[inline]
-    fn thiserror_provide<'a>(&'a self, request: &mut Request<'a>) {
-        self.provide(request);
+    fn thiserror_provide<'a>(&'a self, demand: &mut Demand<'a>) {
+        self.provide(demand);
     }
 }
 
-#[doc(hidden)]
 pub trait Sealed {}
-impl<T: Error + ?Sized> Sealed for T {}
+impl<T: Provider + ?Sized> Sealed for T {}

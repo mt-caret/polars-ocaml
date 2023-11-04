@@ -13,20 +13,24 @@
 edition = "2021"
 rust-version = "1.61.0"
 name = "zerocopy"
-version = "0.7.14"
+version = "0.7.3"
 authors = ["Joshua Liebow-Feeser <joshlf@google.com>"]
 exclude = [".*"]
 description = "Utilities for zero-copy parsing and serialization"
 readme = "README.md"
-license = "BSD-2-Clause OR Apache-2.0 OR MIT"
+license = "BSD-2-Clause"
 repository = "https://github.com/google/zerocopy"
-
-[package.metadata.ci]
-pinned-nightly = "nightly-2023-10-23"
-pinned-stable = "1.73.0"
 
 [package.metadata.docs.rs]
 all-features = true
+
+[package.metadata.ci]
+pinned-stable = "1.69.0"
+pinned-nightly = "nightly-2023-05-25"
+
+[lib]
+path = "src/lib.rs"
+doctest = false
 
 [dependencies.byteorder]
 version = "1.3"
@@ -34,18 +38,11 @@ optional = true
 default-features = false
 
 [dependencies.zerocopy-derive]
-version = "=0.7.14"
+version = "=0.7.3"
 optional = true
 
-[dev-dependencies.assert_matches]
-version = "1.5"
-
-[dev-dependencies.itertools]
-version = "0.11"
-
 [dev-dependencies.rand]
-version = "0.8.5"
-features = ["small_rng"]
+version = "0.6"
 
 [dev-dependencies.rustversion]
 version = "1.0"
@@ -54,16 +51,14 @@ version = "1.0"
 version = "1.1"
 
 [dev-dependencies.trybuild]
-version = "=1.0.85"
-features = ["diff"]
+version = "=1.0.80"
 
 [dev-dependencies.zerocopy-derive]
-version = "=0.7.14"
+version = "=0.7.3"
 
 [features]
 __internal_use_only_features_that_work_on_stable = [
     "alloc",
-    "derive",
     "simd",
 ]
 alloc = []
@@ -73,4 +68,4 @@ simd = []
 simd-nightly = ["simd"]
 
 [target."cfg(any())".dependencies.zerocopy-derive]
-version = "=0.7.14"
+version = "=0.7.3"

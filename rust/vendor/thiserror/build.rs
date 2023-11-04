@@ -1,61 +1,30 @@
-#![allow(clippy::needless_raw_string_hashes)]
-
 use std::env;
 use std::fs;
 use std::path::Path;
 use std::process::{Command, ExitStatus, Stdio};
 use std::str;
 
-// This code exercises the surface area that we expect of the Error generic
-// member access API. If the current toolchain is able to compile it, then
-// thiserror is able to provide backtrace support.
+// This code exercises the surface area that we expect of the Provider API. If
+// the current toolchain is able to compile it, then thiserror is able to use
+// providers for backtrace support.
 const PROBE: &str = r#"
-    #![feature(error_generic_member_access)]
+    #![feature(provide_any)]
 
-    use std::error::{Error, Request};
-    use std::fmt::{self, Debug, Display};
+    use std::any::{Demand, Provider};
 
-    struct MyError(Thing);
-    struct Thing;
-
-    impl Debug for MyError {
-        fn fmt(&self, _formatter: &mut fmt::Formatter) -> fmt::Result {
-            unimplemented!()
-        }
-    }
-
-    impl Display for MyError {
-        fn fmt(&self, _formatter: &mut fmt::Formatter) -> fmt::Result {
-            unimplemented!()
-        }
-    }
-
-    impl Error for MyError {
-        fn provide<'a>(&'a self, request: &mut Request<'a>) {
-            request.provide_ref(&self.0);
-        }
+    fn _f<'a, P: Provider>(p: &'a P, demand: &mut Demand<'a>) {
+        p.provide(demand);
     }
 "#;
 
 fn main() {
     match compile_probe() {
-        Some(status) if status.success() => println!("cargo:rustc-cfg=error_generic_member_access"),
+        Some(status) if status.success() => println!("cargo:rustc-cfg=provide_any"),
         _ => {}
     }
 }
 
 fn compile_probe() -> Option<ExitStatus> {
-    if env::var_os("RUSTC_STAGE").is_some() {
-        // We are running inside rustc bootstrap. This is a highly non-standard
-        // environment with issues such as:
-        //
-        //     https://github.com/rust-lang/cargo/issues/11138
-        //     https://github.com/rust-lang/rust/issues/114839
-        //
-        // Let's just not use nightly features here.
-        return None;
-    }
-
     let rustc = env::var_os("RUSTC")?;
     let out_dir = env::var_os("OUT_DIR")?;
     let probefile = Path::new(&out_dir).join("probe.rs");

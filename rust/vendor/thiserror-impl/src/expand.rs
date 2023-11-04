@@ -1,10 +1,10 @@
 use crate::ast::{Enum, Field, Input, Struct};
 use crate::attr::Trait;
 use crate::generics::InferredBounds;
-use crate::span::MemberSpan;
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote, quote_spanned, ToTokens};
 use std::collections::BTreeSet as Set;
+use syn::spanned::Spanned;
 use syn::{
     Data, DeriveInput, GenericArgument, Member, PathArguments, Result, Token, Type, Visibility,
 };
@@ -23,13 +23,13 @@ fn impl_struct(input: Struct) -> TokenStream {
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
     let mut error_inferred_bounds = InferredBounds::new();
 
-    let source_body = if let Some(transparent_attr) = &input.attrs.transparent {
+    let source_body = if input.attrs.transparent.is_some() {
         let only_field = &input.fields[0];
         if only_field.contains_generic {
             error_inferred_bounds.insert(only_field.ty, quote!(std::error::Error));
         }
         let member = &only_field.member;
-        Some(quote_spanned! {transparent_attr.span=>
+        Some(quote! {
             std::error::Error::source(self.#member.as_dyn_error())
         })
     } else if let Some(source_field) = input.source_field() {
@@ -39,22 +39,20 @@ fn impl_struct(input: Struct) -> TokenStream {
             error_inferred_bounds.insert(ty, quote!(std::error::Error + 'static));
         }
         let asref = if type_is_option(source_field.ty) {
-            Some(quote_spanned!(source.member_span()=> .as_ref()?))
+            Some(quote_spanned!(source.span()=> .as_ref()?))
         } else {
             None
         };
-        let dyn_error = quote_spanned! {source_field.source_span()=>
-            self.#source #asref.as_dyn_error()
-        };
+        let dyn_error = quote_spanned!(source.span()=> self.#source #asref.as_dyn_error());
         Some(quote! {
-            ::core::option::Option::Some(#dyn_error)
+            std::option::Option::Some(#dyn_error)
         })
     } else {
         None
     };
     let source_method = source_body.map(|body| {
         quote! {
-            fn source(&self) -> ::core::option::Option<&(dyn std::error::Error + 'static)> {
+            fn source(&self) -> std::option::Option<&(dyn std::error::Error + 'static)> {
                 use thiserror::__private::AsDynError;
                 #body
             }
@@ -62,32 +60,32 @@ fn impl_struct(input: Struct) -> TokenStream {
     });
 
     let provide_method = input.backtrace_field().map(|backtrace_field| {
-        let request = quote!(request);
+        let demand = quote!(demand);
         let backtrace = &backtrace_field.member;
         let body = if let Some(source_field) = input.source_field() {
             let source = &source_field.member;
             let source_provide = if type_is_option(source_field.ty) {
-                quote_spanned! {source.member_span()=>
-                    if let ::core::option::Option::Some(source) = &self.#source {
-                        source.thiserror_provide(#request);
+                quote_spanned! {source.span()=>
+                    if let std::option::Option::Some(source) = &self.#source {
+                        source.thiserror_provide(#demand);
                     }
                 }
             } else {
-                quote_spanned! {source.member_span()=>
-                    self.#source.thiserror_provide(#request);
+                quote_spanned! {source.span()=>
+                    self.#source.thiserror_provide(#demand);
                 }
             };
             let self_provide = if source == backtrace {
                 None
             } else if type_is_option(backtrace_field.ty) {
                 Some(quote! {
-                    if let ::core::option::Option::Some(backtrace) = &self.#backtrace {
-                        #request.provide_ref::<std::backtrace::Backtrace>(backtrace);
+                    if let std::option::Option::Some(backtrace) = &self.#backtrace {
+                        #demand.provide_ref::<std::backtrace::Backtrace>(backtrace);
                     }
                 })
             } else {
                 Some(quote! {
-                    #request.provide_ref::<std::backtrace::Backtrace>(&self.#backtrace);
+                    #demand.provide_ref::<std::backtrace::Backtrace>(&self.#backtrace);
                 })
             };
             quote! {
@@ -97,17 +95,17 @@ fn impl_struct(input: Struct) -> TokenStream {
             }
         } else if type_is_option(backtrace_field.ty) {
             quote! {
-                if let ::core::option::Option::Some(backtrace) = &self.#backtrace {
-                    #request.provide_ref::<std::backtrace::Backtrace>(backtrace);
+                if let std::option::Option::Some(backtrace) = &self.#backtrace {
+                    #demand.provide_ref::<std::backtrace::Backtrace>(backtrace);
                 }
             }
         } else {
             quote! {
-                #request.provide_ref::<std::backtrace::Backtrace>(&self.#backtrace);
+                #demand.provide_ref::<std::backtrace::Backtrace>(&self.#backtrace);
             }
         };
         quote! {
-            fn provide<'_request>(&'_request self, #request: &mut std::error::Request<'_request>) {
+            fn provide<'_demand>(&'_demand self, #demand: &mut std::any::Demand<'_demand>) {
                 #body
             }
         }
@@ -118,11 +116,18 @@ fn impl_struct(input: Struct) -> TokenStream {
         let only_field = &input.fields[0].member;
         display_implied_bounds.insert((0, Trait::Display));
         Some(quote! {
-            ::core::fmt::Display::fmt(&self.#only_field, __formatter)
+            std::fmt::Display::fmt(&self.#only_field, __formatter)
         })
     } else if let Some(display) = &input.attrs.display {
         display_implied_bounds = display.implied_bounds.clone();
-        let use_as_display = use_as_display(display.has_bonus_display);
+        let use_as_display = if display.has_bonus_display {
+            Some(quote! {
+                #[allow(unused_imports)]
+                use thiserror::__private::{DisplayAsDisplay, PathAsDisplay};
+            })
+        } else {
+            None
+        };
         let pat = fields_pat(&input.fields);
         Some(quote! {
             #use_as_display
@@ -144,9 +149,9 @@ fn impl_struct(input: Struct) -> TokenStream {
         let display_where_clause = display_inferred_bounds.augment_where_clause(input.generics);
         quote! {
             #[allow(unused_qualifications)]
-            impl #impl_generics ::core::fmt::Display for #ty #ty_generics #display_where_clause {
+            impl #impl_generics std::fmt::Display for #ty #ty_generics #display_where_clause {
                 #[allow(clippy::used_underscore_binding)]
-                fn fmt(&self, __formatter: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
+                fn fmt(&self, __formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
                     #body
                 }
             }
@@ -159,7 +164,7 @@ fn impl_struct(input: Struct) -> TokenStream {
         let body = from_initializer(from_field, backtrace_field);
         quote! {
             #[allow(unused_qualifications)]
-            impl #impl_generics ::core::convert::From<#from> for #ty #ty_generics #where_clause {
+            impl #impl_generics std::convert::From<#from> for #ty #ty_generics #where_clause {
                 #[allow(deprecated)]
                 fn from(source: #from) -> Self {
                     #ty #body
@@ -195,15 +200,13 @@ fn impl_enum(input: Enum) -> TokenStream {
     let source_method = if input.has_source() {
         let arms = input.variants.iter().map(|variant| {
             let ident = &variant.ident;
-            if let Some(transparent_attr) = &variant.attrs.transparent {
+            if variant.attrs.transparent.is_some() {
                 let only_field = &variant.fields[0];
                 if only_field.contains_generic {
                     error_inferred_bounds.insert(only_field.ty, quote!(std::error::Error));
                 }
                 let member = &only_field.member;
-                let source = quote_spanned! {transparent_attr.span=>
-                    std::error::Error::source(transparent.as_dyn_error())
-                };
+                let source = quote!(std::error::Error::source(transparent.as_dyn_error()));
                 quote! {
                     #ty::#ident {#member: transparent} => #source,
                 }
@@ -214,25 +217,23 @@ fn impl_enum(input: Enum) -> TokenStream {
                     error_inferred_bounds.insert(ty, quote!(std::error::Error + 'static));
                 }
                 let asref = if type_is_option(source_field.ty) {
-                    Some(quote_spanned!(source.member_span()=> .as_ref()?))
+                    Some(quote_spanned!(source.span()=> .as_ref()?))
                 } else {
                     None
                 };
                 let varsource = quote!(source);
-                let dyn_error = quote_spanned! {source_field.source_span()=>
-                    #varsource #asref.as_dyn_error()
-                };
+                let dyn_error = quote_spanned!(source.span()=> #varsource #asref.as_dyn_error());
                 quote! {
-                    #ty::#ident {#source: #varsource, ..} => ::core::option::Option::Some(#dyn_error),
+                    #ty::#ident {#source: #varsource, ..} => std::option::Option::Some(#dyn_error),
                 }
             } else {
                 quote! {
-                    #ty::#ident {..} => ::core::option::Option::None,
+                    #ty::#ident {..} => std::option::Option::None,
                 }
             }
         });
         Some(quote! {
-            fn source(&self) -> ::core::option::Option<&(dyn std::error::Error + 'static)> {
+            fn source(&self) -> std::option::Option<&(dyn std::error::Error + 'static)> {
                 use thiserror::__private::AsDynError;
                 #[allow(deprecated)]
                 match self {
@@ -245,7 +246,7 @@ fn impl_enum(input: Enum) -> TokenStream {
     };
 
     let provide_method = if input.has_backtrace() {
-        let request = quote!(request);
+        let demand = quote!(demand);
         let arms = input.variants.iter().map(|variant| {
             let ident = &variant.ident;
             match (variant.backtrace_field(), variant.source_field()) {
@@ -256,25 +257,25 @@ fn impl_enum(input: Enum) -> TokenStream {
                     let source = &source_field.member;
                     let varsource = quote!(source);
                     let source_provide = if type_is_option(source_field.ty) {
-                        quote_spanned! {source.member_span()=>
-                            if let ::core::option::Option::Some(source) = #varsource {
-                                source.thiserror_provide(#request);
+                        quote_spanned! {source.span()=>
+                            if let std::option::Option::Some(source) = #varsource {
+                                source.thiserror_provide(#demand);
                             }
                         }
                     } else {
-                        quote_spanned! {source.member_span()=>
-                            #varsource.thiserror_provide(#request);
+                        quote_spanned! {source.span()=>
+                            #varsource.thiserror_provide(#demand);
                         }
                     };
                     let self_provide = if type_is_option(backtrace_field.ty) {
                         quote! {
-                            if let ::core::option::Option::Some(backtrace) = backtrace {
-                                #request.provide_ref::<std::backtrace::Backtrace>(backtrace);
+                            if let std::option::Option::Some(backtrace) = backtrace {
+                                #demand.provide_ref::<std::backtrace::Backtrace>(backtrace);
                             }
                         }
                     } else {
                         quote! {
-                            #request.provide_ref::<std::backtrace::Backtrace>(backtrace);
+                            #demand.provide_ref::<std::backtrace::Backtrace>(backtrace);
                         }
                     };
                     quote! {
@@ -295,14 +296,14 @@ fn impl_enum(input: Enum) -> TokenStream {
                     let backtrace = &backtrace_field.member;
                     let varsource = quote!(source);
                     let source_provide = if type_is_option(source_field.ty) {
-                        quote_spanned! {backtrace.member_span()=>
-                            if let ::core::option::Option::Some(source) = #varsource {
-                                source.thiserror_provide(#request);
+                        quote_spanned! {backtrace.span()=>
+                            if let std::option::Option::Some(source) = #varsource {
+                                source.thiserror_provide(#demand);
                             }
                         }
                     } else {
-                        quote_spanned! {backtrace.member_span()=>
-                            #varsource.thiserror_provide(#request);
+                        quote_spanned! {backtrace.span()=>
+                            #varsource.thiserror_provide(#demand);
                         }
                     };
                     quote! {
@@ -316,13 +317,13 @@ fn impl_enum(input: Enum) -> TokenStream {
                     let backtrace = &backtrace_field.member;
                     let body = if type_is_option(backtrace_field.ty) {
                         quote! {
-                            if let ::core::option::Option::Some(backtrace) = backtrace {
-                                #request.provide_ref::<std::backtrace::Backtrace>(backtrace);
+                            if let std::option::Option::Some(backtrace) = backtrace {
+                                #demand.provide_ref::<std::backtrace::Backtrace>(backtrace);
                             }
                         }
                     } else {
                         quote! {
-                            #request.provide_ref::<std::backtrace::Backtrace>(backtrace);
+                            #demand.provide_ref::<std::backtrace::Backtrace>(backtrace);
                         }
                     };
                     quote! {
@@ -337,7 +338,7 @@ fn impl_enum(input: Enum) -> TokenStream {
             }
         });
         Some(quote! {
-            fn provide<'_request>(&'_request self, #request: &mut std::error::Request<'_request>) {
+            fn provide<'_demand>(&'_demand self, #demand: &mut std::any::Demand<'_demand>) {
                 #[allow(deprecated)]
                 match self {
                     #(#arms)*
@@ -350,13 +351,19 @@ fn impl_enum(input: Enum) -> TokenStream {
 
     let display_impl = if input.has_display() {
         let mut display_inferred_bounds = InferredBounds::new();
-        let has_bonus_display = input.variants.iter().any(|v| {
+        let use_as_display = if input.variants.iter().any(|v| {
             v.attrs
                 .display
                 .as_ref()
                 .map_or(false, |display| display.has_bonus_display)
-        });
-        let use_as_display = use_as_display(has_bonus_display);
+        }) {
+            Some(quote! {
+                #[allow(unused_imports)]
+                use thiserror::__private::{DisplayAsDisplay, PathAsDisplay};
+            })
+        } else {
+            None
+        };
         let void_deref = if input.variants.is_empty() {
             Some(quote!(*))
         } else {
@@ -375,7 +382,7 @@ fn impl_enum(input: Enum) -> TokenStream {
                         Member::Unnamed(index) => format_ident!("_{}", index),
                     };
                     display_implied_bounds.insert((0, Trait::Display));
-                    quote!(::core::fmt::Display::fmt(#only_field, __formatter))
+                    quote!(std::fmt::Display::fmt(#only_field, __formatter))
                 }
             };
             for (field, bound) in display_implied_bounds {
@@ -394,8 +401,8 @@ fn impl_enum(input: Enum) -> TokenStream {
         let display_where_clause = display_inferred_bounds.augment_where_clause(input.generics);
         Some(quote! {
             #[allow(unused_qualifications)]
-            impl #impl_generics ::core::fmt::Display for #ty #ty_generics #display_where_clause {
-                fn fmt(&self, __formatter: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
+            impl #impl_generics std::fmt::Display for #ty #ty_generics #display_where_clause {
+                fn fmt(&self, __formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
                     #use_as_display
                     #[allow(unused_variables, deprecated, clippy::used_underscore_binding)]
                     match #void_deref self {
@@ -416,7 +423,7 @@ fn impl_enum(input: Enum) -> TokenStream {
         let body = from_initializer(from_field, backtrace_field);
         Some(quote! {
             #[allow(unused_qualifications)]
-            impl #impl_generics ::core::convert::From<#from> for #ty #ty_generics #where_clause {
+            impl #impl_generics std::convert::From<#from> for #ty #ty_generics #where_clause {
                 #[allow(deprecated)]
                 fn from(source: #from) -> Self {
                     #ty::#variant #body
@@ -459,20 +466,10 @@ fn fields_pat(fields: &[Field]) -> TokenStream {
     }
 }
 
-fn use_as_display(needs_as_display: bool) -> Option<TokenStream> {
-    if needs_as_display {
-        Some(quote! {
-            use thiserror::__private::AsDisplay as _;
-        })
-    } else {
-        None
-    }
-}
-
 fn from_initializer(from_field: &Field, backtrace_field: Option<&Field>) -> TokenStream {
     let from_member = &from_field.member;
     let some_source = if type_is_option(from_field.ty) {
-        quote!(::core::option::Option::Some(source))
+        quote!(std::option::Option::Some(source))
     } else {
         quote!(source)
     };
@@ -480,11 +477,11 @@ fn from_initializer(from_field: &Field, backtrace_field: Option<&Field>) -> Toke
         let backtrace_member = &backtrace_field.member;
         if type_is_option(backtrace_field.ty) {
             quote! {
-                #backtrace_member: ::core::option::Option::Some(std::backtrace::Backtrace::capture()),
+                #backtrace_member: std::option::Option::Some(std::backtrace::Backtrace::capture()),
             }
         } else {
             quote! {
-                #backtrace_member: ::core::convert::From::from(std::backtrace::Backtrace::capture()),
+                #backtrace_member: std::convert::From::from(std::backtrace::Backtrace::capture()),
             }
         }
     });

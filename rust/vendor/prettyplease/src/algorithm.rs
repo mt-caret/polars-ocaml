@@ -251,7 +251,7 @@ impl Printer {
 
     fn check_stack(&mut self, mut depth: usize) {
         while let Some(&index) = self.scan_stack.back() {
-            let entry = &mut self.buf[index];
+            let mut entry = &mut self.buf[index];
             match entry.token {
                 Token::Begin(_) => {
                     if depth == 0 {

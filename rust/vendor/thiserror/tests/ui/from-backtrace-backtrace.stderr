@@ -1,5 +1,5 @@
 error: deriving From requires no fields other than source and backtrace
- --> tests/ui/from-backtrace-backtrace.rs:9:5
+ --> tests/ui/from-backtrace-backtrace.rs:8:18
   |
-9 |     #[from]
-  |     ^^^^^^^
+8 | pub struct Error(#[from] #[backtrace] std::io::Error, Backtrace);
+  |                  ^^^^^^^

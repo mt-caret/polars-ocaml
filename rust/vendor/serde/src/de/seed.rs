@@ -1,4 +1,4 @@
-use crate::de::{Deserialize, DeserializeSeed, Deserializer};
+use de::{Deserialize, DeserializeSeed, Deserializer};
 
 /// A DeserializeSeed helper for implementing deserialize_in_place Visitors.
 ///

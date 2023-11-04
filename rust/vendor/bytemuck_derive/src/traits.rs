@@ -35,9 +35,6 @@ pub trait Derivable {
   fn requires_where_clause() -> bool {
     true
   }
-  fn explicit_bounds_attribute_name() -> Option<&'static str> {
-    None
-  }
 }
 
 pub struct Pod;
@@ -128,10 +125,6 @@ impl Derivable for Zeroable {
       Data::Struct(_) => generate_fields_are_trait(input, Self::ident(input)?),
       Data::Enum(_) => bail!("Deriving Zeroable is not supported for enums"),
     }
-  }
-
-  fn explicit_bounds_attribute_name() -> Option<&'static str> {
-    Some("zeroable")
   }
 }
 
@@ -378,31 +371,12 @@ impl Derivable for Contiguous {
     let min_lit = LitInt::new(&format!("{}", min), input.span());
     let max_lit = LitInt::new(&format!("{}", max), input.span());
 
-    // `from_integer` and `into_integer` are usually provided by the trait's default implementation.
-    // We override this implementation because it goes through `transmute_copy`, which can lead to
-    // inefficient assembly as seen in https://github.com/Lokathor/bytemuck/issues/175 .
-
     Ok((
       quote!(),
       quote! {
           type Int = #integer_ty;
           const MIN_VALUE: #integer_ty = #min_lit;
           const MAX_VALUE: #integer_ty = #max_lit;
-
-          #[inline]
-          fn from_integer(value: Self::Int) -> Option<Self> {
-            #[allow(clippy::manual_range_contains)]
-            if Self::MIN_VALUE <= value && value <= Self::MAX_VALUE {
-              Some(unsafe { ::core::mem::transmute(value) })
-            } else {
-              None
-            }
-          }
-
-          #[inline]
-          fn into_integer(self) -> Self::Int {
-              self as #integer_ty
-          }
       },
     ))
   }
@@ -558,13 +532,12 @@ fn generate_assert_no_padding(input: &DeriveInput) -> Result<TokenStream> {
     let size_rest =
       quote_spanned!(span => #( + ::core::mem::size_of::<#field_types>() )*);
 
-    quote_spanned!(span => #size_first #size_rest)
+    quote_spanned!(span => #size_first#size_rest)
   } else {
     quote_spanned!(span => 0)
   };
 
   Ok(quote_spanned! {span => const _: fn() = || {
-    #[doc(hidden)]
     struct TypeWithoutPadding([u8; #size_sum]);
     let _ = ::core::mem::transmute::<#struct_type, TypeWithoutPadding>;
   };})
@@ -581,7 +554,6 @@ fn generate_fields_are_trait(
   let field_types = get_field_types(&fields);
   Ok(quote_spanned! {span => #(const _: fn() = || {
       #[allow(clippy::missing_const_for_fn)]
-      #[doc(hidden)]
       fn check #impl_generics () #where_clause {
         fn assert_impl<T: #trait_>() {}
         assert_impl::<#field_types>();

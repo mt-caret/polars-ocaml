@@ -228,18 +228,19 @@
 //!
 //!   [`anyhow`]: https://github.com/dtolnay/anyhow
 
-#![doc(html_root_url = "https://docs.rs/thiserror/1.0.50")]
+#![doc(html_root_url = "https://docs.rs/thiserror/1.0.40")]
 #![allow(
+    // Clippy bug: https://github.com/rust-lang/rust-clippy/issues/7421
+    clippy::doc_markdown,
     clippy::module_name_repetitions,
-    clippy::needless_lifetimes,
     clippy::return_self_not_must_use,
-    clippy::wildcard_imports
+    clippy::wildcard_imports,
 )]
-#![cfg_attr(error_generic_member_access, feature(error_generic_member_access))]
+#![cfg_attr(provide_any, feature(provide_any))]
 
 mod aserror;
 mod display;
-#[cfg(error_generic_member_access)]
+#[cfg(provide_any)]
 mod provide;
 
 pub use thiserror_impl::*;
@@ -247,11 +248,8 @@ pub use thiserror_impl::*;
 // Not public API.
 #[doc(hidden)]
 pub mod __private {
-    #[doc(hidden)]
     pub use crate::aserror::AsDynError;
-    #[doc(hidden)]
-    pub use crate::display::AsDisplay;
-    #[cfg(error_generic_member_access)]
-    #[doc(hidden)]
+    pub use crate::display::{DisplayAsDisplay, PathAsDisplay};
+    #[cfg(provide_any)]
     pub use crate::provide::ThiserrorProvide;
 }

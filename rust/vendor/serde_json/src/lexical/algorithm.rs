@@ -51,10 +51,7 @@ where
         // Compute the product of the power, if it overflows,
         // prematurely return early, otherwise, if we didn't overshoot,
         // we can get an exact value.
-        let value = match mantissa.checked_mul(power) {
-            None => return None,
-            Some(value) => value,
-        };
+        let value = mantissa.checked_mul(power)?;
         if value >> mantissa_size != 0 {
             None
         } else {

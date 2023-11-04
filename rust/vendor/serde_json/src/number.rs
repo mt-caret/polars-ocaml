@@ -279,33 +279,6 @@ impl Number {
         }
     }
 
-    /// Returns the exact original JSON representation that this Number was
-    /// parsed from.
-    ///
-    /// For numbers constructed not via parsing, such as by `From<i32>`, returns
-    /// the JSON representation that serde\_json would serialize for this
-    /// number.
-    ///
-    /// ```
-    /// # use serde_json::Number;
-    /// for value in [
-    ///     "7",
-    ///     "12.34",
-    ///     "34e-56789",
-    ///     "0.0123456789000000012345678900000001234567890000123456789",
-    ///     "343412345678910111213141516171819202122232425262728293034",
-    ///     "-343412345678910111213141516171819202122232425262728293031",
-    /// ] {
-    ///     let number: Number = serde_json::from_str(value).unwrap();
-    ///     assert_eq!(number.as_str(), value);
-    /// }
-    /// ```
-    #[cfg(feature = "arbitrary_precision")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "arbitrary_precision")))]
-    pub fn as_str(&self) -> &str {
-        &self.n
-    }
-
     pub(crate) fn as_f32(&self) -> Option<f32> {
         #[cfg(not(feature = "arbitrary_precision"))]
         match self.n {
@@ -388,8 +361,8 @@ impl Serialize for Number {
     {
         use serde::ser::SerializeStruct;
 
-        let mut s = tri!(serializer.serialize_struct(TOKEN, 1));
-        tri!(s.serialize_field(TOKEN, &self.n));
+        let mut s = serializer.serialize_struct(TOKEN, 1)?;
+        s.serialize_field(TOKEN, &self.n)?;
         s.end()
     }
 }
@@ -433,11 +406,11 @@ impl<'de> Deserialize<'de> for Number {
             where
                 V: de::MapAccess<'de>,
             {
-                let value = tri!(visitor.next_key::<NumberKey>());
+                let value = visitor.next_key::<NumberKey>()?;
                 if value.is_none() {
                     return Err(de::Error::invalid_type(Unexpected::Map, &self));
                 }
-                let v: NumberFromString = tri!(visitor.next_value());
+                let v: NumberFromString = visitor.next_value()?;
                 Ok(v.value)
             }
         }
@@ -476,7 +449,7 @@ impl<'de> de::Deserialize<'de> for NumberKey {
             }
         }
 
-        tri!(deserializer.deserialize_identifier(FieldVisitor));
+        deserializer.deserialize_identifier(FieldVisitor)?;
         Ok(NumberKey)
     }
 }
@@ -579,7 +552,7 @@ macro_rules! deserialize_number {
         where
             V: de::Visitor<'de>,
         {
-            visitor.$visit(tri!(self.n.parse().map_err(|_| invalid_number())))
+            visitor.$visit(self.n.parse().map_err(|_| invalid_number())?)
         }
     };
 }

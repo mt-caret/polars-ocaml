@@ -8,7 +8,7 @@ use syn::{
     ForeignItemType, ImplItem, ImplItemConst, ImplItemFn, ImplItemMacro, ImplItemType, Item,
     ItemConst, ItemEnum, ItemExternCrate, ItemFn, ItemForeignMod, ItemImpl, ItemMacro, ItemMod,
     ItemStatic, ItemStruct, ItemTrait, ItemTraitAlias, ItemType, ItemUnion, ItemUse, Receiver,
-    Signature, StaticMutability, TraitItem, TraitItemConst, TraitItemFn, TraitItemMacro,
+    Signature, StaticMutability, Stmt, TraitItem, TraitItemConst, TraitItemFn, TraitItemMacro,
     TraitItemType, Type, UseGlob, UseGroup, UseName, UsePath, UseRename, UseTree, Variadic,
 };
 
@@ -164,8 +164,8 @@ impl Printer {
 
     fn item_macro(&mut self, item: &ItemMacro) {
         self.outer_attrs(&item.attrs);
-        let semicolon = true;
-        self.mac(&item.mac, item.ident.as_ref(), semicolon);
+        self.mac(&item.mac, item.ident.as_ref());
+        self.mac_semi_if_needed(&item.mac.delimiter);
         self.hardbreak();
     }
 
@@ -200,7 +200,9 @@ impl Printer {
         self.cbox(0);
         self.visibility(&item.vis);
         self.word("static ");
-        self.static_mutability(&item.mutability);
+        if let StaticMutability::Mut(_) = item.mutability {
+            self.word("mut ");
+        }
         self.ident(&item.ident);
         self.word(": ");
         self.ty(&item.ty);
@@ -364,51 +366,11 @@ impl Printer {
     fn item_verbatim(&mut self, tokens: &TokenStream) {
         use syn::parse::{Parse, ParseStream, Result};
         use syn::punctuated::Punctuated;
-        use syn::{
-            braced, parenthesized, token, Attribute, Generics, Ident, Lifetime, Token, Visibility,
-        };
-        use verbatim::{
-            FlexibleItemConst, FlexibleItemFn, FlexibleItemStatic, FlexibleItemType,
-            WhereClauseLocation,
-        };
+        use syn::{braced, Attribute, Token, Visibility};
 
         enum ItemVerbatim {
             Empty,
-            Ellipsis,
-            ConstFlexible(FlexibleItemConst),
-            FnFlexible(FlexibleItemFn),
-            ImplFlexible(ImplFlexible),
-            Macro2(Macro2),
-            StaticFlexible(FlexibleItemStatic),
-            TypeFlexible(FlexibleItemType),
             UseBrace(UseBrace),
-        }
-
-        struct ImplFlexible {
-            attrs: Vec<Attribute>,
-            vis: Visibility,
-            defaultness: bool,
-            unsafety: bool,
-            generics: Generics,
-            constness: ImplConstness,
-            negative_impl: bool,
-            trait_: Option<Type>,
-            self_ty: Type,
-            items: Vec<ImplItem>,
-        }
-
-        enum ImplConstness {
-            None,
-            MaybeConst,
-            Const,
-        }
-
-        struct Macro2 {
-            attrs: Vec<Attribute>,
-            vis: Visibility,
-            ident: Ident,
-            args: Option<TokenStream>,
-            body: TokenStream,
         }
 
         struct UseBrace {
@@ -420,19 +382,6 @@ impl Printer {
         struct RootUseTree {
             leading_colon: Option<Token![::]>,
             inner: UseTree,
-        }
-
-        impl Parse for ImplConstness {
-            fn parse(input: ParseStream) -> Result<Self> {
-                if input.parse::<Option<Token![?]>>()?.is_some() {
-                    input.parse::<Token![const]>()?;
-                    Ok(ImplConstness::MaybeConst)
-                } else if input.parse::<Option<Token![const]>>()?.is_some() {
-                    Ok(ImplConstness::Const)
-                } else {
-                    Ok(ImplConstness::None)
-                }
-            }
         }
 
         impl Parse for RootUseTree {
@@ -447,122 +396,16 @@ impl Printer {
         impl Parse for ItemVerbatim {
             fn parse(input: ParseStream) -> Result<Self> {
                 if input.is_empty() {
-                    return Ok(ItemVerbatim::Empty);
-                } else if input.peek(Token![...]) {
-                    input.parse::<Token![...]>()?;
-                    return Ok(ItemVerbatim::Ellipsis);
-                }
-
-                let mut attrs = input.call(Attribute::parse_outer)?;
-                let vis: Visibility = input.parse()?;
-
-                let lookahead = input.lookahead1();
-                if lookahead.peek(Token![const]) && (input.peek2(Ident) || input.peek2(Token![_])) {
-                    let defaultness = false;
-                    let flexible_item = FlexibleItemConst::parse(attrs, vis, defaultness, input)?;
-                    Ok(ItemVerbatim::ConstFlexible(flexible_item))
-                } else if input.peek(Token![const])
-                    || lookahead.peek(Token![async])
-                    || lookahead.peek(Token![unsafe]) && !input.peek2(Token![impl])
-                    || lookahead.peek(Token![extern])
-                    || lookahead.peek(Token![fn])
-                {
-                    let defaultness = false;
-                    let flexible_item = FlexibleItemFn::parse(attrs, vis, defaultness, input)?;
-                    Ok(ItemVerbatim::FnFlexible(flexible_item))
-                } else if lookahead.peek(Token![default])
-                    || input.peek(Token![unsafe])
-                    || lookahead.peek(Token![impl])
-                {
-                    let defaultness = input.parse::<Option<Token![default]>>()?.is_some();
-                    let unsafety = input.parse::<Option<Token![unsafe]>>()?.is_some();
-                    input.parse::<Token![impl]>()?;
-                    let has_generics = input.peek(Token![<])
-                        && (input.peek2(Token![>])
-                            || input.peek2(Token![#])
-                            || (input.peek2(Ident) || input.peek2(Lifetime))
-                                && (input.peek3(Token![:])
-                                    || input.peek3(Token![,])
-                                    || input.peek3(Token![>])
-                                    || input.peek3(Token![=]))
-                            || input.peek2(Token![const]));
-                    let mut generics: Generics = if has_generics {
-                        input.parse()?
-                    } else {
-                        Generics::default()
-                    };
-                    let constness: ImplConstness = input.parse()?;
-                    let negative_impl =
-                        !input.peek2(token::Brace) && input.parse::<Option<Token![!]>>()?.is_some();
-                    let first_ty: Type = input.parse()?;
-                    let (trait_, self_ty) = if input.parse::<Option<Token![for]>>()?.is_some() {
-                        (Some(first_ty), input.parse()?)
-                    } else {
-                        (None, first_ty)
-                    };
-                    generics.where_clause = input.parse()?;
-                    let content;
-                    braced!(content in input);
-                    let inner_attrs = content.call(Attribute::parse_inner)?;
-                    attrs.extend(inner_attrs);
-                    let mut items = Vec::new();
-                    while !content.is_empty() {
-                        items.push(content.parse()?);
-                    }
-                    Ok(ItemVerbatim::ImplFlexible(ImplFlexible {
-                        attrs,
-                        vis,
-                        defaultness,
-                        unsafety,
-                        generics,
-                        constness,
-                        negative_impl,
-                        trait_,
-                        self_ty,
-                        items,
-                    }))
-                } else if lookahead.peek(Token![macro]) {
-                    input.parse::<Token![macro]>()?;
-                    let ident: Ident = input.parse()?;
-                    let args = if input.peek(token::Paren) {
-                        let paren_content;
-                        parenthesized!(paren_content in input);
-                        Some(paren_content.parse::<TokenStream>()?)
-                    } else {
-                        None
-                    };
-                    let brace_content;
-                    braced!(brace_content in input);
-                    let body: TokenStream = brace_content.parse()?;
-                    Ok(ItemVerbatim::Macro2(Macro2 {
-                        attrs,
-                        vis,
-                        ident,
-                        args,
-                        body,
-                    }))
-                } else if lookahead.peek(Token![static]) {
-                    let flexible_item = FlexibleItemStatic::parse(attrs, vis, input)?;
-                    Ok(ItemVerbatim::StaticFlexible(flexible_item))
-                } else if lookahead.peek(Token![type]) {
-                    let defaultness = false;
-                    let flexible_item = FlexibleItemType::parse(
-                        attrs,
-                        vis,
-                        defaultness,
-                        input,
-                        WhereClauseLocation::BeforeEq,
-                    )?;
-                    Ok(ItemVerbatim::TypeFlexible(flexible_item))
-                } else if lookahead.peek(Token![use]) {
+                    Ok(ItemVerbatim::Empty)
+                } else {
+                    let attrs = input.call(Attribute::parse_outer)?;
+                    let vis: Visibility = input.parse()?;
                     input.parse::<Token![use]>()?;
                     let content;
                     braced!(content in input);
                     let trees = content.parse_terminated(RootUseTree::parse, Token![,])?;
                     input.parse::<Token![;]>()?;
                     Ok(ItemVerbatim::UseBrace(UseBrace { attrs, vis, trees }))
-                } else {
-                    Err(lookahead.error())
                 }
             }
         }
@@ -573,100 +416,7 @@ impl Printer {
         };
 
         match item {
-            ItemVerbatim::Empty => {
-                self.hardbreak();
-            }
-            ItemVerbatim::Ellipsis => {
-                self.word("...");
-                self.hardbreak();
-            }
-            ItemVerbatim::ConstFlexible(item) => {
-                self.flexible_item_const(&item);
-            }
-            ItemVerbatim::FnFlexible(item) => {
-                self.flexible_item_fn(&item);
-            }
-            ItemVerbatim::ImplFlexible(item) => {
-                self.outer_attrs(&item.attrs);
-                self.cbox(INDENT);
-                self.ibox(-INDENT);
-                self.cbox(INDENT);
-                self.visibility(&item.vis);
-                if item.defaultness {
-                    self.word("default ");
-                }
-                if item.unsafety {
-                    self.word("unsafe ");
-                }
-                self.word("impl");
-                self.generics(&item.generics);
-                self.end();
-                self.nbsp();
-                match item.constness {
-                    ImplConstness::None => {}
-                    ImplConstness::MaybeConst => self.word("?const "),
-                    ImplConstness::Const => self.word("const "),
-                }
-                if item.negative_impl {
-                    self.word("!");
-                }
-                if let Some(trait_) = &item.trait_ {
-                    self.ty(trait_);
-                    self.space();
-                    self.word("for ");
-                }
-                self.ty(&item.self_ty);
-                self.end();
-                self.where_clause_for_body(&item.generics.where_clause);
-                self.word("{");
-                self.hardbreak_if_nonempty();
-                self.inner_attrs(&item.attrs);
-                for impl_item in &item.items {
-                    self.impl_item(impl_item);
-                }
-                self.offset(-INDENT);
-                self.end();
-                self.word("}");
-                self.hardbreak();
-            }
-            ItemVerbatim::Macro2(item) => {
-                self.outer_attrs(&item.attrs);
-                self.visibility(&item.vis);
-                self.word("macro ");
-                self.ident(&item.ident);
-                if let Some(args) = &item.args {
-                    self.word("(");
-                    self.cbox(INDENT);
-                    self.zerobreak();
-                    self.ibox(0);
-                    self.macro_rules_tokens(args.clone(), true);
-                    self.end();
-                    self.zerobreak();
-                    self.offset(-INDENT);
-                    self.end();
-                    self.word(")");
-                }
-                self.word(" {");
-                if !item.body.is_empty() {
-                    self.neverbreak();
-                    self.cbox(INDENT);
-                    self.hardbreak();
-                    self.ibox(0);
-                    self.macro_rules_tokens(item.body.clone(), false);
-                    self.end();
-                    self.hardbreak();
-                    self.offset(-INDENT);
-                    self.end();
-                }
-                self.word("}");
-                self.hardbreak();
-            }
-            ItemVerbatim::StaticFlexible(item) => {
-                self.flexible_item_static(&item);
-            }
-            ItemVerbatim::TypeFlexible(item) => {
-                self.flexible_item_type(&item);
-            }
+            ItemVerbatim::Empty => {}
             ItemVerbatim::UseBrace(item) => {
                 self.outer_attrs(&item.attrs);
                 self.visibility(&item.vis);
@@ -704,9 +454,10 @@ impl Printer {
                     self.end();
                 }
                 self.word(";");
-                self.hardbreak();
             }
         }
+
+        self.hardbreak();
     }
 
     fn use_tree(&mut self, use_tree: &UseTree) {
@@ -800,7 +551,9 @@ impl Printer {
         self.cbox(0);
         self.visibility(&foreign_item.vis);
         self.word("static ");
-        self.static_mutability(&foreign_item.mutability);
+        if let StaticMutability::Mut(_) = foreign_item.mutability {
+            self.word("mut ");
+        }
         self.ident(&foreign_item.ident);
         self.word(": ");
         self.ty(&foreign_item.ty);
@@ -823,8 +576,8 @@ impl Printer {
 
     fn foreign_item_macro(&mut self, foreign_item: &ForeignItemMacro) {
         self.outer_attrs(&foreign_item.attrs);
-        let semicolon = true;
-        self.mac(&foreign_item.mac, None, semicolon);
+        self.mac(&foreign_item.mac, None);
+        self.mac_semi_if_needed(&foreign_item.mac.delimiter);
         self.hardbreak();
     }
 
@@ -839,54 +592,14 @@ impl Printer {
     #[cfg(feature = "verbatim")]
     fn foreign_item_verbatim(&mut self, tokens: &TokenStream) {
         use syn::parse::{Parse, ParseStream, Result};
-        use syn::{Attribute, Token, Visibility};
-        use verbatim::{FlexibleItemFn, FlexibleItemStatic, FlexibleItemType, WhereClauseLocation};
 
         enum ForeignItemVerbatim {
-            Empty,
-            Ellipsis,
-            FnFlexible(FlexibleItemFn),
-            StaticFlexible(FlexibleItemStatic),
-            TypeFlexible(FlexibleItemType),
+            TypeAlias(ItemType),
         }
 
         impl Parse for ForeignItemVerbatim {
             fn parse(input: ParseStream) -> Result<Self> {
-                if input.is_empty() {
-                    return Ok(ForeignItemVerbatim::Empty);
-                } else if input.peek(Token![...]) {
-                    input.parse::<Token![...]>()?;
-                    return Ok(ForeignItemVerbatim::Ellipsis);
-                }
-
-                let attrs = input.call(Attribute::parse_outer)?;
-                let vis: Visibility = input.parse()?;
-                let defaultness = false;
-
-                let lookahead = input.lookahead1();
-                if lookahead.peek(Token![const])
-                    || lookahead.peek(Token![async])
-                    || lookahead.peek(Token![unsafe])
-                    || lookahead.peek(Token![extern])
-                    || lookahead.peek(Token![fn])
-                {
-                    let flexible_item = FlexibleItemFn::parse(attrs, vis, defaultness, input)?;
-                    Ok(ForeignItemVerbatim::FnFlexible(flexible_item))
-                } else if lookahead.peek(Token![static]) {
-                    let flexible_item = FlexibleItemStatic::parse(attrs, vis, input)?;
-                    Ok(ForeignItemVerbatim::StaticFlexible(flexible_item))
-                } else if lookahead.peek(Token![type]) {
-                    let flexible_item = FlexibleItemType::parse(
-                        attrs,
-                        vis,
-                        defaultness,
-                        input,
-                        WhereClauseLocation::Both,
-                    )?;
-                    Ok(ForeignItemVerbatim::TypeFlexible(flexible_item))
-                } else {
-                    Err(lookahead.error())
-                }
+                input.parse().map(ForeignItemVerbatim::TypeAlias)
             }
         }
 
@@ -896,22 +609,7 @@ impl Printer {
         };
 
         match foreign_item {
-            ForeignItemVerbatim::Empty => {
-                self.hardbreak();
-            }
-            ForeignItemVerbatim::Ellipsis => {
-                self.word("...");
-                self.hardbreak();
-            }
-            ForeignItemVerbatim::FnFlexible(foreign_item) => {
-                self.flexible_item_fn(&foreign_item);
-            }
-            ForeignItemVerbatim::StaticFlexible(foreign_item) => {
-                self.flexible_item_static(&foreign_item);
-            }
-            ForeignItemVerbatim::TypeFlexible(foreign_item) => {
-                self.flexible_item_type(&foreign_item);
-            }
+            ForeignItemVerbatim::TypeAlias(item) => self.item_type(&item),
         }
     }
 
@@ -985,9 +683,7 @@ impl Printer {
         if let Some((_eq_token, default)) = &trait_item.default {
             self.word(" = ");
             self.neverbreak();
-            self.ibox(-INDENT);
             self.ty(default);
-            self.end();
         }
         self.where_clause_oneline_semi(&trait_item.generics.where_clause);
         self.end();
@@ -996,113 +692,16 @@ impl Printer {
 
     fn trait_item_macro(&mut self, trait_item: &TraitItemMacro) {
         self.outer_attrs(&trait_item.attrs);
-        let semicolon = true;
-        self.mac(&trait_item.mac, None, semicolon);
+        self.mac(&trait_item.mac, None);
+        self.mac_semi_if_needed(&trait_item.mac.delimiter);
         self.hardbreak();
     }
 
-    #[cfg(not(feature = "verbatim"))]
     fn trait_item_verbatim(&mut self, trait_item: &TokenStream) {
         if !trait_item.is_empty() {
             unimplemented!("TraitItem::Verbatim `{}`", trait_item);
         }
         self.hardbreak();
-    }
-
-    #[cfg(feature = "verbatim")]
-    fn trait_item_verbatim(&mut self, tokens: &TokenStream) {
-        use syn::parse::{Parse, ParseStream, Result};
-        use syn::{Attribute, Ident, Token, Visibility};
-        use verbatim::{FlexibleItemConst, FlexibleItemType, WhereClauseLocation};
-
-        enum TraitItemVerbatim {
-            Empty,
-            Ellipsis,
-            ConstFlexible(FlexibleItemConst),
-            TypeFlexible(FlexibleItemType),
-            PubOrDefault(PubOrDefaultTraitItem),
-        }
-
-        struct PubOrDefaultTraitItem {
-            attrs: Vec<Attribute>,
-            vis: Visibility,
-            defaultness: bool,
-            trait_item: TraitItem,
-        }
-
-        impl Parse for TraitItemVerbatim {
-            fn parse(input: ParseStream) -> Result<Self> {
-                if input.is_empty() {
-                    return Ok(TraitItemVerbatim::Empty);
-                } else if input.peek(Token![...]) {
-                    input.parse::<Token![...]>()?;
-                    return Ok(TraitItemVerbatim::Ellipsis);
-                }
-
-                let attrs = input.call(Attribute::parse_outer)?;
-                let vis: Visibility = input.parse()?;
-                let defaultness = input.parse::<Option<Token![default]>>()?.is_some();
-
-                let lookahead = input.lookahead1();
-                if lookahead.peek(Token![const]) && (input.peek2(Ident) || input.peek2(Token![_])) {
-                    let flexible_item = FlexibleItemConst::parse(attrs, vis, defaultness, input)?;
-                    Ok(TraitItemVerbatim::ConstFlexible(flexible_item))
-                } else if lookahead.peek(Token![type]) {
-                    let flexible_item = FlexibleItemType::parse(
-                        attrs,
-                        vis,
-                        defaultness,
-                        input,
-                        WhereClauseLocation::AfterEq,
-                    )?;
-                    Ok(TraitItemVerbatim::TypeFlexible(flexible_item))
-                } else if (input.peek(Token![const])
-                    || lookahead.peek(Token![async])
-                    || lookahead.peek(Token![unsafe])
-                    || lookahead.peek(Token![extern])
-                    || lookahead.peek(Token![fn]))
-                    && (!matches!(vis, Visibility::Inherited) || defaultness)
-                {
-                    Ok(TraitItemVerbatim::PubOrDefault(PubOrDefaultTraitItem {
-                        attrs,
-                        vis,
-                        defaultness,
-                        trait_item: input.parse()?,
-                    }))
-                } else {
-                    Err(lookahead.error())
-                }
-            }
-        }
-
-        let impl_item: TraitItemVerbatim = match syn::parse2(tokens.clone()) {
-            Ok(impl_item) => impl_item,
-            Err(_) => unimplemented!("TraitItem::Verbatim `{}`", tokens),
-        };
-
-        match impl_item {
-            TraitItemVerbatim::Empty => {
-                self.hardbreak();
-            }
-            TraitItemVerbatim::Ellipsis => {
-                self.word("...");
-                self.hardbreak();
-            }
-            TraitItemVerbatim::ConstFlexible(trait_item) => {
-                self.flexible_item_const(&trait_item);
-            }
-            TraitItemVerbatim::TypeFlexible(trait_item) => {
-                self.flexible_item_type(&trait_item);
-            }
-            TraitItemVerbatim::PubOrDefault(trait_item) => {
-                self.outer_attrs(&trait_item.attrs);
-                self.visibility(&trait_item.vis);
-                if trait_item.defaultness {
-                    self.word("default ");
-                }
-                self.trait_item(&trait_item.trait_item);
-            }
-        }
     }
 
     fn impl_item(&mut self, impl_item: &ImplItem) {
@@ -1145,6 +744,16 @@ impl Printer {
             self.word("default ");
         }
         self.signature(&impl_item.sig);
+        if impl_item.block.stmts.len() == 1 {
+            if let Stmt::Item(Item::Verbatim(verbatim)) = &impl_item.block.stmts[0] {
+                if verbatim.to_string() == ";" {
+                    self.where_clause_semi(&impl_item.sig.generics.where_clause);
+                    self.end();
+                    self.hardbreak();
+                    return;
+                }
+            }
+        }
         self.where_clause_for_body(&impl_item.sig.generics.where_clause);
         self.word("{");
         self.hardbreak_if_nonempty();
@@ -1180,96 +789,16 @@ impl Printer {
 
     fn impl_item_macro(&mut self, impl_item: &ImplItemMacro) {
         self.outer_attrs(&impl_item.attrs);
-        let semicolon = true;
-        self.mac(&impl_item.mac, None, semicolon);
+        self.mac(&impl_item.mac, None);
+        self.mac_semi_if_needed(&impl_item.mac.delimiter);
         self.hardbreak();
     }
 
-    #[cfg(not(feature = "verbatim"))]
     fn impl_item_verbatim(&mut self, impl_item: &TokenStream) {
         if !impl_item.is_empty() {
             unimplemented!("ImplItem::Verbatim `{}`", impl_item);
         }
         self.hardbreak();
-    }
-
-    #[cfg(feature = "verbatim")]
-    fn impl_item_verbatim(&mut self, tokens: &TokenStream) {
-        use syn::parse::{Parse, ParseStream, Result};
-        use syn::{Attribute, Ident, Token, Visibility};
-        use verbatim::{FlexibleItemConst, FlexibleItemFn, FlexibleItemType, WhereClauseLocation};
-
-        enum ImplItemVerbatim {
-            Empty,
-            Ellipsis,
-            ConstFlexible(FlexibleItemConst),
-            FnFlexible(FlexibleItemFn),
-            TypeFlexible(FlexibleItemType),
-        }
-
-        impl Parse for ImplItemVerbatim {
-            fn parse(input: ParseStream) -> Result<Self> {
-                if input.is_empty() {
-                    return Ok(ImplItemVerbatim::Empty);
-                } else if input.peek(Token![...]) {
-                    input.parse::<Token![...]>()?;
-                    return Ok(ImplItemVerbatim::Ellipsis);
-                }
-
-                let attrs = input.call(Attribute::parse_outer)?;
-                let vis: Visibility = input.parse()?;
-                let defaultness = input.parse::<Option<Token![default]>>()?.is_some();
-
-                let lookahead = input.lookahead1();
-                if lookahead.peek(Token![const]) && (input.peek2(Ident) || input.peek2(Token![_])) {
-                    let flexible_item = FlexibleItemConst::parse(attrs, vis, defaultness, input)?;
-                    Ok(ImplItemVerbatim::ConstFlexible(flexible_item))
-                } else if input.peek(Token![const])
-                    || lookahead.peek(Token![async])
-                    || lookahead.peek(Token![unsafe])
-                    || lookahead.peek(Token![extern])
-                    || lookahead.peek(Token![fn])
-                {
-                    let flexible_item = FlexibleItemFn::parse(attrs, vis, defaultness, input)?;
-                    Ok(ImplItemVerbatim::FnFlexible(flexible_item))
-                } else if lookahead.peek(Token![type]) {
-                    let flexible_item = FlexibleItemType::parse(
-                        attrs,
-                        vis,
-                        defaultness,
-                        input,
-                        WhereClauseLocation::AfterEq,
-                    )?;
-                    Ok(ImplItemVerbatim::TypeFlexible(flexible_item))
-                } else {
-                    Err(lookahead.error())
-                }
-            }
-        }
-
-        let impl_item: ImplItemVerbatim = match syn::parse2(tokens.clone()) {
-            Ok(impl_item) => impl_item,
-            Err(_) => unimplemented!("ImplItem::Verbatim `{}`", tokens),
-        };
-
-        match impl_item {
-            ImplItemVerbatim::Empty => {
-                self.hardbreak();
-            }
-            ImplItemVerbatim::Ellipsis => {
-                self.word("...");
-                self.hardbreak();
-            }
-            ImplItemVerbatim::ConstFlexible(impl_item) => {
-                self.flexible_item_const(&impl_item);
-            }
-            ImplItemVerbatim::FnFlexible(impl_item) => {
-                self.flexible_item_fn(&impl_item);
-            }
-            ImplItemVerbatim::TypeFlexible(impl_item) => {
-                self.flexible_item_type(&impl_item);
-            }
-        }
     }
 
     fn signature(&mut self, signature: &Signature) {
@@ -1358,350 +887,5 @@ impl Printer {
             self.word(": ");
         }
         self.word("...");
-    }
-
-    fn static_mutability(&mut self, mutability: &StaticMutability) {
-        match mutability {
-            StaticMutability::Mut(_) => self.word("mut "),
-            StaticMutability::None => {}
-            #[cfg_attr(all(test, exhaustive), deny(non_exhaustive_omitted_patterns))]
-            _ => unimplemented!("unknown StaticMutability"),
-        }
-    }
-}
-
-#[cfg(feature = "verbatim")]
-mod verbatim {
-    use crate::algorithm::Printer;
-    use crate::iter::IterDelimited;
-    use crate::INDENT;
-    use syn::ext::IdentExt;
-    use syn::parse::{ParseStream, Result};
-    use syn::{
-        braced, token, Attribute, Block, Expr, Generics, Ident, Signature, StaticMutability, Stmt,
-        Token, Type, TypeParamBound, Visibility, WhereClause,
-    };
-
-    pub struct FlexibleItemConst {
-        pub attrs: Vec<Attribute>,
-        pub vis: Visibility,
-        pub defaultness: bool,
-        pub ident: Ident,
-        pub generics: Generics,
-        pub ty: Type,
-        pub value: Option<Expr>,
-    }
-
-    pub struct FlexibleItemFn {
-        pub attrs: Vec<Attribute>,
-        pub vis: Visibility,
-        pub defaultness: bool,
-        pub sig: Signature,
-        pub body: Option<Vec<Stmt>>,
-    }
-
-    pub struct FlexibleItemStatic {
-        pub attrs: Vec<Attribute>,
-        pub vis: Visibility,
-        pub mutability: StaticMutability,
-        pub ident: Ident,
-        pub ty: Option<Type>,
-        pub expr: Option<Expr>,
-    }
-
-    pub struct FlexibleItemType {
-        pub attrs: Vec<Attribute>,
-        pub vis: Visibility,
-        pub defaultness: bool,
-        pub ident: Ident,
-        pub generics: Generics,
-        pub bounds: Vec<TypeParamBound>,
-        pub definition: Option<Type>,
-        pub where_clause_after_eq: Option<WhereClause>,
-    }
-
-    pub enum WhereClauseLocation {
-        // type Ty<T> where T: 'static = T;
-        BeforeEq,
-        // type Ty<T> = T where T: 'static;
-        AfterEq,
-        // TODO: goes away once the migration period on rust-lang/rust#89122 is over
-        Both,
-    }
-
-    impl FlexibleItemConst {
-        pub fn parse(
-            attrs: Vec<Attribute>,
-            vis: Visibility,
-            defaultness: bool,
-            input: ParseStream,
-        ) -> Result<Self> {
-            input.parse::<Token![const]>()?;
-            let ident = input.call(Ident::parse_any)?;
-            let mut generics: Generics = input.parse()?;
-            input.parse::<Token![:]>()?;
-            let ty: Type = input.parse()?;
-            let value = if input.parse::<Option<Token![=]>>()?.is_some() {
-                let expr: Expr = input.parse()?;
-                Some(expr)
-            } else {
-                None
-            };
-            generics.where_clause = input.parse()?;
-            input.parse::<Token![;]>()?;
-
-            Ok(FlexibleItemConst {
-                attrs,
-                vis,
-                defaultness,
-                ident,
-                generics,
-                ty,
-                value,
-            })
-        }
-    }
-
-    impl FlexibleItemFn {
-        pub fn parse(
-            mut attrs: Vec<Attribute>,
-            vis: Visibility,
-            defaultness: bool,
-            input: ParseStream,
-        ) -> Result<Self> {
-            let sig: Signature = input.parse()?;
-
-            let lookahead = input.lookahead1();
-            let body = if lookahead.peek(Token![;]) {
-                input.parse::<Token![;]>()?;
-                None
-            } else if lookahead.peek(token::Brace) {
-                let content;
-                braced!(content in input);
-                attrs.extend(content.call(Attribute::parse_inner)?);
-                Some(content.call(Block::parse_within)?)
-            } else {
-                return Err(lookahead.error());
-            };
-
-            Ok(FlexibleItemFn {
-                attrs,
-                vis,
-                defaultness,
-                sig,
-                body,
-            })
-        }
-    }
-
-    impl FlexibleItemStatic {
-        pub fn parse(attrs: Vec<Attribute>, vis: Visibility, input: ParseStream) -> Result<Self> {
-            input.parse::<Token![static]>()?;
-            let mutability: StaticMutability = input.parse()?;
-            let ident = input.parse()?;
-
-            let lookahead = input.lookahead1();
-            let has_type = lookahead.peek(Token![:]);
-            let has_expr = lookahead.peek(Token![=]);
-            if !has_type && !has_expr {
-                return Err(lookahead.error());
-            }
-
-            let ty: Option<Type> = if has_type {
-                input.parse::<Token![:]>()?;
-                input.parse().map(Some)?
-            } else {
-                None
-            };
-
-            let expr: Option<Expr> = if input.parse::<Option<Token![=]>>()?.is_some() {
-                input.parse().map(Some)?
-            } else {
-                None
-            };
-
-            input.parse::<Token![;]>()?;
-
-            Ok(FlexibleItemStatic {
-                attrs,
-                vis,
-                mutability,
-                ident,
-                ty,
-                expr,
-            })
-        }
-    }
-
-    impl FlexibleItemType {
-        pub fn parse(
-            attrs: Vec<Attribute>,
-            vis: Visibility,
-            defaultness: bool,
-            input: ParseStream,
-            where_clause_location: WhereClauseLocation,
-        ) -> Result<Self> {
-            input.parse::<Token![type]>()?;
-            let ident: Ident = input.parse()?;
-            let mut generics: Generics = input.parse()?;
-
-            let mut bounds = Vec::new();
-            if input.parse::<Option<Token![:]>>()?.is_some() {
-                loop {
-                    if input.peek(Token![where]) || input.peek(Token![=]) || input.peek(Token![;]) {
-                        break;
-                    }
-                    bounds.push(input.parse::<TypeParamBound>()?);
-                    if input.peek(Token![where]) || input.peek(Token![=]) || input.peek(Token![;]) {
-                        break;
-                    }
-                    input.parse::<Token![+]>()?;
-                }
-            }
-
-            match where_clause_location {
-                WhereClauseLocation::BeforeEq | WhereClauseLocation::Both => {
-                    generics.where_clause = input.parse()?;
-                }
-                WhereClauseLocation::AfterEq => {}
-            }
-
-            let definition = if input.parse::<Option<Token![=]>>()?.is_some() {
-                Some(input.parse()?)
-            } else {
-                None
-            };
-
-            let where_clause_after_eq = match where_clause_location {
-                WhereClauseLocation::AfterEq | WhereClauseLocation::Both
-                    if generics.where_clause.is_none() =>
-                {
-                    input.parse()?
-                }
-                _ => None,
-            };
-
-            input.parse::<Token![;]>()?;
-
-            Ok(FlexibleItemType {
-                attrs,
-                vis,
-                defaultness,
-                ident,
-                generics,
-                bounds,
-                definition,
-                where_clause_after_eq,
-            })
-        }
-    }
-
-    impl Printer {
-        pub fn flexible_item_const(&mut self, item: &FlexibleItemConst) {
-            self.outer_attrs(&item.attrs);
-            self.cbox(INDENT);
-            self.visibility(&item.vis);
-            if item.defaultness {
-                self.word("default ");
-            }
-            self.word("const ");
-            self.ident(&item.ident);
-            self.generics(&item.generics);
-            self.word(": ");
-            self.cbox(-INDENT);
-            self.ty(&item.ty);
-            self.end();
-            if let Some(value) = &item.value {
-                self.word(" = ");
-                self.neverbreak();
-                self.ibox(-INDENT);
-                self.expr(value);
-                self.end();
-            }
-            self.where_clause_oneline_semi(&item.generics.where_clause);
-            self.end();
-            self.hardbreak();
-        }
-
-        pub fn flexible_item_fn(&mut self, item: &FlexibleItemFn) {
-            self.outer_attrs(&item.attrs);
-            self.cbox(INDENT);
-            self.visibility(&item.vis);
-            if item.defaultness {
-                self.word("default ");
-            }
-            self.signature(&item.sig);
-            if let Some(body) = &item.body {
-                self.where_clause_for_body(&item.sig.generics.where_clause);
-                self.word("{");
-                self.hardbreak_if_nonempty();
-                self.inner_attrs(&item.attrs);
-                for stmt in body {
-                    self.stmt(stmt);
-                }
-                self.offset(-INDENT);
-                self.end();
-                self.word("}");
-            } else {
-                self.where_clause_semi(&item.sig.generics.where_clause);
-                self.end();
-            }
-            self.hardbreak();
-        }
-
-        pub fn flexible_item_static(&mut self, item: &FlexibleItemStatic) {
-            self.outer_attrs(&item.attrs);
-            self.cbox(0);
-            self.visibility(&item.vis);
-            self.word("static ");
-            self.static_mutability(&item.mutability);
-            self.ident(&item.ident);
-            if let Some(ty) = &item.ty {
-                self.word(": ");
-                self.ty(ty);
-            }
-            if let Some(expr) = &item.expr {
-                self.word(" = ");
-                self.neverbreak();
-                self.expr(expr);
-            }
-            self.word(";");
-            self.end();
-            self.hardbreak();
-        }
-
-        pub fn flexible_item_type(&mut self, item: &FlexibleItemType) {
-            self.outer_attrs(&item.attrs);
-            self.cbox(INDENT);
-            self.visibility(&item.vis);
-            if item.defaultness {
-                self.word("default ");
-            }
-            self.word("type ");
-            self.ident(&item.ident);
-            self.generics(&item.generics);
-            for bound in item.bounds.iter().delimited() {
-                if bound.is_first {
-                    self.word(": ");
-                } else {
-                    self.space();
-                    self.word("+ ");
-                }
-                self.type_param_bound(&bound);
-            }
-            if let Some(definition) = &item.definition {
-                self.where_clause_oneline(&item.generics.where_clause);
-                self.word("= ");
-                self.neverbreak();
-                self.ibox(-INDENT);
-                self.ty(definition);
-                self.end();
-                self.where_clause_oneline_semi(&item.where_clause_after_eq);
-            } else {
-                self.where_clause_oneline_semi(&item.generics.where_clause);
-            }
-            self.end();
-            self.hardbreak();
-        }
     }
 }

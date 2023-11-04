@@ -263,16 +263,15 @@ impl Printer {
                 };
                 if wrap_in_brace {
                     self.cbox(INDENT);
-                    let okay_to_brace = parseable_as_stmt(&expr.body);
                     self.scan_break(BreakToken {
-                        pre_break: Some(if okay_to_brace { '{' } else { '(' }),
+                        pre_break: Some('{'),
                         ..BreakToken::default()
                     });
                     self.expr(&expr.body);
                     self.scan_break(BreakToken {
                         offset: -INDENT,
-                        pre_break: (okay_to_brace && stmt::add_semi(&expr.body)).then(|| ';'),
-                        post_break: Some(if okay_to_brace { '}' } else { ')' }),
+                        pre_break: stmt::add_semi(&expr.body).then(|| ';'),
+                        post_break: Some('}'),
                         ..BreakToken::default()
                     });
                     self.end();
@@ -436,14 +435,13 @@ impl Printer {
 
     fn expr_let(&mut self, expr: &ExprLet) {
         self.outer_attrs(&expr.attrs);
-        self.ibox(0);
+        self.ibox(INDENT);
         self.word("let ");
-        self.ibox(0);
+        self.ibox(-INDENT);
         self.pat(&expr.pat);
         self.end();
-        self.word(" = ");
-        self.neverbreak();
-        self.ibox(0);
+        self.space();
+        self.word("= ");
         let needs_paren = contains_exterior_struct_lit(&expr.expr);
         if needs_paren {
             self.word("(");
@@ -452,7 +450,6 @@ impl Printer {
         if needs_paren {
             self.word(")");
         }
-        self.end();
         self.end();
     }
 
@@ -480,8 +477,7 @@ impl Printer {
 
     pub fn expr_macro(&mut self, expr: &ExprMacro) {
         self.outer_attrs(&expr.attrs);
-        let semicolon = false;
-        self.mac(&expr.mac, None, semicolon);
+        self.mac(&expr.mac, None);
     }
 
     fn expr_match(&mut self, expr: &ExprMatch) {
@@ -668,52 +664,28 @@ impl Printer {
 
     #[cfg(feature = "verbatim")]
     fn expr_verbatim(&mut self, tokens: &TokenStream) {
-        use syn::parse::discouraged::Speculative;
         use syn::parse::{Parse, ParseStream, Result};
-        use syn::{parenthesized, Ident};
 
         enum ExprVerbatim {
             Empty,
-            Ellipsis,
-            Builtin(Builtin),
             RawReference(RawReference),
         }
 
-        struct Builtin {
-            attrs: Vec<Attribute>,
-            name: Ident,
-            args: TokenStream,
-        }
-
         struct RawReference {
-            attrs: Vec<Attribute>,
             mutable: bool,
             expr: Expr,
         }
 
         mod kw {
-            syn::custom_keyword!(builtin);
             syn::custom_keyword!(raw);
         }
 
         impl Parse for ExprVerbatim {
             fn parse(input: ParseStream) -> Result<Self> {
-                let ahead = input.fork();
-                let attrs = ahead.call(Attribute::parse_outer)?;
-                let lookahead = ahead.lookahead1();
+                let lookahead = input.lookahead1();
                 if input.is_empty() {
                     Ok(ExprVerbatim::Empty)
-                } else if lookahead.peek(kw::builtin) {
-                    input.advance_to(&ahead);
-                    input.parse::<kw::builtin>()?;
-                    input.parse::<Token![#]>()?;
-                    let name: Ident = input.parse()?;
-                    let args;
-                    parenthesized!(args in input);
-                    let args: TokenStream = args.parse()?;
-                    Ok(ExprVerbatim::Builtin(Builtin { attrs, name, args }))
                 } else if lookahead.peek(Token![&]) {
-                    input.advance_to(&ahead);
                     input.parse::<Token![&]>()?;
                     input.parse::<kw::raw>()?;
                     let mutable = input.parse::<Option<Token![mut]>>()?.is_some();
@@ -721,14 +693,7 @@ impl Printer {
                         input.parse::<Token![const]>()?;
                     }
                     let expr: Expr = input.parse()?;
-                    Ok(ExprVerbatim::RawReference(RawReference {
-                        attrs,
-                        mutable,
-                        expr,
-                    }))
-                } else if lookahead.peek(Token![...]) {
-                    input.parse::<Token![...]>()?;
-                    Ok(ExprVerbatim::Ellipsis)
+                    Ok(ExprVerbatim::RawReference(RawReference { mutable, expr }))
                 } else {
                     Err(lookahead.error())
                 }
@@ -742,28 +707,7 @@ impl Printer {
 
         match expr {
             ExprVerbatim::Empty => {}
-            ExprVerbatim::Ellipsis => {
-                self.word("...");
-            }
-            ExprVerbatim::Builtin(expr) => {
-                self.outer_attrs(&expr.attrs);
-                self.word("builtin # ");
-                self.ident(&expr.name);
-                self.word("(");
-                if !expr.args.is_empty() {
-                    self.cbox(INDENT);
-                    self.zerobreak();
-                    self.ibox(0);
-                    self.macro_rules_tokens(expr.args, false);
-                    self.end();
-                    self.zerobreak();
-                    self.offset(-INDENT);
-                    self.end();
-                }
-                self.word(")");
-            }
             ExprVerbatim::RawReference(expr) => {
-                self.outer_attrs(&expr.attrs);
                 self.word("&raw ");
                 self.word(if expr.mutable { "mut " } else { "const " });
                 self.expr(&expr.expr);
@@ -875,7 +819,7 @@ impl Printer {
                 pre_break: Some('{'),
                 ..BreakToken::default()
             });
-            self.expr_beginning_of_line(body, true);
+            self.expr(body);
             self.scan_break(BreakToken {
                 offset: -INDENT,
                 pre_break: stmt::add_semi(body).then(|| ';'),
@@ -994,7 +938,7 @@ impl Printer {
     }
 }
 
-fn requires_terminator(expr: &Expr) -> bool {
+pub fn requires_terminator(expr: &Expr) -> bool {
     // see https://github.com/rust-lang/rust/blob/a266f1199/compiler/rustc_ast/src/util/classify.rs#L7-L26
     match expr {
         Expr::If(_)
@@ -1209,61 +1153,6 @@ fn is_blocklike(expr: &Expr) -> bool {
         | Expr::Verbatim(_)
         | Expr::While(_)
         | Expr::Yield(_) => false,
-
-        #[cfg_attr(all(test, exhaustive), deny(non_exhaustive_omitted_patterns))]
-        _ => false,
-    }
-}
-
-// Expressions for which `$expr` and `{ $expr }` mean the same thing.
-//
-// This is not the case for all expressions. For example `{} | x | x` has some
-// bitwise OR operators while `{ {} |x| x }` has a block followed by a closure.
-fn parseable_as_stmt(expr: &Expr) -> bool {
-    match expr {
-        Expr::Array(_)
-        | Expr::Async(_)
-        | Expr::Block(_)
-        | Expr::Break(_)
-        | Expr::Closure(_)
-        | Expr::Const(_)
-        | Expr::Continue(_)
-        | Expr::ForLoop(_)
-        | Expr::If(_)
-        | Expr::Infer(_)
-        | Expr::Let(_)
-        | Expr::Lit(_)
-        | Expr::Loop(_)
-        | Expr::Macro(_)
-        | Expr::Match(_)
-        | Expr::Paren(_)
-        | Expr::Path(_)
-        | Expr::Reference(_)
-        | Expr::Repeat(_)
-        | Expr::Return(_)
-        | Expr::Struct(_)
-        | Expr::TryBlock(_)
-        | Expr::Tuple(_)
-        | Expr::Unary(_)
-        | Expr::Unsafe(_)
-        | Expr::Verbatim(_)
-        | Expr::While(_)
-        | Expr::Yield(_) => true,
-
-        Expr::Assign(expr) => parseable_as_stmt(&expr.left),
-        Expr::Await(expr) => parseable_as_stmt(&expr.base),
-        Expr::Binary(expr) => requires_terminator(&expr.left) && parseable_as_stmt(&expr.left),
-        Expr::Call(expr) => requires_terminator(&expr.func) && parseable_as_stmt(&expr.func),
-        Expr::Cast(expr) => requires_terminator(&expr.expr) && parseable_as_stmt(&expr.expr),
-        Expr::Field(expr) => parseable_as_stmt(&expr.base),
-        Expr::Group(expr) => parseable_as_stmt(&expr.expr),
-        Expr::Index(expr) => requires_terminator(&expr.expr) && parseable_as_stmt(&expr.expr),
-        Expr::MethodCall(expr) => parseable_as_stmt(&expr.receiver),
-        Expr::Range(expr) => match &expr.start {
-            None => true,
-            Some(start) => requires_terminator(start) && parseable_as_stmt(start),
-        },
-        Expr::Try(expr) => parseable_as_stmt(&expr.expr),
 
         #[cfg_attr(all(test, exhaustive), deny(non_exhaustive_omitted_patterns))]
         _ => false,

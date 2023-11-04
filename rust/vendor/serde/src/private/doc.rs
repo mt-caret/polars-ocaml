@@ -1,8 +1,8 @@
 // Used only by Serde doc tests. Not public API.
 
-use crate::lib::*;
+use lib::*;
 
-use crate::ser;
+use ser;
 
 #[doc(hidden)]
 #[derive(Debug)]
