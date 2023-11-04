@@ -1,3 +1,22 @@
 (dirs :standard .cargo \ target)
 
-(data_only_dirs vendor)
+; Usually below two "subdir" stanzas should not exist, and instead should just
+; be (data_only_dirs vendor) which instructs dune to not try and interpret dune
+; files and so on in vendor.
+;
+; However, this causes errors since dune
+; *also* ignores all files that start with an underscore, and so it ignores
+; the vendored vendor/futures-core/src/task/__internalk directory causing Rust
+; builds in dune to fail. Based on suggestions in
+; https://github.com/ocaml/dune/issues/4795, we work around this by first
+; specifying as data_only_dirs the directories which contain dune files in them
+; (so they aren't compiled), and then manually specifying the directory which
+; starts with an underscore to un-ignore it.
+
+(subdir
+ vendor
+ (data_only_dirs ocaml*))
+
+(subdir
+ vendor/futures-core/src/task
+ (dirs :standard __internal))
