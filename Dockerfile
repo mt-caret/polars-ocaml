@@ -20,4 +20,4 @@ COPY ./polars.opam ./polars_async.opam ./
 RUN opam install . --deps-only --with-doc --with-test --assume-depexts --yes
 
 # Overwrite default linker with mold (this drastically speeds up builds)
-RUN ln -sf /usr/local/bin/mold "$(realpath /usr/bin/ld)"
+RUN ln -sf /usr/bin/mold "$(realpath /usr/bin/ld)"
