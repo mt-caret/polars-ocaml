@@ -12,3 +12,5 @@ val of_ofday : Time_ns.Ofday.t -> t option
 
 val of_ofday_exn : Time_ns.Ofday.t -> t
 val to_ofday : t -> Time_ns.Ofday.t
+val to_string : t -> string
+val pp : Format.formatter -> t -> unit [@@ocaml.toplevel_printer]

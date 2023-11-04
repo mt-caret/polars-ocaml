@@ -35,6 +35,8 @@ fn rust_naive_date_to_ocaml(
     (year, month, day).to_ocaml(cr)
 }
 
+dyn_box_to_string!(rust_naive_date_to_string, NaiveDate);
+
 #[ocaml_interop_export(raise_on_err)]
 fn rust_naive_date_to_naive_datetime(
     cr: &mut &mut OCamlRuntime,
@@ -61,15 +63,7 @@ fn rust_naive_date_to_naive_datetime(
     date.and_hms_opt(hour, min, sec).map(Abstract).to_ocaml(cr)
 }
 
-#[ocaml_interop_export]
-fn rust_naive_datetime_to_string(
-    cr: &mut &mut OCamlRuntime,
-    datetime: OCamlRef<DynBox<NaiveDateTime>>,
-) -> OCaml<String> {
-    let Abstract(datetime) = datetime.to_rust(cr);
-
-    datetime.to_string().to_ocaml(cr)
-}
+dyn_box_to_string!(rust_naive_datetime_to_string, NaiveDateTime);
 
 #[ocaml_interop_export]
 fn rust_time_ns_to_naive_datetime(
@@ -172,8 +166,10 @@ fn rust_duration_round_to_time_unit(
     Abstract(duration).to_ocaml(cr)
 }
 
+dyn_box_to_string!(rust_duration_to_string, Duration);
+
 #[ocaml_interop_export]
-fn rust_time_ns_ofday_to_time(
+fn rust_time_ns_ofday_to_naive_time(
     cr: &mut &mut OCamlRuntime,
     time_ns_ofday: OCamlRef<OCamlInt63>,
 ) -> OCaml<Option<DynBox<NaiveTime>>> {
@@ -198,7 +194,7 @@ pub fn time_to_time64ns(time: &NaiveTime) -> i64 {
 }
 
 #[ocaml_interop_export]
-fn rust_time_to_nanoseconds(
+fn rust_naive_time_to_nanoseconds(
     cr: &mut &mut OCammlRuntime,
     time: OCamlRef<DynBox<NaiveTime>>,
 ) -> OCaml<OCamlInt> {
@@ -206,6 +202,8 @@ fn rust_time_to_nanoseconds(
 
     time_to_time64ns(&time).to_ocaml(cr)
 }
+
+dyn_box_to_string!(rust_naive_time_to_string, NaiveTime);
 
 #[ocaml_interop_export]
 fn rust_all_tzs(

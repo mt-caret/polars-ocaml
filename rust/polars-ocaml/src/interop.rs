@@ -134,8 +134,20 @@ macro_rules! dyn_box_op_result {
     }
 }
 
+macro_rules! dyn_box_to_string {
+    ($name:ident, $type:ty) => {
+        #[ocaml_interop_export]
+        fn $name(cr: &mut &mut OCamlRuntime, value: OCamlRef<DynBox<$type>>) -> OCaml<String> {
+            let Abstract(value) = value.to_rust(cr);
+
+            value.to_string().to_ocaml(cr)
+        }
+    };
+}
+
 pub(crate) use dyn_box_op;
 pub(crate) use dyn_box_op_result;
+pub(crate) use dyn_box_to_string;
 
 // This function is actually quite unsafe; as a general rule, additional use of
 // this is strongly discouraged. See comment for `raise_ocaml_exception` in the

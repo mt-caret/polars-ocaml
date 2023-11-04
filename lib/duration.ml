@@ -12,6 +12,15 @@ let%expect_test "roundtrip" =
     of_span span |> to_span |> [%test_result: Time_ns.Span.t] ~expect:span)
 ;;
 
+external to_string : t -> string = "rust_duration_to_string"
+
+include Pretty_printer.Register (struct
+    type nonrec t = t
+
+    let module_name = "Polars.Duration"
+    let to_string = to_string
+  end)
+
 module For_testing = struct
   external round_to_time_unit
     :  t

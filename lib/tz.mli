@@ -14,3 +14,4 @@ val to_string : t -> string
 val parse : string -> t option
 val of_time_zone : Time_ns_unix.Zone.t -> t option
 val to_time_zone : t -> Time_ns_unix.Zone.t option
+val pp : Format.formatter -> t -> unit [@@ocaml.toplevel_printer]
