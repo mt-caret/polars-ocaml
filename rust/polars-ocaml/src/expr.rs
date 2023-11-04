@@ -1,3 +1,6 @@
+use crate::interop::*;
+use crate::polars_types::PolarsDataType;
+use crate::polars_types::*;
 use chrono::{Duration, NaiveDate, NaiveDateTime, NaiveTime};
 use ocaml_interop::{
     DynBox, OCaml, OCamlBytes, OCamlFloat, OCamlInt, OCamlList, OCamlRef, OCamlRuntime, ToOCaml,
@@ -7,9 +10,6 @@ use polars::prelude::*;
 use polars::series::IsSorted;
 use polars_ocaml_macros::ocaml_interop_export;
 use std::rc::Rc;
-
-use crate::utils::PolarsDataType;
-use crate::utils::*;
 
 macro_rules! expr_op {
     ($name:ident, |$($var:ident),+| $body:expr) => {
@@ -153,7 +153,7 @@ fn rust_expr_lit(
                 .to_rust::<Abstract<NaiveTime>>()
                 .get();
 
-            lit(LiteralValue::Time(crate::misc::time_to_time64ns(&time)))
+            lit(LiteralValue::Time(crate::time::time_to_time64ns(&time)))
         }
         GADTDataType::List(data_type) => {
             // Since there is no direct way to create a List-based literal, we

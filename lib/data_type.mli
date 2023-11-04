@@ -69,9 +69,12 @@ module Typed : sig
 
     val to_untyped : 'a t -> untyped
     val of_untyped : untyped -> packed option
-    val date : Date.t t
-    val time : Time_ns.t t
-    val span : Time_ns.Span.t t
-    val ofday : Time_ns.Ofday.t t
+
+    module Core : sig
+      val date : Date.t t
+      val time : Time_ns.t t
+      val span : Time_ns.Span.t t
+      val ofday : Time_ns.Ofday.t t
+    end
   end
   with type untyped := t

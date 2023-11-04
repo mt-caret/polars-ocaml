@@ -200,29 +200,31 @@ module Typed = struct
     Quickcheck.Observer.unmap quickcheck_observer ~f:(fun (T t) -> to_untyped t)
   ;;
 
-  let date =
-    Custom
-      { data_type = Date; f = Naive_date.to_date_exn; f_inverse = Naive_date.of_date }
-  ;;
+  module Core = struct
+    let date =
+      Custom
+        { data_type = Date; f = Naive_date.to_date_exn; f_inverse = Naive_date.of_date }
+    ;;
 
-  let time =
-    Custom
-      { data_type = Datetime (Nanoseconds, None)
-      ; f = Naive_datetime.to_time_ns
-      ; f_inverse = Naive_datetime.of_time_ns_exn
-      }
-  ;;
+    let time =
+      Custom
+        { data_type = Datetime (Nanoseconds, None)
+        ; f = Naive_datetime.to_time_ns
+        ; f_inverse = Naive_datetime.of_time_ns_exn
+        }
+    ;;
 
-  let span =
-    Custom
-      { data_type = Duration Nanoseconds
-      ; f = Duration.to_span
-      ; f_inverse = Duration.of_span
-      }
-  ;;
+    let span =
+      Custom
+        { data_type = Duration Nanoseconds
+        ; f = Duration.to_span
+        ; f_inverse = Duration.of_span
+        }
+    ;;
 
-  let ofday =
-    Custom
-      { data_type = Time; f = Naive_time.to_ofday; f_inverse = Naive_time.of_ofday_exn }
-  ;;
+    let ofday =
+      Custom
+        { data_type = Time; f = Naive_time.to_ofday; f_inverse = Naive_time.of_ofday_exn }
+    ;;
+  end
 end

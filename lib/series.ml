@@ -104,33 +104,22 @@ module T = struct
 
   let string = create Utf8
   let stringo = createo Utf8
-
-  external datetime : string -> Naive_datetime.t list -> t = "rust_series_new_datetime"
-
-  external datetime_option
-    :  string
-    -> Naive_datetime.t option list
-    -> t
-    = "rust_series_new_datetime_option"
-
-  let datetime' name dates = datetime name (List.map dates ~f:Naive_datetime.of_date)
-
-  let datetime_option' name dates =
-    datetime_option name (List.map dates ~f:(Option.map ~f:Naive_datetime.of_date))
-  ;;
-
-  let time string times =
-    datetime string (List.map times ~f:Naive_datetime.of_time_ns_exn)
-  ;;
-
-  let time_option string times =
-    datetime_option
-      string
-      (List.map times ~f:(Option.map ~f:Naive_datetime.of_time_ns_exn))
-  ;;
-
-  let date = create Data_type.Typed.date
-  let dateo = createo Data_type.Typed.date
+  let datetime = create (Datetime (Nanoseconds, None))
+  let datetimeo = createo (Datetime (Nanoseconds, None))
+  let datetime' = create Data_type.Typed.Core.time
+  let datetimeo' = createo Data_type.Typed.Core.time
+  let date = create Date
+  let dateo = createo Date
+  let date' = create Data_type.Typed.Core.date
+  let dateo' = createo Data_type.Typed.Core.date
+  let duration = create (Duration Nanoseconds)
+  let durationo = createo (Duration Nanoseconds)
+  let duration' = create Data_type.Typed.Core.span
+  let durationo' = createo Data_type.Typed.Core.span
+  let time = create Time
+  let timeo = createo Time
+  let time' = create Data_type.Typed.Core.ofday
+  let timeo' = createo Data_type.Typed.Core.ofday
 
   external date_range
     :  string

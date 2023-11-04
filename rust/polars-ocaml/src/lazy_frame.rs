@@ -3,7 +3,8 @@
 // attribute alongside the proc macro invocation doesn't work, which probably
 // is fixable; disabling the warning file-wide in the interim.
 #![allow(clippy::type_complexity)]
-use crate::utils::*;
+use crate::interop::*;
+use crate::polars_types::*;
 use ocaml_interop::{DynBox, OCaml, OCamlInt, OCamlList, OCamlRef, ToOCaml};
 use polars::prelude::*;
 use polars_ocaml_macros::ocaml_interop_export;
