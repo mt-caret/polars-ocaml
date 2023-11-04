@@ -42,7 +42,7 @@ of libraries possible:
 
 ```
 $ cd rust
-$ rm -rf vendor
+$ rm -rf Cargo.lock vendor
 $ cargo vendor -Z direct-minimal-versions
 $ cargo build # to make sure that the minimal versions we've specified are actually reasonable
 ```
