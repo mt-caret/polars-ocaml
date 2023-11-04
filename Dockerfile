@@ -18,4 +18,4 @@ RUN opam install dune ocamlformat ocaml-lsp-server --yes
 RUN cargo install cargo-watch
 
 COPY ./polars.opam ./polars_async.opam ./
-RUN opam install . --deps-only --with-doc --with-test --yes
+RUN opam install . --deps-only --with-doc --with-test --assume-depexts --yes
