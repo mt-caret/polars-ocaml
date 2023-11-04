@@ -1,7 +1,7 @@
 #![allow(clippy::from_iter_instead_of_collect)]
 
 use proc_macro2::{Delimiter, Group, Ident, Span, TokenStream, TokenTree};
-use std::iter;
+use std::iter::{self, FromIterator};
 
 #[test]
 fn test_fmt_group() {

@@ -87,8 +87,7 @@ impl Printer {
     }
 
     fn type_macro(&mut self, ty: &TypeMacro) {
-        let semicolon = false;
-        self.mac(&ty.mac, None, semicolon);
+        self.mac(&ty.mac, None);
     }
 
     fn type_never(&mut self, ty: &TypeNever) {
@@ -171,23 +170,12 @@ impl Printer {
     fn type_verbatim(&mut self, tokens: &TokenStream) {
         use syn::parse::{Parse, ParseStream, Result};
         use syn::punctuated::Punctuated;
-        use syn::{token, FieldsNamed, Token, TypeParamBound};
+        use syn::{Token, TypeParamBound};
 
         enum TypeVerbatim {
-            Ellipsis,
-            AnonStruct(AnonStruct),
-            AnonUnion(AnonUnion),
             DynStar(DynStar),
             MutSelf(MutSelf),
             NotType(NotType),
-        }
-
-        struct AnonStruct {
-            fields: FieldsNamed,
-        }
-
-        struct AnonUnion {
-            fields: FieldsNamed,
         }
 
         struct DynStar {
@@ -205,15 +193,7 @@ impl Printer {
         impl Parse for TypeVerbatim {
             fn parse(input: ParseStream) -> Result<Self> {
                 let lookahead = input.lookahead1();
-                if lookahead.peek(Token![struct]) {
-                    input.parse::<Token![struct]>()?;
-                    let fields: FieldsNamed = input.parse()?;
-                    Ok(TypeVerbatim::AnonStruct(AnonStruct { fields }))
-                } else if lookahead.peek(Token![union]) && input.peek2(token::Brace) {
-                    input.parse::<Token![union]>()?;
-                    let fields: FieldsNamed = input.parse()?;
-                    Ok(TypeVerbatim::AnonUnion(AnonUnion { fields }))
-                } else if lookahead.peek(Token![dyn]) {
+                if lookahead.peek(Token![dyn]) {
                     input.parse::<Token![dyn]>()?;
                     input.parse::<Token![*]>()?;
                     let bounds = input.parse_terminated(TypeParamBound::parse, Token![+])?;
@@ -233,9 +213,6 @@ impl Printer {
                     input.parse::<Token![!]>()?;
                     let inner: Type = input.parse()?;
                     Ok(TypeVerbatim::NotType(NotType { inner }))
-                } else if lookahead.peek(Token![...]) {
-                    input.parse::<Token![...]>()?;
-                    Ok(TypeVerbatim::Ellipsis)
                 } else {
                     Err(lookahead.error())
                 }
@@ -248,35 +225,6 @@ impl Printer {
         };
 
         match ty {
-            TypeVerbatim::Ellipsis => {
-                self.word("...");
-            }
-            TypeVerbatim::AnonStruct(ty) => {
-                self.cbox(INDENT);
-                self.word("struct {");
-                self.hardbreak_if_nonempty();
-                for field in &ty.fields.named {
-                    self.field(field);
-                    self.word(",");
-                    self.hardbreak();
-                }
-                self.offset(-INDENT);
-                self.end();
-                self.word("}");
-            }
-            TypeVerbatim::AnonUnion(ty) => {
-                self.cbox(INDENT);
-                self.word("union {");
-                self.hardbreak_if_nonempty();
-                for field in &ty.fields.named {
-                    self.field(field);
-                    self.word(",");
-                    self.hardbreak();
-                }
-                self.offset(-INDENT);
-                self.end();
-                self.word("}");
-            }
             TypeVerbatim::DynStar(ty) => {
                 self.word("dyn* ");
                 for type_param_bound in ty.bounds.iter().delimited() {

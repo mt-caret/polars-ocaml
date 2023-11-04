@@ -155,10 +155,42 @@ struct CheckedBitPatternStruct {
 
 #[derive(Debug, Copy, Clone, AnyBitPattern, PartialEq, Eq)]
 #[repr(C)]
-struct AnyBitPatternTest<A: AnyBitPattern, B: AnyBitPattern> {
-  a: A,
-  b: B,
+struct AnyBitPatternTest {
+  a: u16,
+  b: u16,
 }
+
+/// ```compile_fail
+/// use bytemuck::{Pod, Zeroable};
+///
+/// #[derive(Pod, Zeroable)]
+/// #[repr(transparent)]
+/// struct TransparentSingle<T>(T);
+///
+/// struct NotPod(u32);
+///
+/// let _: u32 = bytemuck::cast(TransparentSingle(NotPod(0u32)));
+/// ```
+#[derive(
+  Debug, Copy, Clone, PartialEq, Eq, Pod, Zeroable, TransparentWrapper,
+)]
+#[repr(transparent)]
+struct NewtypeWrapperTest<T>(T);
+
+/// ```compile_fail
+/// use bytemuck::TransparentWrapper;
+///
+/// struct NonTransparentSafeZST;
+///
+/// #[derive(TransparentWrapper)]
+/// #[repr(transparent)]
+/// struct Wrapper<T>(T, NonTransparentSafeZST);
+/// ```
+#[derive(
+  Debug, Copy, Clone, PartialEq, Eq, Pod, Zeroable, TransparentWrapper,
+)]
+#[repr(transparent)]
+struct TransarentWrapperZstTest<T>(T);
 
 #[test]
 fn fails_cast_contiguous() {
@@ -227,8 +259,8 @@ fn passes_cast_struct() {
 
 #[test]
 fn anybitpattern_implies_zeroable() {
-  let test = AnyBitPatternTest::<isize, usize>::zeroed();
-  assert_eq!(test, AnyBitPatternTest { a: 0isize, b: 0usize });
+  let test = AnyBitPatternTest::zeroed();
+  assert_eq!(test, AnyBitPatternTest { a: 0, b: 0 });
 }
 
 #[test]

@@ -12,12 +12,11 @@
 //! Rust 1.39 did not include support for async fn in traits. Trying to include
 //! an async fn in a trait produces the following error:
 //!
-#![cfg_attr(not(native_async_fn_in_trait), doc = "```compile_fail")]
-#![cfg_attr(native_async_fn_in_trait, doc = "```")]
+//! ```compile_fail
 //! trait MyTrait {
 //!     async fn f() {}
 //! }
-#![doc = "```"]
+//! ```
 //!
 //! ```text
 //! error[E0706]: trait fns cannot be declared `async`
@@ -119,7 +118,7 @@
 //! # Explanation
 //!
 //! Async fns get transformed into methods that return `Pin<Box<dyn Future +
-//! Send + 'async_trait>>` and delegate to a private async freestanding function.
+//! Send + 'async>>` and delegate to a private async freestanding function.
 //!
 //! For example the `impl Advertisement for AutoplayingVideo` above would be
 //! expanded as:
@@ -127,11 +126,11 @@
 //! ```
 //! # const IGNORE: &str = stringify! {
 //! impl Advertisement for AutoplayingVideo {
-//!     fn run<'async_trait>(
-//!         &'async_trait self,
-//!     ) -> Pin<Box<dyn core::future::Future<Output = ()> + Send + 'async_trait>>
+//!     fn run<'async>(
+//!         &'async self,
+//!     ) -> Pin<Box<dyn core::future::Future<Output = ()> + Send + 'async>>
 //!     where
-//!         Self: Sync + 'async_trait,
+//!         Self: Sync + 'async,
 //!     {
 //!         async fn run(_self: &AutoplayingVideo) {
 //!             /* the original method body */
@@ -304,7 +303,7 @@
 //! let object = &value as &dyn ObjectSafe;
 //! ```
 
-#![doc(html_root_url = "https://docs.rs/async-trait/0.1.74")]
+#![doc(html_root_url = "https://docs.rs/async-trait/0.1.67")]
 #![allow(
     clippy::default_trait_access,
     clippy::doc_markdown,
@@ -326,7 +325,6 @@ mod expand;
 mod lifetime;
 mod parse;
 mod receiver;
-mod verbatim;
 
 use crate::args::Args;
 use crate::expand::expand;

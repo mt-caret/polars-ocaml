@@ -15,14 +15,9 @@ impl Printer {
                     self.neverbreak();
                     self.expr(&local_init.expr);
                     if let Some((_else, diverge)) = &local_init.diverge {
-                        self.space();
-                        self.word("else ");
-                        self.end();
-                        self.neverbreak();
+                        self.word(" else ");
                         if let Expr::Block(expr) = diverge.as_ref() {
-                            self.cbox(INDENT);
                             self.small_block(&expr.block, &[]);
-                            self.end();
                         } else {
                             self.word("{");
                             self.space();
@@ -33,13 +28,10 @@ impl Printer {
                             self.offset(-INDENT);
                             self.word("}");
                         }
-                    } else {
-                        self.end();
                     }
-                } else {
-                    self.end();
                 }
                 self.word(";");
+                self.end();
                 self.hardbreak();
             }
             Stmt::Item(item) => self.item(item),
@@ -72,8 +64,8 @@ impl Printer {
             }
             Stmt::Macro(stmt) => {
                 self.outer_attrs(&stmt.attrs);
-                let semicolon = true;
-                self.mac(&stmt.mac, None, semicolon);
+                self.mac(&stmt.mac, None);
+                self.mac_semi_if_needed(&stmt.mac.delimiter);
                 self.hardbreak();
             }
         }

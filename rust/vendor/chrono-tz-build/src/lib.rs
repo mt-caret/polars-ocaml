@@ -51,12 +51,12 @@ fn format_rest(rest: Vec<(i64, FixedTimespan)>) -> String {
 // it's a hyphen, in which case remove it. This is so the names can be used
 // as rust identifiers.
 fn convert_bad_chars(name: &str) -> String {
-    let name = name.replace("/", "__").replace("+", "Plus");
+    let name = name.replace('/', "__").replace('+', "Plus");
     if let Some(pos) = name.find('-') {
         if name[pos + 1..].chars().next().map(char::is_numeric).unwrap_or(false) {
-            name.replace("-", "Minus")
+            name.replace('-', "Minus")
         } else {
-            name.replace("-", "")
+            name.replace('-', "")
         }
     } else {
         name
@@ -197,7 +197,7 @@ impl FromStr for Tz {{
         match *self {{"
     )?;
     for zone in &zones {
-        let timespans = table.timespans(&zone).unwrap();
+        let timespans = table.timespans(zone).unwrap();
         let zone_name = convert_bad_chars(zone);
         writeln!(
             timezone_file,
@@ -248,8 +248,10 @@ pub static TZ_VARIANTS: [Tz; {num}] = [
 
 // Create a file containing nice-looking re-exports such as Europe::London
 // instead of having to use chrono_tz::timezones::Europe__London
-fn write_directory_file(directory_file: &mut File, table: &Table) -> io::Result<()> {
-    // add the `loose' zone definitions first at the top of the file
+fn write_directory_file(directory_file: &mut File, table: &Table, version: &str) -> io::Result<()> {
+    // expose the underlying IANA TZDB version
+    writeln!(directory_file, "pub const IANA_TZDB_VERSION : &str = \"{version}\";\n")?;
+    // add the `loose' zone definitions first
     writeln!(directory_file, "use crate::timezones::Tz;\n")?;
     let zones = table
         .zonesets
@@ -426,8 +428,29 @@ mod filter {
 
         table
             .zonesets
-            .retain(|k, _| filter_regex.is_match(&k) || keep.iter().any(|s| k.starts_with(s)));
+            .retain(|k, _| filter_regex.is_match(k) || keep.iter().any(|s| k.starts_with(s)));
     }
+}
+
+fn detect_iana_db_version() -> String {
+    let root = env::var("CARGO_MANIFEST_DIR").expect("no Cargo build context");
+    let path = Path::new(&root).join(Path::new("tz/NEWS"));
+    let file = File::open(path).expect("failed to open file");
+
+    let mut lines = BufReader::new(file).lines();
+    while let Some(Ok(line)) = lines.next() {
+        let line = match line.strip_prefix("Release ") {
+            Some(line) => line,
+            _ => continue,
+        };
+
+        match line.split_once(" - ") {
+            Some((version, _)) => return version.to_owned(),
+            _ => continue,
+        }
+    }
+
+    unreachable!("no version found")
 }
 
 pub fn main() {
@@ -476,10 +499,11 @@ pub fn main() {
     filter::maybe_filter_timezone_table(&mut table);
 
     let timezone_path = Path::new(&env::var("OUT_DIR").unwrap()).join("timezones.rs");
-    let mut timezone_file = File::create(&timezone_path).unwrap();
+    let mut timezone_file = File::create(timezone_path).unwrap();
     write_timezone_file(&mut timezone_file, &table).unwrap();
 
     let directory_path = Path::new(&env::var("OUT_DIR").unwrap()).join("directory.rs");
-    let mut directory_file = File::create(&directory_path).unwrap();
-    write_directory_file(&mut directory_file, &table).unwrap();
+    let mut directory_file = File::create(directory_path).unwrap();
+    let version = detect_iana_db_version();
+    write_directory_file(&mut directory_file, &table, &version).unwrap();
 }

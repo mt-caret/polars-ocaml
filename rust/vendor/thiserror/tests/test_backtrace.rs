@@ -1,4 +1,7 @@
-#![cfg_attr(thiserror_nightly_testing, feature(error_generic_member_access))]
+#![cfg_attr(
+    thiserror_nightly_testing,
+    feature(error_generic_member_access, provide_any)
+)]
 
 use thiserror::Error;
 
@@ -16,8 +19,9 @@ pub struct InnerBacktrace {
 #[cfg(thiserror_nightly_testing)]
 pub mod structs {
     use super::{Inner, InnerBacktrace};
+    use std::any;
     use std::backtrace::Backtrace;
-    use std::error::{self, Error};
+    use std::error::Error;
     use std::sync::Arc;
     use thiserror::Error;
 
@@ -102,56 +106,75 @@ pub mod structs {
         let error = PlainBacktrace {
             backtrace: Backtrace::capture(),
         };
-        assert!(error::request_ref::<Backtrace>(&error).is_some());
+        assert!(any::request_ref::<Backtrace>(&error).is_some());
 
         let error = ExplicitBacktrace {
             backtrace: Backtrace::capture(),
         };
-        assert!(error::request_ref::<Backtrace>(&error).is_some());
+        assert!(any::request_ref::<Backtrace>(&error).is_some());
 
         let error = OptBacktrace {
             backtrace: Some(Backtrace::capture()),
         };
-        assert!(error::request_ref::<Backtrace>(&error).is_some());
+        assert!(any::request_ref::<Backtrace>(&error).is_some());
 
         let error = ArcBacktrace {
             backtrace: Arc::new(Backtrace::capture()),
         };
-        assert!(error::request_ref::<Backtrace>(&error).is_some());
+        assert!(any::request_ref::<Backtrace>(&error).is_some());
 
         let error = BacktraceFrom::from(Inner);
-        assert!(error::request_ref::<Backtrace>(&error).is_some());
+        assert!(any::request_ref::<Backtrace>(&error).is_some());
 
         let error = CombinedBacktraceFrom::from(InnerBacktrace {
             backtrace: Backtrace::capture(),
         });
-        assert!(error::request_ref::<Backtrace>(&error).is_some());
+        assert!(any::request_ref::<Backtrace>(&error).is_some());
 
         let error = OptBacktraceFrom::from(Inner);
-        assert!(error::request_ref::<Backtrace>(&error).is_some());
+        assert!(any::request_ref::<Backtrace>(&error).is_some());
 
         let error = ArcBacktraceFrom::from(Inner);
-        assert!(error::request_ref::<Backtrace>(&error).is_some());
+        assert!(any::request_ref::<Backtrace>(&error).is_some());
 
         let error = AnyhowBacktrace {
             source: anyhow::Error::msg("..."),
         };
-        assert!(error::request_ref::<Backtrace>(&error).is_some());
+        assert!(any::request_ref::<Backtrace>(&error).is_some());
 
         let error = BoxDynErrorBacktrace {
             source: Box::new(PlainBacktrace {
                 backtrace: Backtrace::capture(),
             }),
         };
-        assert!(error::request_ref::<Backtrace>(&error).is_some());
+        assert!(any::request_ref::<Backtrace>(&error).is_some());
+    }
+
+    // https://github.com/dtolnay/thiserror/issues/185 -- std::error::Error and
+    // std::any::Provide both have a method called 'provide', so directly
+    // calling it from generated code could be ambiguous.
+    #[test]
+    fn test_provide_name_collision() {
+        use std::any::Provider;
+
+        #[derive(Error, Debug)]
+        #[error("...")]
+        struct MyError {
+            #[source]
+            #[backtrace]
+            x: std::io::Error,
+        }
+
+        let _: dyn Error;
+        let _: dyn Provider;
     }
 }
 
 #[cfg(thiserror_nightly_testing)]
 pub mod enums {
     use super::{Inner, InnerBacktrace};
+    use std::any;
     use std::backtrace::Backtrace;
-    use std::error;
     use std::sync::Arc;
     use thiserror::Error;
 
@@ -236,36 +259,36 @@ pub mod enums {
         let error = PlainBacktrace::Test {
             backtrace: Backtrace::capture(),
         };
-        assert!(error::request_ref::<Backtrace>(&error).is_some());
+        assert!(any::request_ref::<Backtrace>(&error).is_some());
 
         let error = ExplicitBacktrace::Test {
             backtrace: Backtrace::capture(),
         };
-        assert!(error::request_ref::<Backtrace>(&error).is_some());
+        assert!(any::request_ref::<Backtrace>(&error).is_some());
 
         let error = OptBacktrace::Test {
             backtrace: Some(Backtrace::capture()),
         };
-        assert!(error::request_ref::<Backtrace>(&error).is_some());
+        assert!(any::request_ref::<Backtrace>(&error).is_some());
 
         let error = ArcBacktrace::Test {
             backtrace: Arc::new(Backtrace::capture()),
         };
-        assert!(error::request_ref::<Backtrace>(&error).is_some());
+        assert!(any::request_ref::<Backtrace>(&error).is_some());
 
         let error = BacktraceFrom::from(Inner);
-        assert!(error::request_ref::<Backtrace>(&error).is_some());
+        assert!(any::request_ref::<Backtrace>(&error).is_some());
 
         let error = CombinedBacktraceFrom::from(InnerBacktrace {
             backtrace: Backtrace::capture(),
         });
-        assert!(error::request_ref::<Backtrace>(&error).is_some());
+        assert!(any::request_ref::<Backtrace>(&error).is_some());
 
         let error = OptBacktraceFrom::from(Inner);
-        assert!(error::request_ref::<Backtrace>(&error).is_some());
+        assert!(any::request_ref::<Backtrace>(&error).is_some());
 
         let error = ArcBacktraceFrom::from(Inner);
-        assert!(error::request_ref::<Backtrace>(&error).is_some());
+        assert!(any::request_ref::<Backtrace>(&error).is_some());
     }
 }
 

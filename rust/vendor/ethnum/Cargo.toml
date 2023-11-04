@@ -12,7 +12,7 @@
 [package]
 edition = "2021"
 name = "ethnum"
-version = "1.4.0"
+version = "1.5.0"
 authors = ["Nicholas Rodrigues Lordello <nlordell@gmail.com>"]
 description = "256-bit integer implementation"
 homepage = "https://github.com/nlordell/ethnum-rs"
@@ -32,17 +32,10 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/nlordell/ethnum-rs"
 
 [package.metadata.docs.rs]
-features = [
-    "macros",
-    "serde",
-]
+features = ["serde"]
 
 [dependencies.ethnum-intrinsics]
 version = "=1.2.0"
-optional = true
-
-[dependencies.ethnum-macros]
-version = "=1.1.0"
 optional = true
 
 [dependencies.serde]
@@ -52,4 +45,4 @@ default-features = false
 
 [features]
 llvm-intrinsics = ["ethnum-intrinsics"]
-macros = ["ethnum-macros"]
+macros = []

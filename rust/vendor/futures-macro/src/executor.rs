@@ -44,7 +44,6 @@ pub(crate) fn test(args: TokenStream, item: TokenStream) -> TokenStream {
             #path::block_on(async #body)
         })
         .unwrap(),
-        None,
     )];
 
     let gen = quote! {

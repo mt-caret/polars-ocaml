@@ -3,13 +3,12 @@ use crate::lookahead;
 
 pub use proc_macro2::Ident;
 
+#[cfg(not(doc))] // rustdoc bug: https://github.com/rust-lang/rust/issues/105735
 #[cfg(feature = "parsing")]
-pub_if_not_doc! {
-    #[doc(hidden)]
-    #[allow(non_snake_case)]
-    pub fn Ident(marker: lookahead::TokenMarker) -> Ident {
-        match marker {}
-    }
+#[doc(hidden)]
+#[allow(non_snake_case)]
+pub fn Ident(marker: lookahead::TokenMarker) -> Ident {
+    match marker {}
 }
 
 macro_rules! ident_from_token {

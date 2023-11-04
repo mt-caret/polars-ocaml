@@ -79,20 +79,9 @@
 //!     }
 //! };
 //! ```
-//!
-//! <br>
-//!
-//! # Non-macro code generators
-//!
-//! When using `quote` in a build.rs or main.rs and writing the output out to a
-//! file, consider having the code generator pass the tokens through
-//! [prettyplease] before writing. This way if an error occurs in the generated
-//! code it is convenient for a human to read and debug.
-//!
-//! [prettyplease]: https://github.com/dtolnay/prettyplease
 
 // Quote types in rustdoc of other crates get linked to here.
-#![doc(html_root_url = "https://docs.rs/quote/1.0.33")]
+#![doc(html_root_url = "https://docs.rs/quote/1.0.26")]
 #![allow(
     clippy::doc_markdown,
     clippy::missing_errors_doc,
@@ -102,9 +91,10 @@
     clippy::wrong_self_convention,
 )]
 
-extern crate alloc;
-
-#[cfg(feature = "proc-macro")]
+#[cfg(all(
+    not(all(target_arch = "wasm32", target_os = "unknown")),
+    feature = "proc-macro"
+))]
 extern crate proc_macro;
 
 mod ext;

@@ -5,11 +5,6 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 #[error("...")]
-pub struct Error(
-    #[from]
-    #[backtrace]
-    std::io::Error,
-    Backtrace,
-);
+pub struct Error(#[from] #[backtrace] std::io::Error, Backtrace);
 
 fn main() {}

@@ -13,9 +13,9 @@
 edition = "2021"
 rust-version = "1.56"
 name = "prettyplease"
-version = "0.2.15"
+version = "0.2.0"
 authors = ["David Tolnay <dtolnay@gmail.com>"]
-links = "prettyplease02"
+links = "prettyplease01"
 exclude = ["cargo-expand"]
 autoexamples = false
 description = "A minimal `syn` syntax tree pretty-printer"
@@ -26,27 +26,20 @@ categories = ["development-tools"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/dtolnay/prettyplease"
 
-[package.metadata.docs.rs]
-rustdoc-args = ["--generate-link-to-definition"]
-targets = ["x86_64-unknown-linux-gnu"]
-
-[package.metadata.playground]
-features = ["verbatim"]
-
 [lib]
 doc-scrape-examples = false
 
 [dependencies.proc-macro2]
-version = "1.0.63"
+version = "1.0"
 default-features = false
 
 [dependencies.syn]
-version = "2.0.31"
+version = "2.0.7"
 features = ["full"]
 default-features = false
 
 [dev-dependencies.syn]
-version = "2.0.31"
+version = "2.0.7"
 features = ["parsing"]
 default-features = false
 

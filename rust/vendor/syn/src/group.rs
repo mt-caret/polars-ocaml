@@ -7,27 +7,21 @@ use proc_macro2::Delimiter;
 // Not public API.
 #[doc(hidden)]
 pub struct Parens<'a> {
-    #[doc(hidden)]
     pub token: token::Paren,
-    #[doc(hidden)]
     pub content: ParseBuffer<'a>,
 }
 
 // Not public API.
 #[doc(hidden)]
 pub struct Braces<'a> {
-    #[doc(hidden)]
     pub token: token::Brace,
-    #[doc(hidden)]
     pub content: ParseBuffer<'a>,
 }
 
 // Not public API.
 #[doc(hidden)]
 pub struct Brackets<'a> {
-    #[doc(hidden)]
     pub token: token::Bracket,
-    #[doc(hidden)]
     pub content: ParseBuffer<'a>,
 }
 
@@ -35,9 +29,7 @@ pub struct Brackets<'a> {
 #[cfg(any(feature = "full", feature = "derive"))]
 #[doc(hidden)]
 pub struct Group<'a> {
-    #[doc(hidden)]
     pub token: token::Group,
-    #[doc(hidden)]
     pub content: ParseBuffer<'a>,
 }
 

@@ -12,10 +12,18 @@
 [package]
 rust-version = "1.56"
 name = "serde_derive"
-version = "1.0.189"
+version = "1.0.164"
 authors = [
     "Erick Tryzelaar <erick.tryzelaar@gmail.com>",
     "David Tolnay <dtolnay@gmail.com>",
+]
+include = [
+    "build.rs",
+    "src/**/*.rs",
+    "crates-io.md",
+    "README.md",
+    "LICENSE-APACHE",
+    "LICENSE-MIT",
 ]
 description = "Macros 1.1 implementation of #[derive(Serialize, Deserialize)]"
 homepage = "https://serde.rs"
@@ -27,15 +35,11 @@ keywords = [
     "no_std",
     "derive",
 ]
-categories = [
-    "no-std",
-    "no-std::no-alloc",
-]
+categories = ["no-std"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/serde-rs/serde"
 
 [package.metadata.docs.rs]
-rustdoc-args = ["--generate-link-to-definition"]
 targets = ["x86_64-unknown-linux-gnu"]
 
 [lib]
@@ -49,10 +53,10 @@ version = "1.0"
 version = "1.0"
 
 [dependencies.syn]
-version = "2.0.28"
+version = "2.0.3"
 
 [dev-dependencies.serde]
-version = "1"
+version = "1.0"
 
 [features]
 default = []

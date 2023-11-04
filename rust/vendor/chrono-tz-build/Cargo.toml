@@ -13,12 +13,11 @@
 edition = "2021"
 rust-version = "1.60"
 name = "chrono-tz-build"
-version = "0.2.0"
+version = "0.2.1"
 description = "internal build script for chrono-tz"
 documentation = "https://docs.rs/chrono-tz-build"
 readme = "README.md"
 license = "MIT OR Apache-2.0"
-resolver = "1"
 
 [dependencies.parse-zoneinfo]
 version = "0.3"

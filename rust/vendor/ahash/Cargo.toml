@@ -12,7 +12,7 @@
 [package]
 edition = "2018"
 name = "ahash"
-version = "0.8.6"
+version = "0.8.5"
 authors = ["Tom Kaitchuck <Tom.Kaitchuck@gmail.com>"]
 build = "./build.rs"
 exclude = [
@@ -104,7 +104,7 @@ version = "1.0.117"
 optional = true
 
 [dependencies.zerocopy]
-version = "0.7.14"
+version = "0.7.0"
 features = ["simd"]
 default-features = false
 

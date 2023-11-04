@@ -120,7 +120,6 @@ pub fn parse<T: ParseQuote>(token_stream: TokenStream) -> T {
     }
 }
 
-#[doc(hidden)]
 pub trait ParseQuote: Sized {
     fn parse(input: ParseStream) -> Result<Self>;
 }

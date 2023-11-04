@@ -4,6 +4,7 @@ use crate::number::Number;
 use alloc::borrow::Cow;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
+use core::iter::FromIterator;
 
 macro_rules! from_integer {
     ($($ty:ident)*) => {

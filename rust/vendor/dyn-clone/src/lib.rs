@@ -12,10 +12,6 @@
 //! [`std::clone::Clone`] trait are automatically usable by a `DynClone` trait
 //! object.
 //!
-//! [`DynClone`]: trait.DynClone.html
-//! [`clone_box`]: fn.clone_box.html
-//! [`std::clone::Clone`]: https://doc.rust-lang.org/std/clone/trait.Clone.html
-//!
 //! # Example
 //!
 //! ```
@@ -84,7 +80,7 @@
 //! // and similar for Box<dyn MyTrait + Send>, Box<dyn MyTrait + Sync>, Box<dyn MyTrait + Send + Sync>
 //! ```
 
-#![doc(html_root_url = "https://docs.rs/dyn_clone/1.0.14")]
+#![doc(html_root_url = "https://docs.rs/dyn-clone/1.0.16")]
 #![no_std]
 #![allow(
     clippy::missing_panics_doc,
@@ -93,6 +89,9 @@
 )]
 
 extern crate alloc;
+
+#[cfg(doc)]
+extern crate core as std;
 
 #[macro_use]
 mod macros;
@@ -123,8 +122,6 @@ use alloc::rc::Rc;
 use alloc::sync::Arc;
 
 /// This trait is implemented by any type that implements [`std::clone::Clone`].
-///
-/// [`std::clone::Clone`]: https://doc.rust-lang.org/std/clone/trait.Clone.html
 pub trait DynClone: Sealed {
     // Not public API
     #[doc(hidden)]

@@ -30,12 +30,12 @@ extern crate rustc_ast_pretty;
 extern crate rustc_data_structures;
 extern crate rustc_driver;
 extern crate rustc_span;
-extern crate smallvec;
 extern crate thin_vec;
 
 use crate::common::eq::SpanlessEq;
 use crate::common::parse;
 use quote::quote;
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use regex::Regex;
 use rustc_ast::ast;
 use rustc_ast::ptr::P;
@@ -45,6 +45,7 @@ use std::fs;
 use std::path::Path;
 use std::process;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use walkdir::{DirEntry, WalkDir};
 
 #[macro_use]
 mod macros;
@@ -69,36 +70,48 @@ fn test_rustc_precedence() {
     // 2018 edition is hard
     let edition_regex = Regex::new(r"\b(async|try)[!(]").unwrap();
 
-    repo::for_each_rust_file(|path| {
-        let content = fs::read_to_string(path).unwrap();
-        let content = edition_regex.replace_all(&content, "_$0");
-
-        let (l_passed, l_failed) = match syn::parse_file(&content) {
-            Ok(file) => {
-                let edition = repo::edition(path).parse().unwrap();
-                let exprs = collect_exprs(file);
-                let (l_passed, l_failed) = test_expressions(path, edition, exprs);
-                errorf!(
-                    "=== {}: {} passed | {} failed\n",
-                    path.display(),
-                    l_passed,
-                    l_failed,
-                );
-                (l_passed, l_failed)
+    WalkDir::new("tests/rust")
+        .sort_by(|a, b| a.file_name().cmp(b.file_name()))
+        .into_iter()
+        .filter_entry(repo::base_dir_filter)
+        .collect::<Result<Vec<DirEntry>, walkdir::Error>>()
+        .unwrap()
+        .into_par_iter()
+        .for_each(|entry| {
+            let path = entry.path();
+            if path.is_dir() {
+                return;
             }
-            Err(msg) => {
-                errorf!("\nFAIL {} - syn failed to parse: {}\n", path.display(), msg);
-                (0, 1)
+
+            let content = fs::read_to_string(path).unwrap();
+            let content = edition_regex.replace_all(&content, "_$0");
+
+            let (l_passed, l_failed) = match syn::parse_file(&content) {
+                Ok(file) => {
+                    let edition = repo::edition(path).parse().unwrap();
+                    let exprs = collect_exprs(file);
+                    let (l_passed, l_failed) = test_expressions(path, edition, exprs);
+                    errorf!(
+                        "=== {}: {} passed | {} failed\n",
+                        path.display(),
+                        l_passed,
+                        l_failed,
+                    );
+                    (l_passed, l_failed)
+                }
+                Err(msg) => {
+                    errorf!("\nFAIL {} - syn failed to parse: {}\n", path.display(), msg);
+                    (0, 1)
+                }
+            };
+
+            passed.fetch_add(l_passed, Ordering::Relaxed);
+            let prev_failed = failed.fetch_add(l_failed, Ordering::Relaxed);
+
+            if prev_failed + l_failed >= abort_after {
+                process::exit(1);
             }
-        };
-
-        passed.fetch_add(l_passed, Ordering::Relaxed);
-        let prev_failed = failed.fetch_add(l_failed, Ordering::Relaxed);
-
-        if prev_failed + l_failed >= abort_after {
-            process::exit(1);
-        }
-    });
+        });
 
     let passed = passed.load(Ordering::Relaxed);
     let failed = failed.load(Ordering::Relaxed);
@@ -169,34 +182,21 @@ fn librustc_parse_and_rewrite(input: &str) -> Option<P<ast::Expr>> {
 /// This method operates on librustc objects.
 fn librustc_brackets(mut librustc_expr: P<ast::Expr>) -> Option<P<ast::Expr>> {
     use rustc_ast::ast::{
-        AssocItem, AssocItemKind, Attribute, BinOpKind, Block, BorrowKind, Expr, ExprField,
-        ExprKind, GenericArg, GenericBound, ItemKind, Local, LocalKind, Pat, Stmt, StmtKind,
-        StructExpr, StructRest, TraitBoundModifier, Ty,
+        Attribute, BinOpKind, Block, BorrowKind, Expr, ExprField, ExprKind, GenericArg,
+        GenericBound, Local, LocalKind, Pat, Stmt, StmtKind, StructExpr, StructRest,
+        TraitBoundModifier, Ty,
     };
     use rustc_ast::mut_visit::{
-        noop_flat_map_assoc_item, noop_visit_generic_arg, noop_visit_item_kind, noop_visit_local,
-        noop_visit_param_bound, MutVisitor,
+        noop_visit_generic_arg, noop_visit_local, noop_visit_param_bound, MutVisitor,
     };
     use rustc_data_structures::flat_map_in_place::FlatMapInPlace;
     use rustc_span::DUMMY_SP;
-    use smallvec::SmallVec;
     use std::mem;
     use std::ops::DerefMut;
     use thin_vec::ThinVec;
 
     struct BracketsVisitor {
         failed: bool,
-    }
-
-    fn contains_let_chain(expr: &Expr) -> bool {
-        match &expr.kind {
-            ExprKind::Let(..) => true,
-            ExprKind::Binary(binop, left, right) => {
-                binop.node == BinOpKind::And
-                    && (contains_let_chain(left) || contains_let_chain(right))
-            }
-            _ => false,
-        }
     }
 
     fn flat_map_field<T: MutVisitor>(mut f: ExprField, vis: &mut T) -> Vec<ExprField> {
@@ -255,7 +255,12 @@ fn librustc_brackets(mut librustc_expr: P<ast::Expr>) -> Option<P<ast::Expr>> {
             noop_visit_expr(e, self);
             match e.kind {
                 ExprKind::Block(..) | ExprKind::If(..) | ExprKind::Let(..) => {}
-                ExprKind::Binary(..) if contains_let_chain(e) => {}
+                ExprKind::Binary(binop, ref left, ref right)
+                    if match (&left.kind, binop.node, &right.kind) {
+                        (ExprKind::Let(..), BinOpKind::And, _)
+                        | (_, BinOpKind::And, ExprKind::Let(..)) => true,
+                        _ => false,
+                    } => {}
                 _ => {
                     let inner = mem::replace(
                         e,
@@ -309,39 +314,6 @@ fn librustc_brackets(mut librustc_expr: P<ast::Expr>) -> Option<P<ast::Expr>> {
             }
         }
 
-        fn visit_item_kind(&mut self, item: &mut ItemKind) {
-            match item {
-                ItemKind::Const(const_item)
-                    if !const_item.generics.params.is_empty()
-                        || !const_item.generics.where_clause.predicates.is_empty() => {}
-                _ => noop_visit_item_kind(item, self),
-            }
-        }
-
-        fn flat_map_trait_item(&mut self, item: P<AssocItem>) -> SmallVec<[P<AssocItem>; 1]> {
-            match &item.kind {
-                AssocItemKind::Const(const_item)
-                    if !const_item.generics.params.is_empty()
-                        || !const_item.generics.where_clause.predicates.is_empty() =>
-                {
-                    SmallVec::from([item])
-                }
-                _ => noop_flat_map_assoc_item(item, self),
-            }
-        }
-
-        fn flat_map_impl_item(&mut self, item: P<AssocItem>) -> SmallVec<[P<AssocItem>; 1]> {
-            match &item.kind {
-                AssocItemKind::Const(const_item)
-                    if !const_item.generics.params.is_empty()
-                        || !const_item.generics.where_clause.predicates.is_empty() =>
-                {
-                    SmallVec::from([item])
-                }
-                _ => noop_flat_map_assoc_item(item, self),
-            }
-        }
-
         // We don't want to look at expressions that might appear in patterns or
         // types yet. We'll look into comparing those in the future. For now
         // focus on expressions appearing in other places.
@@ -376,42 +348,28 @@ fn syn_brackets(syn_expr: syn::Expr) -> syn::Expr {
 
     struct ParenthesizeEveryExpr;
 
-    fn parenthesize(expr: Expr) -> Expr {
-        Expr::Paren(ExprParen {
-            attrs: Vec::new(),
-            expr: Box::new(expr),
-            paren_token: token::Paren::default(),
-        })
-    }
-
     fn needs_paren(expr: &Expr) -> bool {
         match expr {
             Expr::Group(_) => unreachable!(),
             Expr::If(_) | Expr::Unsafe(_) | Expr::Block(_) | Expr::Let(_) => false,
-            Expr::Binary(_) => !contains_let_chain(expr),
+            Expr::Binary(bin) => match (&*bin.left, bin.op, &*bin.right) {
+                (Expr::Let(_), BinOp::And(_), _) | (_, BinOp::And(_), Expr::Let(_)) => false,
+                _ => true,
+            },
             _ => true,
-        }
-    }
-
-    fn contains_let_chain(expr: &Expr) -> bool {
-        match expr {
-            Expr::Let(_) => true,
-            Expr::Binary(expr) => {
-                matches!(expr.op, BinOp::And(_))
-                    && (contains_let_chain(&expr.left) || contains_let_chain(&expr.right))
-            }
-            _ => false,
         }
     }
 
     impl Fold for ParenthesizeEveryExpr {
         fn fold_expr(&mut self, expr: Expr) -> Expr {
-            let needs_paren = needs_paren(&expr);
-            let folded = fold_expr(self, expr);
-            if needs_paren {
-                parenthesize(folded)
+            if needs_paren(&expr) {
+                Expr::Paren(ExprParen {
+                    attrs: Vec::new(),
+                    expr: Box::new(fold_expr(self, expr)),
+                    paren_token: token::Paren::default(),
+                })
             } else {
-                folded
+                fold_expr(self, expr)
             }
         }
 
