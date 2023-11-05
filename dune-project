@@ -34,7 +34,9 @@
   core_kernel
   core_unix
   dune
-  ocaml
+  ; ocaml-interop does not yet properly support OCaml 5
+  (ocaml
+   (< 5.0.0))
   ppx_jane
   ppx_typed_fields)
  (tags

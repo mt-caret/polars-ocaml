@@ -22,7 +22,7 @@ depends: [
   "core_kernel"
   "core_unix"
   "dune" {>= "3.8"}
-  "ocaml"
+  "ocaml" {< "5.0.0"}
   "ppx_jane"
   "ppx_typed_fields"
 ]
