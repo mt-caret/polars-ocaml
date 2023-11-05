@@ -44,6 +44,16 @@
  (name polars_async)
  (synopsis "Async OCaml bindings to the Polars dataframe library")
  (description "Async OCaml bindings to the Polars dataframe library")
- (depends polars async core)
+ (depends
+  (core_bench :with-test)
+  (expect_test_helpers_core :with-test)
+  (mdx :with-test)
+  (ocamlformat :dev)
+  (odoc :with-doc)
+  (re2 :with-test)
+  (shell :with-test)
+  async
+  core
+  polars)
  (tags
   (data-science polars rust)))
