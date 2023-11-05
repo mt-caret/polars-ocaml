@@ -5,8 +5,10 @@
 polars-ocaml is a project to provide idiomatic OCaml bindings to the Polars
 dataframe library.
 
-Check out the examples from the Polars user guide for a quick tour of what you
+Check out the [ported examples from the Polars user guide](./guide/) for a quick tour of what you
 can do with polars-ocaml!
+
+Install with `opam install polars`.
 
 ## project status
 
@@ -26,6 +28,21 @@ polars-ocaml works in utop!
 [^utop-workaround]: The special profile is a workaround for a [known limitation in a library we use](https://github.com/tizoc/ocaml-interop/issues/49#issuecomment-1627842973)).
 
 ![polars-ocaml running in utop](https://user-images.githubusercontent.com/4996739/253110945-c8ffb606-bcbb-4297-acef-602d3cecd15b.png)
+
+## jupyter notebook
+
+polars-ocaml works in Jupyter notebooks, using [akabe/ocaml-jupyter](https://github.com/akabe/ocaml-jupyter)!
+
+Just install the `polars` opam package alongside the `jupyter` package:
+
+```
+$ pip install jupyter
+$ opam install jupyter polars
+$ ocaml-jupyter-opam-genspec
+$ jupyter kernelspec install --user --name "ocaml-jupyter-$(opam var switch)" "$(opam var share)/jupyter"
+```
+
+![polars-ocaml running in jupyter](https://github.com/mt-caret/polars-ocaml/assets/4996739/fa09ef51-078f-4aad-af39-1243ca559451)
 
 ## license
 
