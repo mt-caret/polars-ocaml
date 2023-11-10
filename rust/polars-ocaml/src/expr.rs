@@ -636,6 +636,8 @@ expr_op!(rust_expr_sub, |expr, other| expr - other);
 expr_op!(rust_expr_mul, |expr, other| expr * other);
 expr_op!(rust_expr_div, |expr, other| expr / other);
 expr_op!(rust_expr_floor_div, |expr, other| expr.floor_div(other));
+expr_op!(rust_expr_exp, |expr| expr.exp());
+expr_op!(rust_expr_log, |expr, base| expr.log(base)); 
 
 #[ocaml_interop_export]
 fn rust_expr_dt_strftime(
