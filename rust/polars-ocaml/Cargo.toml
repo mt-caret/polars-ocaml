@@ -1,9 +1,11 @@
 [package]
 name = "polars-ocaml"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+# Once cargo-msrv supports using workspace inheritance, move this into ../Cargo.toml:
+# https://github.com/foresterre/cargo-msrv/issues/590
+rust-version = "1.70.0"
 
 [lib]
 crate-type = ["staticlib", "cdylib"]

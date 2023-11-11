@@ -8,9 +8,9 @@ on:
   # Since cargo and opam dependencies change over time, we schedule a build of
   # the container every week so we can catch issues early on
   schedule:
-      # Run at 1AM UTC every Saturday; this translates to 9AM HKT and 9PM EST
-      # (new york outside of DST)
-      - cron: '0 1 * * 6'
+    # Run at 1AM UTC every Saturday; this translates to 9AM HKT and 9PM EST
+    # (new york outside of DST)
+    - cron: "0 1 * * 6"
 
 env:
   CARGO_TERM_COLOR: always
@@ -34,7 +34,7 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@v2 
+        uses: docker/login-action@v2
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
@@ -49,6 +49,32 @@ jobs:
           runCmd: |
             opam exec -- dune build
             opam exec -- dune runtest
+
+  verify-minimum-supported-rust-version:
+    runs-on: self-hosted
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout (GitHub)
+        uses: actions/checkout@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name:
+        uses: devcontainers/ci@v0.3
+        with:
+          imageName: ghcr.io/mt-caret/polars-ocaml
+          cacheFrom: ghcr.io/mt-caret/polars-ocaml
+          push: always
+          runCmd: |
+            cargo install msrv
+            cd ./rust/polars-ocaml && cargo msrv verify
 
   rust-checks:
     runs-on: ubuntu-latest
