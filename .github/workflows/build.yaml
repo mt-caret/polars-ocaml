@@ -73,7 +73,7 @@ jobs:
           cacheFrom: ghcr.io/mt-caret/polars-ocaml
           push: always
           runCmd: |
-            cargo install msrv
+            cargo install cargo-msrv
             cd ./rust/polars-ocaml && cargo msrv verify
 
   rust-checks:
