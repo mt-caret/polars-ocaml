@@ -73,6 +73,7 @@ jobs:
           cacheFrom: ghcr.io/mt-caret/polars-ocaml
           push: always
           runCmd: |
+            apt install --yes pkg-config
             cargo install cargo-msrv
             cd ./rust/polars-ocaml && cargo msrv verify
 
