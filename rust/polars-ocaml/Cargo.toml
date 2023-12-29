@@ -43,6 +43,7 @@ features = [
     "list_eval",
     "mode",
     "parquet",
+    "partition_by",
     "pivot",
     "random",
     "rank",
