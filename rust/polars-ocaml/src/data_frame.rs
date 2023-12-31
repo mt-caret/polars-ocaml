@@ -678,3 +678,28 @@ fn rust_data_frame_to_string_hum(
     let data_frame = data_frame.borrow();
     data_frame.to_string().to_ocaml(cr)
 }
+
+#[ocaml_interop_export]
+fn rust_data_frame_partition_by(
+    cr: &mut &mut OCamlRuntime,
+    data_frame: OCamlRef<DynBox<PolarsDataFrame>>,
+    by: OCamlRef<OCamlList<String>>,
+    maintain_order: OCamlRef<bool>,
+) -> OCaml<Result<OCamlList<DynBox<PolarsDataFrame>>, String>> {
+    let Abstract(data_frame) = data_frame.to_rust(cr);
+    let data_frame = data_frame.borrow();
+    let cols: Vec<String> = by.to_rust(cr);
+    let partitioned = if maintain_order.to_rust(cr) {
+        data_frame.partition_by_stable(cols, true)
+    } else {
+        data_frame.partition_by(cols, true)
+    };
+    partitioned
+        .map(|v| {
+            v.into_iter()
+                .map(|df| Abstract(Rc::new(RefCell::new(df))))
+                .collect::<Vec<_>>()
+        })
+        .map_err(|err| err.to_string())
+        .to_ocaml(cr)
+}
