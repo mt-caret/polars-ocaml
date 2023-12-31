@@ -636,6 +636,19 @@ expr_op!(rust_expr_sub, |expr, other| expr - other);
 expr_op!(rust_expr_mul, |expr, other| expr * other);
 expr_op!(rust_expr_div, |expr, other| expr / other);
 expr_op!(rust_expr_floor_div, |expr, other| expr.floor_div(other));
+expr_op!(rust_expr_abs, |expr| expr.abs());
+expr_op!(rust_expr_exp, |expr| expr.exp());
+expr_op!(rust_expr_log1p, |expr| expr.log1p());
+
+#[ocaml_interop_export]
+fn rust_expr_log(
+    cr: &mut &mut OCamlRuntime,
+    expr: OCamlRef<DynBox<Expr>>,
+    base: OCamlRef<OCamlFloat>,
+) -> OCaml<DynBox<Expr>> {
+    let base: f64 = base.to_rust(cr);
+    dyn_box(cr, expr, |expr| expr.log(base))
+}
 
 #[ocaml_interop_export]
 fn rust_expr_dt_strftime(
