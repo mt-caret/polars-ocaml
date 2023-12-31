@@ -204,8 +204,21 @@ module T = struct
   external mul : t -> t -> t = "rust_expr_mul"
   external div : t -> t -> t = "rust_expr_div"
   external floor_div : t -> t -> t = "rust_expr_floor_div"
+  external abs : t -> t = "rust_expr_abs"
   external exp : t -> t = "rust_expr_exp"
-  external log : t -> t -> t = "rust_expr_log"
+  external log : t -> float -> t = "rust_expr_log"
+
+  let log
+    ?(base =
+      (* Surprisingly, Euler's number is not present in Core. And no,
+         [Float.euler] is not Euler's number! *)
+      Float.exp 1.)
+    t
+    =
+    log t base
+  ;;
+
+  external log1p : t -> t = "rust_expr_log1p"
 
   let ( // ) = floor_div
 end

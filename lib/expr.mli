@@ -989,6 +989,10 @@ include Common.Numeric with type t := t
 (* TODO: apparently this doesn't exist for series, which is surprising! *)
 val floor_div : t -> t -> t
 val ( // ) : t -> t -> t
+val abs : t -> t
+val exp : t -> t
+val log : ?base:float -> t -> t
+val log1p : t -> t
 
 module Dt : sig
   val strftime : t -> format:string -> t
