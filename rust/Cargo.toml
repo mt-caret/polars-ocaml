@@ -1,6 +1,10 @@
 [workspace]
-
+resolver = "2"
 members = [
     "polars-ocaml",
     "polars-ocaml-macros"
 ]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"

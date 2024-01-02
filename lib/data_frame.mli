@@ -214,6 +214,8 @@ val upsample_exn
 
 val explode : t -> columns:string list -> (t, string) result
 val explode_exn : t -> columns:string list -> t
+val partition_by : ?maintain_order:bool -> t -> by:string list -> (t list, string) result
+val partition_by_exn : ?maintain_order:bool -> t -> by:string list -> t list
 val schema : t -> Schema.t
 val to_string_hum : t -> string
 val print : t -> unit

@@ -24,3 +24,25 @@ Running benchmarks:
 ```
 $ ./bench/runner.sh dataframe_builders_bench
 ```
+
+## mold
+
+It is strongly recommended that you set up the mold linker, since builds
+often are bottlenecked on very long link times:
+
+1. Follow https://github.com/rui314/mold#how-to-use to configure the linker for Rust
+2. add `(library_flags -ccopt -fuse-ld=mold)` to the `library` stanza in various dune files
+
+## Adding or modifying Rust dependencies
+
+Since opam packages does not support downloading things at build-time, we must
+vendor dependencies. Since the opam package CI may not always have the latest
+version of the Rust compiler, we also want to try and use the oldest versions
+of libraries possible:
+
+```
+$ cd rust
+$ rm -rf Cargo.lock vendor
+$ cargo vendor -Z direct-minimal-versions
+$ cargo build # to make sure that the minimal versions we've specified are actually reasonable
+```

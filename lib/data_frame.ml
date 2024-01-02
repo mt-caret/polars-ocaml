@@ -345,5 +345,24 @@ let explode_exn t ~columns = explode t ~columns |> Utils.string_result_ok_exn
 external schema : t -> Schema.t = "rust_data_frame_schema"
 external to_string_hum : t -> string = "rust_data_frame_to_string_hum"
 
+external partition_by'
+  :  t
+  -> by:string list
+  -> maintain_order:bool
+  -> (t list, string) result
+  = "rust_data_frame_partition_by"
+
+let partition_by ?(maintain_order = true) t ~by = partition_by' t ~by ~maintain_order
+
+let partition_by_exn ?maintain_order t ~by =
+  partition_by ?maintain_order t ~by |> Utils.string_result_ok_exn
+;;
+
 let print t = print_endline (to_string_hum t)
-let pp formatter t = Stdlib.Format.pp_print_string formatter (to_string_hum t)
+
+include Pretty_printer.Register (struct
+    type nonrec t = t
+
+    let module_name = "Polars.Data_frame"
+    let to_string = to_string_hum
+  end)

@@ -263,7 +263,7 @@ let%expect_test "Joins" =
                ; "2020-01-01 09:03:00"
                ; "2020-01-01 09:06:00"
                ]
-               ~f:Common.Naive_datetime.of_string)
+               ~f:Naive_datetime.of_string)
         ; string "stock" [ "A"; "B"; "B"; "C" ]
         ; int "trade" [ 101; 299; 301; 500 ]
         ]
@@ -275,7 +275,7 @@ let%expect_test "Joins" =
     ┌─────────────────────┬───────┬───────┐
     │ time                ┆ stock ┆ trade │
     │ ---                 ┆ ---   ┆ ---   │
-    │ datetime[ms]        ┆ str   ┆ i64   │
+    │ datetime[ns]        ┆ str   ┆ i64   │
     ╞═════════════════════╪═══════╪═══════╡
     │ 2020-01-01 09:01:00 ┆ A     ┆ 101   │
     │ 2020-01-01 09:01:00 ┆ B     ┆ 299   │
@@ -293,7 +293,7 @@ let%expect_test "Joins" =
                ; "2020-01-01 09:04:00"
                ; "2020-01-01 09:06:00"
                ]
-               ~f:Common.Naive_datetime.of_string)
+               ~f:Naive_datetime.of_string)
         ; string "stock" [ "A"; "B"; "C"; "A" ]
         ; int "trade" [ 100; 300; 501; 102 ]
         ]
@@ -305,7 +305,7 @@ let%expect_test "Joins" =
     ┌─────────────────────┬───────┬───────┐
     │ time                ┆ stock ┆ trade │
     │ ---                 ┆ ---   ┆ ---   │
-    │ datetime[ms]        ┆ str   ┆ i64   │
+    │ datetime[ns]        ┆ str   ┆ i64   │
     ╞═════════════════════╪═══════╪═══════╡
     │ 2020-01-01 09:00:00 ┆ A     ┆ 100   │
     │ 2020-01-01 09:02:00 ┆ B     ┆ 300   │
@@ -333,7 +333,7 @@ let%expect_test "Joins" =
     ┌─────────────────────┬───────┬───────┬─────────────┐
     │ time                ┆ stock ┆ trade ┆ trade_right │
     │ ---                 ┆ ---   ┆ ---   ┆ ---         │
-    │ datetime[ms]        ┆ str   ┆ i64   ┆ i64         │
+    │ datetime[ns]        ┆ str   ┆ i64   ┆ i64         │
     ╞═════════════════════╪═══════╪═══════╪═════════════╡
     │ 2020-01-01 09:01:00 ┆ A     ┆ 101   ┆ 100         │
     │ 2020-01-01 09:01:00 ┆ B     ┆ 299   ┆ null        │
@@ -638,8 +638,7 @@ let%expect_test "Filtering" =
     Data_frame.lazy_ df
     |> Lazy_frame.filter
          ~predicate:
-           Expr.(
-             col "Date" = naive_datetime (Common.Naive_datetime.of_string "1995-10-16"))
+           Expr.(col "Date" = naive_datetime (Naive_datetime.of_string "1995-10-16"))
     |> Lazy_frame.collect_exn
   in
   Data_frame.print filtered_df;
@@ -658,8 +657,8 @@ let%expect_test "Filtering" =
     |> Lazy_frame.filter
          ~predicate:
            Expr.(
-             naive_datetime (Common.Naive_datetime.of_string "1995-07-01") < col "Date"
-             && col "Date" < naive_datetime (Common.Naive_datetime.of_string "1995-11-01"))
+             naive_datetime (Naive_datetime.of_string "1995-07-01") < col "Date"
+             && col "Date" < naive_datetime (Naive_datetime.of_string "1995-11-01"))
     |> Lazy_frame.collect_exn
   in
   Data_frame.print filtered_range_df;
@@ -783,8 +782,8 @@ let%expect_test "Grouping" =
       Series.
         [ datetime_range_exn
             ~every:"30m"
-            ~start:(Common.Naive_datetime.of_string "2021-12-16")
-            ~stop:(Common.Naive_datetime.of_string "2021-12-16 3")
+            ~start:(Naive_datetime.of_string "2021-12-16")
+            ~stop:(Naive_datetime.of_string "2021-12-16 3")
             "time"
         ; string "groups" [ "a"; "a"; "a"; "b"; "b"; "a"; "a" ]
         ]
@@ -842,8 +841,8 @@ let%expect_test "Resampling" =
       Series.
         [ datetime_range_exn
             ~every:"30m"
-            ~start:(Common.Naive_datetime.of_string "2021-12-16")
-            ~stop:(Common.Naive_datetime.of_string "2021-12-16 3")
+            ~start:(Naive_datetime.of_string "2021-12-16")
+            ~stop:(Naive_datetime.of_string "2021-12-16 3")
             "time"
         ; string "groups" [ "a"; "a"; "a"; "b"; "b"; "a"; "a" ]
         ; float "values" [ 1.0; 2.0; 3.0; 4.0; 5.0; 6.0; 7.0 ]

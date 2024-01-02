@@ -28,38 +28,67 @@ module T = struct
     | data_type -> createo data_type name values
   ;;
 
-  (* TODO: the astute reader will realize that this is quite terrible when
-     trying to passing float arrays! Unfortunately it's not clear to me how
-     to pass regular arrays safely to Rust, whereas this is definitely safe
-     since [Uniform_array.t] guarantees elements are boxed.
+  (* [create'] actually lies about its signature; if a [float array] is passed
+     and it happens to be unboxed, the Rust-side function does not know how to
+     properly handle it and will crash. So, instead of exposing it directly we
+     branch on the tag that indicates whether the array is boxed or not and
+     switch implementations between it and [float'], which takes a [floatarray]
+     (which is guaranteed to always be unboxed).
 
-     See https://github.com/mt-caret/polars-ocaml/pull/67 for how naively trying to
-     transmute on the Rust side doesn't work. *)
+     Converting from an [float array] to an [floatarray] via [Obj.magic] is
+     safe, since on the Rust side we immediately copy the values into a
+     [Vec<f64>]. *)
   external create'
     :  'a Data_type.Typed.t
     -> string
-    -> 'a Uniform_array.t
+    -> 'a array
     -> t
     = "rust_series_new_array"
 
-  let create' (type a) (data_type : a Data_type.Typed.t) name values =
-    match Data_type.Typed.flatten_custom data_type with
-    | Custom { data_type; f = _; f_inverse } ->
-      create' data_type name (Uniform_array.map values ~f:f_inverse)
-    | data_type -> create' data_type name values
+  external float'
+    :  string
+    -> floatarray
+    -> downcast_to_f32:bool
+    -> t
+    = "rust_series_new_float_array"
+
+  let%expect_test "floatarrays have double array tags" =
+    let floatarray = Stdlib.Float.Array.of_list [ 1.; 2.; 3. ] in
+    assert (Obj.tag (Obj.repr floatarray) = Obj.double_array_tag)
+  ;;
+
+  let create' =
+    let rec go : type a. a Data_type.Typed.t -> string -> a array -> t =
+      fun data_type name values ->
+      let has_double_array_tag = Obj.tag (Obj.repr values) = Obj.double_array_tag in
+      match Data_type.Typed.flatten_custom data_type with
+      | Custom { data_type; f = _; f_inverse } ->
+        let values = Array.map values ~f:f_inverse in
+        go data_type name values
+      | Float32 ->
+        if has_double_array_tag
+        then float' name (Obj.magic values) ~downcast_to_f32:true
+        else create' data_type name values
+      | Float64 ->
+        if has_double_array_tag
+        then float' name (Obj.magic values) ~downcast_to_f32:false
+        else create' data_type name values
+      | data_type -> create' data_type name values
+    in
+    go
   ;;
 
   external createo'
     :  'a Data_type.Typed.t
     -> string
-    -> 'a option Uniform_array.t
+    -> 'a option array
     -> t
     = "rust_series_new_option_array"
 
   let createo' (type a) (data_type : a Data_type.Typed.t) name values =
     match Data_type.Typed.flatten_custom data_type with
     | Custom { data_type; f = _; f_inverse } ->
-      createo' data_type name (Uniform_array.map values ~f:(Option.map ~f:f_inverse))
+      createo' data_type name (Array.map values ~f:(Option.map ~f:f_inverse))
     | data_type -> createo' data_type name values
   ;;
 
@@ -67,6 +96,7 @@ module T = struct
   let into = createo Int64
   let float = create Float64
   let floato = createo Float64
+  let float' name values = float' name values ~downcast_to_f32:false
   let bool = create Boolean
   let boolo = createo Boolean
 
@@ -74,55 +104,27 @@ module T = struct
 
   let string = create Utf8
   let stringo = createo Utf8
-
-  external datetime
-    :  string
-    -> Common.Naive_datetime.t list
-    -> t
-    = "rust_series_new_datetime"
-
-  external datetime_option
-    :  string
-    -> Common.Naive_datetime.t option list
-    -> t
-    = "rust_series_new_datetime_option"
-
-  let datetime' name dates =
-    datetime name (List.map dates ~f:Common.Naive_datetime.of_date)
-  ;;
-
-  let datetime_option' name dates =
-    datetime_option name (List.map dates ~f:(Option.map ~f:Common.Naive_datetime.of_date))
-  ;;
-
-  let time string times =
-    datetime string (List.map times ~f:Common.Naive_datetime.of_time_ns_exn)
-  ;;
-
-  let time_option string times =
-    datetime_option
-      string
-      (List.map times ~f:(Option.map ~f:Common.Naive_datetime.of_time_ns_exn))
-  ;;
-
-  external date : string -> Common.Naive_date.t list -> t = "rust_series_new_date"
-
-  let date name dates = date name (List.map dates ~f:Common.Naive_date.of_date)
-
-  external date_option
-    :  string
-    -> Common.Naive_date.t option list
-    -> t
-    = "rust_series_new_date_option"
-
-  let date_option name dates =
-    date_option name (List.map dates ~f:(Option.map ~f:Common.Naive_date.of_date))
-  ;;
+  let datetime = create (Datetime (Nanoseconds, None))
+  let datetimeo = createo (Datetime (Nanoseconds, None))
+  let datetime' = create Data_type.Typed.Core.time
+  let datetimeo' = createo Data_type.Typed.Core.time
+  let date = create Date
+  let dateo = createo Date
+  let date' = create Data_type.Typed.Core.date
+  let dateo' = createo Data_type.Typed.Core.date
+  let duration = create (Duration Nanoseconds)
+  let durationo = createo (Duration Nanoseconds)
+  let duration' = create Data_type.Typed.Core.span
+  let durationo' = createo Data_type.Typed.Core.span
+  let time = create Time
+  let timeo = createo Time
+  let time' = create Data_type.Typed.Core.ofday
+  let timeo' = createo Data_type.Typed.Core.ofday
 
   external date_range
     :  string
-    -> Common.Naive_datetime.t
-    -> Common.Naive_datetime.t
+    -> Naive_datetime.t
+    -> Naive_datetime.t
     -> every:string option
     -> cast_to_date:bool
     -> (t, string) result
@@ -136,8 +138,8 @@ module T = struct
     date_range_castable
       ?every
       name
-      ~start:(Common.Naive_datetime.of_date start)
-      ~stop:(Common.Naive_datetime.of_date stop)
+      ~start:(Naive_datetime.of_date start)
+      ~stop:(Naive_datetime.of_date stop)
       ~cast_to_date:true
   ;;
 
@@ -157,8 +159,8 @@ module T = struct
     date_range_castable
       ?every
       name
-      ~start:(Common.Naive_datetime.of_date start)
-      ~stop:(Common.Naive_datetime.of_date stop)
+      ~start:(Naive_datetime.of_date start)
+      ~stop:(Naive_datetime.of_date stop)
       ~cast_to_date:false
   ;;
 
@@ -286,8 +288,15 @@ module T = struct
   external to_string_hum : t -> string = "rust_series_to_string_hum"
 
   let print t = print_endline (to_string_hum t)
-  let pp formatter t = Stdlib.Format.pp_print_string formatter (to_string_hum t)
 end
 
 include T
+
+include Pretty_printer.Register (struct
+    type nonrec t = t
+
+    let module_name = "Polars.Series"
+    let to_string = to_string_hum
+  end)
+
 include Common.Make_numeric (T)

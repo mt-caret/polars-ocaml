@@ -22,9 +22,8 @@ let%expect_test "check serializations" =
   in
   let some_fields =
     basic_types
-    @ List.map Data_type.Time_unit.all ~f:(fun time_unit ->
-      Data_type.Datetime (time_unit, None))
-    @ List.map Data_type.Time_unit.all ~f:(fun time_unit -> Data_type.Duration time_unit)
+    @ List.map Time_unit.all ~f:(fun time_unit -> Data_type.Datetime (time_unit, None))
+    @ List.map Time_unit.all ~f:(fun time_unit -> Data_type.Duration time_unit)
     @ [ Data_type.Time
       ; List Boolean
       ; Null

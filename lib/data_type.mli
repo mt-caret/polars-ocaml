@@ -1,13 +1,5 @@
 open! Core
 
-module Time_unit : sig
-  type t =
-    | Nanoseconds
-    | Microseconds
-    | Milliseconds
-  [@@deriving compare, sexp, enumerate, quickcheck]
-end
-
 type t =
   | Boolean
   | UInt8
@@ -23,7 +15,7 @@ type t =
   | Utf8
   | Binary
   | Date
-  | Datetime of Time_unit.t * string option
+  | Datetime of Time_unit.t * Tz.t option
   | Duration of Time_unit.t
   | Time
   | List of t
@@ -51,6 +43,10 @@ module Typed : sig
       | Float64 : float t
       | Utf8 : string t
       | Binary : string t
+      | Date : Naive_date.t t
+      | Datetime : Time_unit.t * Tz.t option -> Naive_datetime.t t
+      | Duration : Time_unit.t -> Duration.t t
+      | Time : Naive_time.t t
       | List : 'a t -> 'a list t
       | Custom :
           { data_type : 'a t
@@ -73,5 +69,12 @@ module Typed : sig
 
     val to_untyped : 'a t -> untyped
     val of_untyped : untyped -> packed option
+
+    module Core : sig
+      val date : Date.t t
+      val time : Time_ns.t t
+      val span : Time_ns.Span.t t
+      val ofday : Time_ns.Ofday.t t
+    end
   end
   with type untyped := t

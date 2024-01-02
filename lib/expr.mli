@@ -27,7 +27,7 @@ type t
       ...
 
       # Data_frame.select_exn df ~exprs:Expr.[ col "foo" ]
-      - : Data_frame.t =
+      - : Data_frame0.t =
       shape: (3, 1)
       +-----+
       | foo |
@@ -44,7 +44,7 @@ type t
 
     {@ocaml[
       # Data_frame.select_exn df ~exprs:Expr.[ col "*" ]
-      - : Data_frame.t =
+      - : Data_frame0.t =
       shape: (3, 4)
       +-----+-----------+-----+-----+
       | ham | hamburger | foo | bar |
@@ -57,7 +57,7 @@ type t
       +-----+-----------+-----+-----+
 
       # Data_frame.select_exn df ~exprs:Expr.[ col "*" |> exclude ~names:[ "ham" ] ]
-      - : Data_frame.t =
+      - : Data_frame0.t =
       shape: (3, 3)
       +-----------+-----+-----+
       | hamburger | foo | bar |
@@ -74,7 +74,7 @@ type t
 
     {@ocaml[
       # Data_frame.select_exn df ~exprs:Expr.[ col "^ham.*$" ]
-      - : Data_frame.t =
+      - : Data_frame0.t =
       shape: (3, 2)
       +-----+-----------+
       | ham | hamburger |
@@ -92,7 +92,7 @@ val col : string -> t
 
     {@ocaml[
       # Data_frame.select_exn df ~exprs:Expr.[ cols [ "hamburger"; "foo" ] ]
-      - : Data_frame.t =
+      - : Data_frame0.t =
       shape: (3, 2)
       +-----------+-----+
       | hamburger | foo |
@@ -117,7 +117,7 @@ val cols : string list -> t
               ]
         in
         Data_frame.select_exn df ~exprs:Expr.[ all () |> sum ]
-      - : Data_frame.t =
+      - : Data_frame0.t =
       shape: (1, 2)
       +-----+-----+
       | a   | b   |
@@ -140,7 +140,7 @@ val all : unit -> t
             ; floato "cc" [ None; Some 2.5; Some 1.5 ]
             ]
           ;;
-      val df : Data_frame.t =
+      val df : Data_frame0.t =
         shape: (3, 3)
       +-----+------+------+
       | aa  | ba   | cc   |
@@ -153,7 +153,7 @@ val all : unit -> t
       +-----+------+------+
 
       # Data_frame.select_exn df ~exprs:Expr.[ all () |> exclude ~names:[ "ba" ] ]
-      - : Data_frame.t =
+      - : Data_frame0.t =
       shape: (3, 2)
       +-----+------+
       | aa  | cc   |
@@ -170,7 +170,7 @@ val all : unit -> t
 
     {@ocaml[
       # Data_frame.select_exn df ~exprs:Expr.[ all () |> exclude ~names:[ "^.*a$" ] ]
-      - : Data_frame.t =
+      - : Data_frame0.t =
       shape: (3, 1)
       +------+
       | cc   |
@@ -202,7 +202,7 @@ val exclude : t -> names:string list -> t
           |> List.eval ~expr:(element () |> rank)
           |> alias ~name:"rank"
         ]
-      - : Data_frame.t =
+      - : Data_frame0.t =
       shape: (3, 3)
       +-----+-----+-----------+
       | a   | b   | rank      |
@@ -230,7 +230,7 @@ val exclude : t -> names:string list -> t
           |> List.eval ~expr:(element () * int 2)
           |> alias ~name:"a_b_doubled"
         ]
-      - : Data_frame.t =
+      - : Data_frame0.t =
       shape: (3, 3)
       +-----+-----+-------------+
       | a   | b   | a_b_doubled |
@@ -260,7 +260,7 @@ val element : unit -> t
           col "a" |> cast ~to_:Float64
         ; col "b" |> cast ~to_:Int32
         ]
-      - : Data_frame.t =
+      - : Data_frame0.t =
       shape: (3, 2)
       +-----+-----+
       | a   | b   |
@@ -280,7 +280,7 @@ val cast : ?strict:bool -> t -> to_:Data_type.t -> t
     {@ocaml[
       # let df = Data_frame.create_exn Series.[ int "a" [ 1; 2; 3 ] ] in
         Data_frame.select_exn df ~exprs:Expr.[ col "a" + int 1 ]
-      - : Data_frame.t =
+      - : Data_frame0.t =
       shape: (3, 1)
       +-----+
       | a   |
@@ -294,7 +294,7 @@ val cast : ?strict:bool -> t -> to_:Data_type.t -> t
 
       # let df = Data_frame.create_exn Series.[ string "a" [ "1"; "2"; "3" ] ] in
         Data_frame.select_exn df ~exprs:Expr.[ col "a" + string "1" ]
-      - : Data_frame.t =
+      - : Data_frame0.t =
       shape: (3, 1)
       +-----+
       | a   |
@@ -308,7 +308,7 @@ val cast : ?strict:bool -> t -> to_:Data_type.t -> t
 
       # let df = Data_frame.create_exn Series.[ int "a" [ 1; 2; 3 ] ] in
         Data_frame.select_exn df ~exprs:Expr.[ col "a" + lit Int32 1 ]
-      - : Data_frame.t =
+      - : Data_frame0.t =
       shape: (3, 1)
       +-----+
       | a   |
@@ -322,7 +322,7 @@ val cast : ?strict:bool -> t -> to_:Data_type.t -> t
 
       # let df = Data_frame.create_exn Series.[ int "a" [ 1; 2; 3 ] ] in
         Data_frame.select_exn df ~exprs:Expr.[ col "a" + series (Series.int "b" [ 1; 1; 1 ]) ]
-      - : Data_frame.t =
+      - : Data_frame0.t =
       shape: (3, 1)
       +-----+
       | a   |
@@ -341,8 +341,8 @@ val int : int -> t
 val float : float -> t
 val bool : bool -> t
 val string : string -> t
-val naive_date : Common.Naive_date.t -> t
-val naive_datetime : Common.Naive_datetime.t -> t
+val naive_date : Naive_date.t -> t
+val naive_datetime : Naive_datetime.t -> t
 val time : Time_ns.t -> t
 val series : Series.t -> t
 
@@ -357,7 +357,7 @@ val series : Series.t -> t
       ...
 
       # Data_frame.with_columns_exn df ~exprs:Expr.[ col "a" |> sort ]
-      - : Data_frame.t =
+      - : Data_frame0.t =
       shape: (4, 1)
       +------+
       | a    |
@@ -371,7 +371,7 @@ val series : Series.t -> t
       +------+
 
       # Data_frame.with_columns_exn df ~exprs:Expr.[ col "a" |> sort ~descending:true ]
-      - : Data_frame.t =
+      - : Data_frame0.t =
       shape: (4, 1)
       +------+
       | a    |
@@ -390,7 +390,7 @@ val series : Series.t -> t
               [ string "group" [ "one"; "one"; "one"; "two"; "two"; "two" ]
               ; int "value" [ 1; 98; 2; 3; 99; 4 ]
               ]
-      val df : Data_frame.t =
+      val df : Data_frame0.t =
         shape: (6, 2)
       +-------+-------+
       | group | value |
@@ -409,7 +409,7 @@ val series : Series.t -> t
           df
           ~by:Expr.[ col "group" ]
           ~agg:Expr.[ col "value" |> sort ]
-      - : (Data_frame.t, string) result =
+      - : (Data_frame0.t, string) result =
       Core.Ok
        shape: (2, 2)
       +-------+------------+
@@ -442,7 +442,7 @@ val sort : ?descending:bool -> t -> t
       # Data_frame.select_exn
           df
           ~exprs:Expr.[ col "group" |> sort_by ~by:[ col "value1" ] ]
-      - : Data_frame.t =
+      - : Data_frame0.t =
       shape: (4, 1)
       +-------+
       | group |
@@ -462,7 +462,7 @@ val sort : ?descending:bool -> t -> t
       # Data_frame.select_exn
           df
           ~exprs:Expr.[ col "group" |> sort_by ~by:[ col "value1" + col "value2" ] ]
-      - : Data_frame.t =
+      - : Data_frame0.t =
       shape: (4, 1)
       +-------+
       | group |
@@ -482,7 +482,7 @@ val sort : ?descending:bool -> t -> t
       # Data_frame.select_exn
           df
           ~exprs:Expr.[ col "group" |> sort_by ~by:[ col "value1"; col "value2" ] ~descending:true ]
-      - : Data_frame.t =
+      - : Data_frame0.t =
       shape: (4, 1)
       +-------+
       | group |
@@ -503,7 +503,7 @@ val sort : ?descending:bool -> t -> t
           df
           ~by:Expr.[ col "group" ]
           ~agg:Expr.[ col "value1" |> sort_by ~by:[ col "value2" ] ]
-      - : (Data_frame.t, string) result =
+      - : (Data_frame0.t, string) result =
       Core.Ok
        shape: (2, 2)
       +-------+-----------+
@@ -523,7 +523,7 @@ val sort : ?descending:bool -> t -> t
       # Data_frame.groupby_exn
           df
           ~by:Expr.[ col "group" ] ~agg:Expr.[ all () |> sort_by ~by:[ col "value2" ] ]
-      - : Data_frame.t =
+      - : Data_frame0.t =
       shape: (2, 3)
       +-------+-----------+-----------+
       | group | value1    | value2    |
@@ -545,7 +545,7 @@ val sort_by : ?descending:bool -> t -> by:t list -> t
         Data_frame.select_exn
           df
           ~exprs:Expr.[ col "values" |> set_sorted_flag ~sorted:`Ascending |> max ]
-      - : Data_frame.t =
+      - : Data_frame0.t =
       shape: (1, 1)
       +--------+
       | values |
@@ -562,7 +562,7 @@ val set_sorted_flag : t -> sorted:[ `Ascending | `Descending | `Not ] -> t
     {@ocaml[
       # let df = Data_frame.create_exn Series.[ int "a" [ 1; 1; 2 ] ] in
         Data_frame.select_exn df ~exprs:Expr.[ col "a" |> first ]
-      - : Data_frame.t =
+      - : Data_frame0.t =
       shape: (1, 1)
       +-----+
       | a   |
@@ -579,7 +579,7 @@ val first : t -> t
     {@ocaml[
       # let df = Data_frame.create_exn Series.[ int "a" [ 1; 1; 2 ] ] in
         Data_frame.select_exn df ~exprs:Expr.[ col "a" |> last ]
-      - : Data_frame.t =
+      - : Data_frame0.t =
       shape: (1, 1)
       +-----+
       | a   |
@@ -604,7 +604,7 @@ val last : t -> t
               ]
         in
         Data_frame.select_exn df ~exprs:Expr.[ all (); all () |> reverse |> suffix ~suffix:"_reverse" ]
-      - : Data_frame.t =
+      - : Data_frame0.t =
       shape: (5, 8)
       +-----+--------+-----+--------+-----------+----------------+-----------+--------------+
       | A   | fruits | B   | cars   | A_reverse | fruits_reverse | B_reverse | cars_reverse |
@@ -625,7 +625,7 @@ val reverse : t -> t
     {@ocaml[
       # let df = Data_frame.create_exn Series.[ int "foo" [ 1; 2; 3; 4; 5; 6; 7 ] ] in
         Data_frame.select_exn df ~exprs:Expr.[ col "foo" |> head ~length:3 ]
-      - : Data_frame.t =
+      - : Data_frame0.t =
       shape: (3, 1)
       +-----+
       | foo |
@@ -644,7 +644,7 @@ val head : ?length:int -> t -> t
     {@ocaml[
       # let df = Data_frame.create_exn Series.[ int "foo" [ 1; 2; 3; 4; 5; 6; 7 ] ] in
         Data_frame.select_exn df ~exprs:Expr.[ col "foo" |> tail ~length:3 ]
-      - : Data_frame.t =
+      - : Data_frame0.t =
       shape: (3, 1)
       +-----+
       | foo |
@@ -671,7 +671,7 @@ val tail : ?length:int -> t -> t
           df
           ~by:Expr.[ col "group" ]
           ~agg:Expr.[ col "value" |> take ~idx:(int 1) ]
-      - : Data_frame.t =
+      - : Data_frame0.t =
       shape: (2, 2)
       +-------+-------+
       | group | value |
@@ -693,7 +693,7 @@ val take : t -> idx:t -> t
           ~exprs:
             Expr.
               [ col "a" |> sample_n ~seed:0 ~fixed_seed:true ~n:2 ~with_replacement:true ~shuffle:true ]
-      - : Data_frame.t =
+      - : Data_frame0.t =
       shape: (2, 1)
       +-----+
       | a   |
@@ -740,7 +740,7 @@ val sample_n
               ; col "b" |> filter ~predicate:(col "b" >= int 2) |> sum |> alias ~name:"gte"
               ]
         |> Data_frame.sort_exn ~by_column:[ "group_col" ]
-      - : Data_frame.t =
+      - : Data_frame0.t =
       shape: (2, 3)
       +-----------+-----+-----+
       | group_col | lt  | gte |
@@ -765,7 +765,7 @@ val filter : t -> predicate:t -> t
               [ col "a" |> ceil |> alias ~name:"a_ceil"
               ; col "a" |> ceil |> alias ~name:"a_floor"
               ]
-      - : Data_frame.t =
+      - : Data_frame0.t =
       shape: (4, 2)
       +--------+---------+
       | a_ceil | a_floor |
@@ -797,7 +797,7 @@ val floor : t -> t
               ; col "foo" |> clip_min_int ~min:(-10) |> alias ~name:"clipped_min_int"
               ; col "foo" |> clip_max_int ~max:10 |> alias ~name:"clipped_max_int"
               ]
-      - : Data_frame.t =
+      - : Data_frame0.t =
       shape: (4, 4)
       +-------------+-------------+-----------------+-----------------+
       | clipped_min | clipped_max | clipped_min_int | clipped_max_int |
@@ -832,7 +832,7 @@ val pow : t -> t -> t
               ; col "a" |> median |> alias ~name:"median"
               ; col "a" |> mode |> alias ~name:"mode"
               ]
-      - : Data_frame.t =
+      - : Data_frame0.t =
       shape: (1, 4)
       +-----+----------+--------+------+
       | sum | mean     | median | mode |
@@ -862,7 +862,7 @@ val mode : t -> t
               ; col "a" |> arg_max |> alias ~name:"arg_max"
               ; col "a" |> arg_min |> alias ~name:"arg_min"
               ]
-      - : Data_frame.t =
+      - : Data_frame0.t =
       shape: (1, 4)
       +-----+-----+---------+---------+
       | max | min | arg_max | arg_min |
@@ -890,7 +890,7 @@ val arg_min : t -> t
               ]
         in
         Data_frame.select_exn df ~exprs:Expr.[ all () |> count ]
-      - : Data_frame.t =
+      - : Data_frame0.t =
       shape: (1, 2)
       +-----+-----+
       | a   | b   |
@@ -915,7 +915,7 @@ val count : t -> t
       ...
 
       # Data_frame.select_exn df ~exprs:Expr.[ count_ () ]
-      - : Data_frame.t =
+      - : Data_frame0.t =
       shape: (1, 1)
       +-------+
       | count |
@@ -926,7 +926,7 @@ val count : t -> t
       +-------+
 
       # Data_frame.groupby_exn df ~by:Expr.[ col "c" ] ~agg:Expr.[ count_ () ]
-      - : Data_frame.t =
+      - : Data_frame0.t =
       shape: (2, 2)
       +-----+-------+
       | c   | count |
@@ -989,6 +989,10 @@ include Common.Numeric with type t := t
 (* TODO: apparently this doesn't exist for series, which is surprising! *)
 val floor_div : t -> t -> t
 val ( // ) : t -> t -> t
+val abs : t -> t
+val exp : t -> t
+val log : ?base:float -> t -> t
+val log1p : t -> t
 
 module Dt : sig
   val strftime : t -> format:string -> t

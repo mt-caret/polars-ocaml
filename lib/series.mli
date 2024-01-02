@@ -4,24 +4,33 @@ type t
 
 val create : 'a Data_type.Typed.t -> string -> 'a list -> t
 val createo : 'a Data_type.Typed.t -> string -> 'a option list -> t
-val create' : 'a Data_type.Typed.t -> string -> 'a Uniform_array.t -> t
-val createo' : 'a Data_type.Typed.t -> string -> 'a option Uniform_array.t -> t
+val create' : 'a Data_type.Typed.t -> string -> 'a array -> t
+val createo' : 'a Data_type.Typed.t -> string -> 'a option array -> t
 val int : string -> int list -> t
 val into : string -> int option list -> t
 val float : string -> float list -> t
 val floato : string -> float option list -> t
+val float' : string -> floatarray -> t
 val bool : string -> bool list -> t
 val boolo : string -> bool option list -> t
 val string : string -> string list -> t
 val stringo : string -> string option list -> t
-val date : string -> Date.t list -> t
-val date_option : string -> Date.t option list -> t
-val datetime : string -> Common.Naive_datetime.t list -> t
-val datetime_option : string -> Common.Naive_datetime.t option list -> t
-val datetime' : string -> Date.t list -> t
-val datetime_option' : string -> Date.t option list -> t
-val time : string -> Time_ns.t list -> t
-val time_option : string -> Time_ns.t option list -> t
+val date : string -> Naive_date.t list -> t
+val dateo : string -> Naive_date.t option list -> t
+val date' : string -> Date.t list -> t
+val dateo' : string -> Date.t option list -> t
+val datetime : string -> Naive_datetime.t list -> t
+val datetimeo : string -> Naive_datetime.t option list -> t
+val datetime' : string -> Time_ns.t list -> t
+val datetimeo' : string -> Time_ns.t option list -> t
+val duration : string -> Duration.t list -> t
+val durationo : string -> Duration.t option list -> t
+val duration' : string -> Time_ns.Span.t list -> t
+val durationo' : string -> Time_ns.Span.t option list -> t
+val time : string -> Naive_time.t list -> t
+val timeo : string -> Naive_time.t option list -> t
+val time' : string -> Time_ns.Ofday.t list -> t
+val timeo' : string -> Time_ns.Ofday.t option list -> t
 
 val date_range
   :  ?every:string
@@ -35,15 +44,15 @@ val date_range_exn : ?every:string -> string -> start:Date.t -> stop:Date.t -> t
 val datetime_range
   :  ?every:string
   -> string
-  -> start:Common.Naive_datetime.t
-  -> stop:Common.Naive_datetime.t
+  -> start:Naive_datetime.t
+  -> stop:Naive_datetime.t
   -> (t, string) result
 
 val datetime_range_exn
   :  ?every:string
   -> string
-  -> start:Common.Naive_datetime.t
-  -> stop:Common.Naive_datetime.t
+  -> start:Naive_datetime.t
+  -> stop:Naive_datetime.t
   -> t
 
 val datetime_range'
