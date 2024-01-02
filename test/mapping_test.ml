@@ -26,8 +26,8 @@ let%expect_test "Series.map" =
   |> Fn.flip List.take 3
   |> String.concat_lines
   |> print_endline;
-  [%expect {|
-    (Failure
-     "Polars panicked: Empty exception
-    Backtrace: |}]
+  [%expect
+    {|
+    (Failure "Polars panicked: Empty exception
+    backtrace not captured") |}]
 ;;
