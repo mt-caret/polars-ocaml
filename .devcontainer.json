@@ -1,8 +1,7 @@
 {
     "name": "polars-ocaml dev",
     "build": {
-        "cacheFrom": "ghcr.io/mt-caret/polars-ocaml",
-        "dockerfile": "Dockerfile"
+        "cacheFrom": "ghcr.io/mt-caret/polars-ocaml"
     },
     "customizations": {
         "vscode": {
@@ -11,5 +10,7 @@
                 "ocamllabs.ocaml-platform"
             ]
         }
-    }
+    },
+    "dockerFile": "Dockerfile",
+    "remoteUser": "opam"
 }
