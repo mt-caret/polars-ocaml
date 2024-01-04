@@ -6,7 +6,8 @@ RUN sudo ln -f /usr/bin/opam-2.2 /usr/bin/opam
 
 RUN sudo apt-get update && sudo apt-get install -y \
     build-essential \
-    curl
+    curl \
+    mold
 
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
     sh -s -- -y --default-toolchain=nightly
@@ -19,3 +20,6 @@ RUN opam install dune ocamlformat ocaml-lsp-server \
 COPY ./polars.opam ./polars_async.opam ./
 
 RUN opam install . --deps-only --with-doc --with-test
+
+# Overwrite default linker with mold (this drastically speeds up builds)
+RUN ln -f /usr/bin/mold "$(realpath /usr/bin/ld)"
