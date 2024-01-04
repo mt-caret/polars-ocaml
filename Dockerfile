@@ -1,4 +1,4 @@
-FROM --platform=amd64 ocaml/opam:debian-ocaml-4.14
+FROM ocaml/opam:debian-ocaml-4.14
 
 LABEL org.opencontainers.image.source=https://github.com/mt-caret/polars-ocaml
 
@@ -17,9 +17,11 @@ ENV PATH="${HOME}/.cargo/bin:${PATH}"
 RUN opam install dune ocamlformat ocaml-lsp-server \
     && cargo install cargo-watch
 
-COPY ./polars.opam ./polars_async.opam ./
+COPY --chown=opam ./polars.opam ./polars_async.opam ./
 
 RUN opam install . --deps-only --with-doc --with-test
 
 # Overwrite default linker with mold (this drastically speeds up builds)
 RUN ln -f /usr/bin/mold "$(realpath /usr/bin/ld)"
+
+COPY --chown=opam . .
