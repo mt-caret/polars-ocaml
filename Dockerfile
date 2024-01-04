@@ -22,6 +22,6 @@ COPY --chown=opam ./polars.opam ./polars_async.opam ./
 RUN opam install . --deps-only --with-doc --with-test
 
 # Overwrite default linker with mold (this drastically speeds up builds)
-RUN ln -f /usr/bin/mold "$(realpath /usr/bin/ld)"
+RUN sudo ln -f /usr/bin/mold "$(realpath /usr/bin/ld)"
 
 COPY --chown=opam . .
