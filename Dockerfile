@@ -1,4 +1,4 @@
-FROM ocaml/opam:debian-ocaml-4.14
+FROM --platform=amd64 ocaml/opam:debian-ocaml-4.14
 
 LABEL org.opencontainers.image.source=https://github.com/mt-caret/polars-ocaml
 
@@ -6,11 +6,7 @@ RUN sudo ln -f /usr/bin/opam-2.2 /usr/bin/opam
 
 RUN sudo apt-get update && sudo apt-get install -y \
     build-essential \
-    curl \
-    mold
-
-# Overwrite default linker with mold (this drastically speeds up builds)
-RUN sudo ln -f /usr/bin/mold "$(realpath /usr/bin/ld)"
+    curl
 
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
     sh -s -- -y --default-toolchain=nightly
