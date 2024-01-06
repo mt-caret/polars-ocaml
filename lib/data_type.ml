@@ -155,8 +155,9 @@ module Typed = struct
     | Date -> Some (T Date)
     | Datetime (time_unit, time_zone) -> Some (T (Datetime (time_unit, time_zone)))
     | Duration time_unit -> Some (T (Duration time_unit))
+    | Time -> Some (T Time)
     | List t -> of_untyped t |> Option.map ~f:(fun (T t) -> T (List t))
-    | Time | Null | Struct _ | Unknown -> None
+    | Null | Struct _ | Unknown -> None
   ;;
 
   let rec sexp_of_packed (T t) =
