@@ -7,9 +7,9 @@
 (source
  (github mt-caret/polars-ocaml))
 
-(authors "mtakeda")
+(authors mtakeda)
 
-(maintainers "mtakeda")
+(maintainers mtakeda)
 
 (license MIT)
 
@@ -25,6 +25,8 @@
   (core_bench :with-test)
   (expect_test_helpers_core :with-test)
   (mdx :with-test)
+  (ocaml
+   (< 5.0.0))
   (ocamlformat :dev)
   (odoc :with-doc)
   (re2 :with-test)
@@ -35,8 +37,6 @@
   core_unix
   dune
   ; ocaml-interop does not yet properly support OCaml 5
-  (ocaml
-   (< 5.0.0))
   ppx_jane
   ppx_typed_fields)
  (tags
@@ -56,6 +56,7 @@
   (shell :with-test)
   async
   core
-  polars)
+  polars
+  ppx_jane)
  (tags
   (data-science polars rust)))

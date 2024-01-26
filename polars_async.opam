@@ -21,6 +21,7 @@ depends: [
   "async"
   "core"
   "polars"
+  "ppx_jane"
 ]
 build: [
   ["dune" "subst"] {dev}

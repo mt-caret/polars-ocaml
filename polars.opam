@@ -13,6 +13,7 @@ depends: [
   "core_bench" {with-test}
   "expect_test_helpers_core" {with-test}
   "mdx" {with-test}
+  "ocaml" {< "5.0.0"}
   "ocamlformat" {dev}
   "odoc" {with-doc}
   "re2" {with-test}
@@ -22,7 +23,6 @@ depends: [
   "core_kernel"
   "core_unix"
   "dune" {>= "3.8"}
-  "ocaml" {< "5.0.0"}
   "ppx_jane"
   "ppx_typed_fields"
 ]

@@ -31,21 +31,21 @@ jobs:
       packages: write
     steps:
       - name: Checkout (GitHub)
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          password: ${{ github.token }}
 
       - name: Build and run Dev Container task
         uses: devcontainers/ci@v0.3
         with:
           imageName: ghcr.io/mt-caret/polars-ocaml
           cacheFrom: ghcr.io/mt-caret/polars-ocaml
-          push: always
+          refFilterForPush: refs/heads/main
           runCmd: |
             opam exec -- dune build
             opam exec -- dune runtest
@@ -57,21 +57,20 @@ jobs:
       packages: write
     steps:
       - name: Checkout (GitHub)
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          password: ${{ github.token }}
 
       - name:
         uses: devcontainers/ci@v0.3
         with:
           imageName: ghcr.io/mt-caret/polars-ocaml
           cacheFrom: ghcr.io/mt-caret/polars-ocaml
-          push: always
           runCmd: |
             apt install --yes pkg-config libssl-dev
             cargo install cargo-msrv
@@ -80,7 +79,7 @@ jobs:
   rust-checks:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       # We need nightly, at least until
       # https://github.com/mt-caret/polars-ocaml/pull/30 is merged.
@@ -118,10 +117,12 @@ jobs:
   ocaml-checks:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - uses: ocaml/setup-ocaml@v2
         with:
           ocaml-compiler: 4.14.x
+
+      - uses: ocaml/setup-ocaml/lint-opam@v2
 
       - uses: ocaml/setup-ocaml/lint-fmt@v2
