@@ -12,7 +12,7 @@
 [package]
 edition = "2018"
 name = "snap"
-version = "1.1.0"
+version = "1.1.1"
 authors = ["Andrew Gallant <jamslam@gmail.com>"]
 exclude = ["data/*"]
 description = """
@@ -33,7 +33,7 @@ license = "BSD-3-Clause"
 repository = "https://github.com/BurntSushi/rust-snappy"
 
 [profile.release]
-debug = true
+debug = 2
 
 [profile.test]
 opt-level = 3

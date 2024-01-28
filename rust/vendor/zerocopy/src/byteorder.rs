@@ -1,6 +1,10 @@
-// Copyright 2019 The Fuchsia Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style license that can be
-// found in the LICENSE file.
+// Copyright 2019 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
 
 //! Byte order-aware numeric primitives.
 //!
@@ -29,7 +33,8 @@
 //! One use of these types is for representing network packet formats, such as
 //! UDP:
 //!
-//! ```edition2021
+//! ```rust,edition2021
+//! # #[cfg(feature = "derive")] { // This example uses derives, and won't compile without them
 //! use zerocopy::{AsBytes, ByteSlice, FromBytes, FromZeroes, Ref, Unaligned};
 //! use zerocopy::byteorder::network_endian::U16;
 //!
@@ -59,6 +64,7 @@
 //!
 //!     // more getters...
 //! }
+//! # }
 //! ```
 
 use core::{
@@ -78,6 +84,7 @@ use super::*;
 macro_rules! impl_fmt_trait {
     ($name:ident, $native:ident, $trait:ident) => {
         impl<O: ByteOrder> $trait for $name<O> {
+            #[inline(always)]
             fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
                 $trait::fmt(&self.get(), f)
             }
@@ -90,18 +97,112 @@ macro_rules! impl_fmt_traits {
         impl_fmt_trait!($name, $native, Display);
     };
     ($name:ident, $native:ident, "unsigned integer") => {
-        impl_fmt_traits!($name, $native, @all_traits);
+        impl_fmt_traits!($name, $native, @all_types);
     };
     ($name:ident, $native:ident, "signed integer") => {
-        impl_fmt_traits!($name, $native, @all_traits);
+        impl_fmt_traits!($name, $native, @all_types);
     };
-
-    ($name:ident, $native:ident, @all_traits) => {
+    ($name:ident, $native:ident, @all_types) => {
         impl_fmt_trait!($name, $native, Display);
         impl_fmt_trait!($name, $native, Octal);
         impl_fmt_trait!($name, $native, LowerHex);
         impl_fmt_trait!($name, $native, UpperHex);
         impl_fmt_trait!($name, $native, Binary);
+    };
+}
+
+macro_rules! impl_ops_traits {
+    ($name:ident, $native:ident, "floating point number") => {
+        impl_ops_traits!($name, $native, @all_types);
+        impl_ops_traits!($name, $native, @signed_integer_floating_point);
+    };
+    ($name:ident, $native:ident, "unsigned integer") => {
+        impl_ops_traits!($name, $native, @signed_unsigned_integer);
+        impl_ops_traits!($name, $native, @all_types);
+    };
+    ($name:ident, $native:ident, "signed integer") => {
+        impl_ops_traits!($name, $native, @signed_unsigned_integer);
+        impl_ops_traits!($name, $native, @signed_integer_floating_point);
+        impl_ops_traits!($name, $native, @all_types);
+    };
+    ($name:ident, $native:ident, @signed_unsigned_integer) => {
+        impl_ops_traits!(@without_byteorder_swap $name, $native, BitAnd, bitand, BitAndAssign, bitand_assign);
+        impl_ops_traits!(@without_byteorder_swap $name, $native, BitOr, bitor, BitOrAssign, bitor_assign);
+        impl_ops_traits!(@without_byteorder_swap $name, $native, BitXor, bitxor, BitXorAssign, bitxor_assign);
+        impl_ops_traits!(@with_byteorder_swap $name, $native, Shl, shl, ShlAssign, shl_assign);
+        impl_ops_traits!(@with_byteorder_swap $name, $native, Shr, shr, ShrAssign, shr_assign);
+
+        impl<O> core::ops::Not for $name<O> {
+            type Output = $name<O>;
+
+            #[inline(always)]
+            fn not(self) -> $name<O> {
+                 let self_native = $native::from_ne_bytes(self.0);
+                 $name((!self_native).to_ne_bytes(), PhantomData)
+            }
+        }
+    };
+    ($name:ident, $native:ident, @signed_integer_floating_point) => {
+        impl<O: ByteOrder> core::ops::Neg for $name<O> {
+            type Output = $name<O>;
+
+            #[inline(always)]
+            fn neg(self) -> $name<O> {
+                let self_native: $native = self.get();
+                #[allow(clippy::arithmetic_side_effects)]
+                $name::<O>::new(-self_native)
+            }
+        }
+    };
+    ($name:ident, $native:ident, @all_types) => {
+        impl_ops_traits!(@with_byteorder_swap $name, $native, Add, add, AddAssign, add_assign);
+        impl_ops_traits!(@with_byteorder_swap $name, $native, Div, div, DivAssign, div_assign);
+        impl_ops_traits!(@with_byteorder_swap $name, $native, Mul, mul, MulAssign, mul_assign);
+        impl_ops_traits!(@with_byteorder_swap $name, $native, Rem, rem, RemAssign, rem_assign);
+        impl_ops_traits!(@with_byteorder_swap $name, $native, Sub, sub, SubAssign, sub_assign);
+    };
+    (@with_byteorder_swap $name:ident, $native:ident, $trait:ident, $method:ident, $trait_assign:ident, $method_assign:ident) => {
+        impl<O: ByteOrder> core::ops::$trait for $name<O> {
+            type Output = $name<O>;
+
+            #[inline(always)]
+            fn $method(self, rhs: $name<O>) -> $name<O> {
+                let self_native: $native = self.get();
+                let rhs_native: $native = rhs.get();
+                let result_native = core::ops::$trait::$method(self_native, rhs_native);
+                $name::<O>::new(result_native)
+            }
+        }
+
+        impl<O: ByteOrder> core::ops::$trait_assign for $name<O> {
+            #[inline(always)]
+            fn $method_assign(&mut self, rhs: $name<O>) {
+                *self = core::ops::$trait::$method(*self, rhs);
+            }
+        }
+    };
+    // Implement traits in terms of the same trait on the native type, but
+    // without performing a byte order swap. This only works for bitwise
+    // operations like `&`, `|`, etc.
+    (@without_byteorder_swap $name:ident, $native:ident, $trait:ident, $method:ident, $trait_assign:ident, $method_assign:ident) => {
+        impl<O: ByteOrder> core::ops::$trait for $name<O> {
+            type Output = $name<O>;
+
+            #[inline(always)]
+            fn $method(self, rhs: $name<O>) -> $name<O> {
+                let self_native = $native::from_ne_bytes(self.0);
+                let rhs_native = $native::from_ne_bytes(rhs.0);
+                let result_native = core::ops::$trait::$method(self_native, rhs_native);
+                $name(result_native.to_ne_bytes(), PhantomData)
+            }
+        }
+
+        impl<O: ByteOrder> core::ops::$trait_assign for $name<O> {
+            #[inline(always)]
+            fn $method_assign(&mut self, rhs: $name<O>) {
+                *self = core::ops::$trait::$method(*self, rhs);
+            }
+        }
     };
 }
 
@@ -147,11 +248,13 @@ macro_rules! define_type {
         [$($larger_byteorder_try:ident),*]) => {
         doc_comment! {
             concat!("A ", stringify!($bits), "-bit ", $number_kind,
-            " stored in `O` byte order.
+            " stored in a given byte order.
 
 `", stringify!($name), "` is like the native `", stringify!($native), "` type with
 two major differences: First, it has no alignment requirement (its alignment is 1).
-Second, the endianness of its memory layout is given by the type parameter `O`.
+Second, the endianness of its memory layout is given by the type parameter `O`,
+which can be any type which implements [`ByteOrder`]. In particular, this refers
+to [`BigEndian`], [`LittleEndian`], [`NativeEndian`], and [`NetworkEndian`].
 
 ", stringify!($article), " `", stringify!($name), "` can be constructed using
 the [`new`] method, and its contained value can be obtained as a native
@@ -173,10 +276,13 @@ example of how it can be used for parsing UDP packets.
 [`AsBytes`]: crate::AsBytes
 [`Unaligned`]: crate::Unaligned"),
             #[derive(Copy, Clone, Eq, PartialEq, Hash)]
-            #[cfg_attr(any(feature = "derive", test), derive(FromZeroes, FromBytes, AsBytes, Unaligned))]
+            #[cfg_attr(any(feature = "derive", test), derive(KnownLayout, FromZeroes, FromBytes, AsBytes, Unaligned))]
             #[repr(transparent)]
             pub struct $name<O>([u8; $bytes], PhantomData<O>);
         }
+
+        #[cfg(not(any(feature = "derive", test)))]
+        impl_known_layout!(O => $name<O>);
 
         safety_comment! {
             /// SAFETY:
@@ -190,6 +296,7 @@ example of how it can be used for parsing UDP packets.
         }
 
         impl<O> Default for $name<O> {
+            #[inline(always)]
             fn default() -> $name<O> {
                 $name::ZERO
             }
@@ -207,6 +314,7 @@ example of how it can be used for parsing UDP packets.
 
             /// Constructs a new value from bytes which are already in the
             /// endianness `O`.
+            #[inline(always)]
             pub const fn from_bytes(bytes: [u8; $bytes]) -> $name<O> {
                 $name(bytes, PhantomData)
             }
@@ -218,6 +326,7 @@ example of how it can be used for parsing UDP packets.
 
             /// Constructs a new value, possibly performing an endianness swap
             /// to guarantee that the returned value has endianness `O`.
+            #[inline(always)]
             pub fn new(n: $native) -> $name<O> {
                 let mut out = $name::default();
                 O::$write_method(&mut out.0[..], n);
@@ -227,6 +336,7 @@ example of how it can be used for parsing UDP packets.
             /// Returns the value as a primitive type, possibly performing an
             /// endianness swap to guarantee that the return value has the
             /// endianness of the native platform.
+            #[inline(always)]
             pub fn get(self) -> $native {
                 O::$read_method(&self.0[..])
             }
@@ -234,6 +344,7 @@ example of how it can be used for parsing UDP packets.
             /// Updates the value in place as a primitive type, possibly
             /// performing an endianness swap to guarantee that the stored value
             /// has the endianness `O`.
+            #[inline(always)]
             pub fn set(&mut self, n: $native) {
                 O::$write_method(&mut self.0[..], n);
             }
@@ -245,24 +356,28 @@ example of how it can be used for parsing UDP packets.
         // inference issues.
 
         impl<O: ByteOrder> From<$name<O>> for [u8; $bytes] {
+            #[inline(always)]
             fn from(x: $name<O>) -> [u8; $bytes] {
                 x.0
             }
         }
 
         impl<O: ByteOrder> From<[u8; $bytes]> for $name<O> {
+            #[inline(always)]
             fn from(bytes: [u8; $bytes]) -> $name<O> {
                 $name(bytes, PhantomData)
             }
         }
 
         impl<O: ByteOrder> From<$name<O>> for $native {
+            #[inline(always)]
             fn from(x: $name<O>) -> $native {
                 x.get()
             }
         }
 
         impl<O: ByteOrder> From<$native> for $name<O> {
+            #[inline(always)]
             fn from(x: $native) -> $name<O> {
                 $name::new(x)
             }
@@ -270,6 +385,7 @@ example of how it can be used for parsing UDP packets.
 
         $(
             impl<O: ByteOrder> From<$name<O>> for $larger_native {
+                #[inline(always)]
                 fn from(x: $name<O>) -> $larger_native {
                     x.get().into()
                 }
@@ -279,6 +395,7 @@ example of how it can be used for parsing UDP packets.
         $(
             impl<O: ByteOrder> TryFrom<$larger_native_try> for $name<O> {
                 type Error = TryFromIntError;
+                #[inline(always)]
                 fn try_from(x: $larger_native_try) -> Result<$name<O>, TryFromIntError> {
                     $native::try_from(x).map($name::new)
                 }
@@ -287,6 +404,7 @@ example of how it can be used for parsing UDP packets.
 
         $(
             impl<O: ByteOrder, P: ByteOrder> From<$name<O>> for $larger_byteorder<P> {
+                #[inline(always)]
                 fn from(x: $name<O>) -> $larger_byteorder<P> {
                     $larger_byteorder::new(x.get().into())
                 }
@@ -296,6 +414,7 @@ example of how it can be used for parsing UDP packets.
         $(
             impl<O: ByteOrder, P: ByteOrder> TryFrom<$larger_byteorder_try<P>> for $name<O> {
                 type Error = TryFromIntError;
+                #[inline(always)]
                 fn try_from(x: $larger_byteorder_try<P>) -> Result<$name<O>, TryFromIntError> {
                     x.get().try_into().map($name::new)
                 }
@@ -303,32 +422,38 @@ example of how it can be used for parsing UDP packets.
         )*
 
         impl<O: ByteOrder> AsRef<[u8; $bytes]> for $name<O> {
+            #[inline(always)]
             fn as_ref(&self) -> &[u8; $bytes] {
                 &self.0
             }
         }
 
         impl<O: ByteOrder> AsMut<[u8; $bytes]> for $name<O> {
+            #[inline(always)]
             fn as_mut(&mut self) -> &mut [u8; $bytes] {
                 &mut self.0
             }
         }
 
         impl<O: ByteOrder> PartialEq<$name<O>> for [u8; $bytes] {
+            #[inline(always)]
             fn eq(&self, other: &$name<O>) -> bool {
                 self.eq(&other.0)
             }
         }
 
         impl<O: ByteOrder> PartialEq<[u8; $bytes]> for $name<O> {
+            #[inline(always)]
             fn eq(&self, other: &[u8; $bytes]) -> bool {
                 self.0.eq(other)
             }
         }
 
         impl_fmt_traits!($name, $native, $number_kind);
+        impl_ops_traits!($name, $native, $number_kind);
 
         impl<O: ByteOrder> Debug for $name<O> {
+            #[inline]
             fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
                 // This results in a format like "U16(42)".
                 f.debug_tuple(stringify!($name)).field(&self.get()).finish()
@@ -474,7 +599,7 @@ module!(little_endian, LittleEndian, "little-endian");
 module!(network_endian, NetworkEndian, "network-endian");
 module!(native_endian, NativeEndian, "native-endian");
 
-#[cfg(test)]
+#[cfg(any(test, kani))]
 mod tests {
     use ::byteorder::NativeEndian;
 
@@ -483,12 +608,85 @@ mod tests {
         crate::{AsBytes, FromBytes, Unaligned},
     };
 
+    #[cfg(not(kani))]
+    mod compatibility {
+        pub(super) use rand::{
+            distributions::{Distribution, Standard},
+            rngs::SmallRng,
+            Rng, SeedableRng,
+        };
+
+        pub(crate) trait Arbitrary {}
+
+        impl<T> Arbitrary for T {}
+    }
+
+    #[cfg(kani)]
+    mod compatibility {
+        pub(crate) use kani::Arbitrary;
+
+        pub(crate) struct SmallRng;
+
+        impl SmallRng {
+            pub(crate) fn seed_from_u64(_state: u64) -> Self {
+                Self
+            }
+        }
+
+        pub(crate) trait Rng {
+            fn sample<T, D: Distribution<T>>(&mut self, _distr: D) -> T
+            where
+                T: Arbitrary,
+            {
+                kani::any()
+            }
+        }
+
+        impl Rng for SmallRng {}
+
+        pub(crate) trait Distribution<T> {}
+        impl<T, U> Distribution<T> for U {}
+
+        pub(crate) struct Standard;
+    }
+
+    use compatibility::*;
+
     // A native integer type (u16, i32, etc).
-    trait Native: FromBytes + AsBytes + Copy + PartialEq + Debug {
+    trait Native: Arbitrary + FromBytes + AsBytes + Copy + PartialEq + Debug {
         const ZERO: Self;
         const MAX_VALUE: Self;
 
-        fn rand() -> Self;
+        type Distribution: Distribution<Self>;
+        const DIST: Self::Distribution;
+
+        fn rand<R: Rng>(rng: &mut R) -> Self {
+            rng.sample(Self::DIST)
+        }
+
+        #[cfg(kani)]
+        fn any() -> Self {
+            kani::any()
+        }
+
+        fn checked_add(self, rhs: Self) -> Option<Self>;
+        fn checked_div(self, rhs: Self) -> Option<Self>;
+        fn checked_mul(self, rhs: Self) -> Option<Self>;
+        fn checked_rem(self, rhs: Self) -> Option<Self>;
+        fn checked_sub(self, rhs: Self) -> Option<Self>;
+        fn checked_shl(self, rhs: Self) -> Option<Self>;
+        fn checked_shr(self, rhs: Self) -> Option<Self>;
+
+        fn is_nan(self) -> bool;
+
+        /// For `f32` and `f64`, NaN values are not considered equal to
+        /// themselves. This method is like `assert_eq!`, but it treats NaN
+        /// values as equal.
+        fn assert_eq_or_nan(self, other: Self) {
+            let slf = (!self.is_nan()).then(|| self);
+            let other = (!other.is_nan()).then(|| other);
+            assert_eq!(slf, other);
+        }
     }
 
     trait ByteArray:
@@ -509,6 +707,15 @@ mod tests {
         fn set(&mut self, native: Self::Native);
         fn from_bytes(bytes: Self::ByteArray) -> Self;
         fn into_bytes(self) -> Self::ByteArray;
+
+        /// For `f32` and `f64`, NaN values are not considered equal to
+        /// themselves. This method is like `assert_eq!`, but it treats NaN
+        /// values as equal.
+        fn assert_eq_or_nan(self, other: Self) {
+            let slf = (!self.get().is_nan()).then(|| self);
+            let other = (!other.get().is_nan()).then(|| other);
+            assert_eq!(slf, other);
+        }
     }
 
     trait ByteOrderTypeUnsigned: ByteOrderType {
@@ -541,7 +748,7 @@ mod tests {
     }
 
     macro_rules! impl_traits {
-        ($name:ident, $native:ident, $bytes:expr, $sign:ident) => {
+        ($name:ident, $native:ident, $bytes:expr, $sign:ident $(, @$float:ident)?) => {
             impl Native for $native {
                 // For some types, `0 as $native` is required (for example, when
                 // `$native` is a floating-point type; `0` is an integer), but
@@ -551,9 +758,10 @@ mod tests {
                 const ZERO: $native = 0 as $native;
                 const MAX_VALUE: $native = $native::MAX;
 
-                fn rand() -> $native {
-                    rand::random()
-                }
+                type Distribution = Standard;
+                const DIST: Standard = Standard;
+
+                impl_traits!(@float_dependent_methods $(@$float)?);
             }
 
             impl<O: ByteOrder> ByteOrderType for $name<O> {
@@ -585,6 +793,26 @@ mod tests {
 
             impl_byte_order_type_unsigned!($name, $sign);
         };
+        (@float_dependent_methods) => {
+            fn checked_add(self, rhs: Self) -> Option<Self> { self.checked_add(rhs) }
+            fn checked_div(self, rhs: Self) -> Option<Self> { self.checked_div(rhs) }
+            fn checked_mul(self, rhs: Self) -> Option<Self> { self.checked_mul(rhs) }
+            fn checked_rem(self, rhs: Self) -> Option<Self> { self.checked_rem(rhs) }
+            fn checked_sub(self, rhs: Self) -> Option<Self> { self.checked_sub(rhs) }
+            fn checked_shl(self, rhs: Self) -> Option<Self> { self.checked_shl(rhs.try_into().unwrap_or(u32::MAX)) }
+            fn checked_shr(self, rhs: Self) -> Option<Self> { self.checked_shr(rhs.try_into().unwrap_or(u32::MAX)) }
+            fn is_nan(self) -> bool { false }
+        };
+        (@float_dependent_methods @float) => {
+            fn checked_add(self, rhs: Self) -> Option<Self> { Some(self + rhs) }
+            fn checked_div(self, rhs: Self) -> Option<Self> { Some(self / rhs) }
+            fn checked_mul(self, rhs: Self) -> Option<Self> { Some(self * rhs) }
+            fn checked_rem(self, rhs: Self) -> Option<Self> { Some(self % rhs) }
+            fn checked_sub(self, rhs: Self) -> Option<Self> { Some(self - rhs) }
+            fn checked_shl(self, _rhs: Self) -> Option<Self> { unimplemented!() }
+            fn checked_shr(self, _rhs: Self) -> Option<Self> { unimplemented!() }
+            fn is_nan(self) -> bool { self.is_nan() }
+        };
     }
 
     impl_traits!(U16, u16, 2, unsigned);
@@ -595,23 +823,8 @@ mod tests {
     impl_traits!(I32, i32, 4, signed);
     impl_traits!(I64, i64, 8, signed);
     impl_traits!(I128, i128, 16, signed);
-    impl_traits!(F32, f32, 4, signed);
-    impl_traits!(F64, f64, 8, signed);
-
-    macro_rules! call_for_all_types {
-        ($fn:ident, $byteorder:ident) => {
-            $fn::<U16<$byteorder>>();
-            $fn::<U32<$byteorder>>();
-            $fn::<U64<$byteorder>>();
-            $fn::<U128<$byteorder>>();
-            $fn::<I16<$byteorder>>();
-            $fn::<I32<$byteorder>>();
-            $fn::<I64<$byteorder>>();
-            $fn::<I128<$byteorder>>();
-            $fn::<F32<$byteorder>>();
-            $fn::<F64<$byteorder>>();
-        };
-    }
+    impl_traits!(F32, f32, 4, signed, @float);
+    impl_traits!(F64, f64, 8, signed, @float);
 
     macro_rules! call_for_unsigned_types {
         ($fn:ident, $byteorder:ident) => {
@@ -622,12 +835,67 @@ mod tests {
         };
     }
 
+    macro_rules! call_for_signed_types {
+        ($fn:ident, $byteorder:ident) => {
+            $fn::<I16<$byteorder>>();
+            $fn::<I32<$byteorder>>();
+            $fn::<I64<$byteorder>>();
+            $fn::<I128<$byteorder>>();
+        };
+    }
+
+    macro_rules! call_for_float_types {
+        ($fn:ident, $byteorder:ident) => {
+            $fn::<F32<$byteorder>>();
+            $fn::<F64<$byteorder>>();
+        };
+    }
+
+    macro_rules! call_for_all_types {
+        ($fn:ident, $byteorder:ident) => {
+            call_for_unsigned_types!($fn, $byteorder);
+            call_for_signed_types!($fn, $byteorder);
+            call_for_float_types!($fn, $byteorder);
+        };
+    }
+
     #[cfg(target_endian = "big")]
     type NonNativeEndian = LittleEndian;
     #[cfg(target_endian = "little")]
     type NonNativeEndian = BigEndian;
 
-    #[test]
+    // We use a `u64` seed so that we can use `SeedableRng::seed_from_u64`.
+    // `SmallRng`'s `SeedableRng::Seed` differs by platform, so if we wanted to
+    // call `SeedableRng::from_seed`, which takes a `Seed`, we would need
+    // conditional compilation by `target_pointer_width`.
+    const RNG_SEED: u64 = 0x7A03CAE2F32B5B8F;
+
+    const RAND_ITERS: usize = if cfg!(any(miri, kani)) {
+        // The tests below which use this constant used to take a very long time
+        // on Miri, which slows down local development and CI jobs. We're not
+        // using Miri to check for the correctness of our code, but rather its
+        // soundness, and at least in the context of these particular tests, a
+        // single loop iteration is just as good for surfacing UB as multiple
+        // iterations are.
+        //
+        // As of the writing of this comment, here's one set of measurements:
+        //
+        //   $ # RAND_ITERS == 1
+        //   $ cargo miri test -- -Z unstable-options --report-time endian
+        //   test byteorder::tests::test_native_endian ... ok <0.049s>
+        //   test byteorder::tests::test_non_native_endian ... ok <0.061s>
+        //
+        //   $ # RAND_ITERS == 1024
+        //   $ cargo miri test -- -Z unstable-options --report-time endian
+        //   test byteorder::tests::test_native_endian ... ok <25.716s>
+        //   test byteorder::tests::test_non_native_endian ... ok <38.127s>
+        1
+    } else {
+        1024
+    };
+
+    #[cfg_attr(test, test)]
+    #[cfg_attr(kani, kani::proof)]
     fn test_zero() {
         fn test_zero<T: ByteOrderType>() {
             assert_eq!(T::ZERO.get(), T::Native::ZERO);
@@ -637,7 +905,8 @@ mod tests {
         call_for_all_types!(test_zero, NonNativeEndian);
     }
 
-    #[test]
+    #[cfg_attr(test, test)]
+    #[cfg_attr(kani, kani::proof)]
     fn test_max_value() {
         fn test_max_value<T: ByteOrderTypeUnsigned>() {
             assert_eq!(T::MAX_VALUE.get(), T::Native::MAX_VALUE);
@@ -647,53 +916,152 @@ mod tests {
         call_for_unsigned_types!(test_max_value, NonNativeEndian);
     }
 
-    #[test]
-    fn test_native_endian() {
-        fn test_native_endian<T: ByteOrderType>() {
-            for _ in 0..1024 {
-                let native = T::Native::rand();
+    #[cfg_attr(test, test)]
+    #[cfg_attr(kani, kani::proof)]
+    fn test_endian() {
+        fn test<T: ByteOrderType>(invert: bool) {
+            let mut r = SmallRng::seed_from_u64(RNG_SEED);
+            for _ in 0..RAND_ITERS {
+                let native = T::Native::rand(&mut r);
                 let mut bytes = T::ByteArray::default();
                 bytes.as_bytes_mut().copy_from_slice(native.as_bytes());
+                if invert {
+                    bytes = bytes.invert();
+                }
                 let mut from_native = T::new(native);
                 let from_bytes = T::from_bytes(bytes);
-                assert_eq!(from_native, from_bytes);
-                assert_eq!(from_native.get(), native);
-                assert_eq!(from_bytes.get(), native);
+
+                from_native.assert_eq_or_nan(from_bytes);
+                from_native.get().assert_eq_or_nan(native);
+                from_bytes.get().assert_eq_or_nan(native);
+
                 assert_eq!(from_native.into_bytes(), bytes);
                 assert_eq!(from_bytes.into_bytes(), bytes);
 
-                let updated = T::Native::rand();
+                let updated = T::Native::rand(&mut r);
                 from_native.set(updated);
-                assert_eq!(from_native.get(), updated);
+                from_native.get().assert_eq_or_nan(updated);
             }
         }
 
-        call_for_all_types!(test_native_endian, NativeEndian);
+        fn test_native<T: ByteOrderType>() {
+            test::<T>(false);
+        }
+
+        fn test_non_native<T: ByteOrderType>() {
+            test::<T>(true);
+        }
+
+        call_for_all_types!(test_native, NativeEndian);
+        call_for_all_types!(test_non_native, NonNativeEndian);
     }
 
     #[test]
-    fn test_non_native_endian() {
-        fn test_non_native_endian<T: ByteOrderType>() {
-            for _ in 0..1024 {
-                let native = T::Native::rand();
-                let mut bytes = T::ByteArray::default();
-                bytes.as_bytes_mut().copy_from_slice(native.as_bytes());
-                bytes = bytes.invert();
-                let mut from_native = T::new(native);
-                let from_bytes = T::from_bytes(bytes);
-                assert_eq!(from_native, from_bytes);
-                assert_eq!(from_native.get(), native);
-                assert_eq!(from_bytes.get(), native);
-                assert_eq!(from_native.into_bytes(), bytes);
-                assert_eq!(from_bytes.into_bytes(), bytes);
+    fn test_ops_impls() {
+        // Test implementations of traits in `core::ops`. Some of these are
+        // fairly banal, but some are optimized to perform the operation without
+        // swapping byte order (namely, bit-wise operations which are identical
+        // regardless of byte order). These are important to test, and while
+        // we're testing those anyway, it's trivial to test all of the impls.
 
-                let updated = T::Native::rand();
-                from_native.set(updated);
-                assert_eq!(from_native.get(), updated);
+        fn test<T, F, G, H>(op: F, op_native: G, op_native_checked: Option<H>)
+        where
+            T: ByteOrderType,
+            F: Fn(T, T) -> T,
+            G: Fn(T::Native, T::Native) -> T::Native,
+            H: Fn(T::Native, T::Native) -> Option<T::Native>,
+        {
+            let mut r = SmallRng::seed_from_u64(RNG_SEED);
+            for _ in 0..RAND_ITERS {
+                let n0 = T::Native::rand(&mut r);
+                let n1 = T::Native::rand(&mut r);
+                let t0 = T::new(n0);
+                let t1 = T::new(n1);
+
+                // If this operation would overflow/underflow, skip it rather
+                // than attempt to catch and recover from panics.
+                if matches!(&op_native_checked, Some(checked) if checked(n0, n1).is_none()) {
+                    continue;
+                }
+
+                let n_res = op_native(n0, n1);
+                let t_res = op(t0, t1);
+
+                // For `f32` and `f64`, NaN values are not considered equal to
+                // themselves. We store `Option<f32>`/`Option<f64>` and store
+                // NaN as `None` so they can still be compared.
+                let n_res = (!T::Native::is_nan(n_res)).then(|| n_res);
+                let t_res = (!T::Native::is_nan(t_res.get())).then(|| t_res.get());
+                assert_eq!(n_res, t_res);
             }
         }
 
-        call_for_all_types!(test_non_native_endian, NonNativeEndian);
+        macro_rules! test {
+            (@binary $trait:ident, $method:ident $([$checked_method:ident])?, $($call_for_macros:ident),*) => {{
+                test!(
+                    @inner $trait,
+                    core::ops::$trait::$method,
+                    core::ops::$trait::$method,
+                    {
+                        #[allow(unused_mut, unused_assignments)]
+                        let mut op_native_checked = None::<fn(T::Native, T::Native) -> Option<T::Native>>;
+                        $(
+                            op_native_checked = Some(T::Native::$checked_method);
+                        )?
+                        op_native_checked
+                    },
+                    $($call_for_macros),*
+                );
+            }};
+            (@unary $trait:ident, $method:ident $([$checked_method:ident])?, $($call_for_macros:ident),*) => {{
+                test!(
+                    @inner $trait,
+                    |slf, _rhs| core::ops::$trait::$method(slf),
+                    |slf, _rhs| core::ops::$trait::$method(slf),
+                    {
+                        #[allow(unused_mut, unused_assignments)]
+                        let mut op_native_checked = None::<fn(T::Native, T::Native) -> Option<T::Native>>;
+                        $(
+                            op_native_checked = Some(|slf, _rhs| T::Native::$checked_method(slf));
+                        )?
+                        op_native_checked
+                    },
+                    $($call_for_macros),*
+                );
+            }};
+            (@inner $trait:ident, $op:expr, $op_native:expr, $op_native_checked:expr, $($call_for_macros:ident),*) => {{
+                fn t<T: ByteOrderType + core::ops::$trait<Output = T>>()
+                where
+                    T::Native: core::ops::$trait<Output = T::Native>,
+                {
+                    test::<T, _, _, _>(
+                        $op,
+                        $op_native,
+                        $op_native_checked,
+                    );
+                }
+
+                $(
+                    $call_for_macros!(t, NativeEndian);
+                    $call_for_macros!(t, NonNativeEndian);
+                )*
+            }};
+        }
+
+        test!(@binary Add, add[checked_add], call_for_all_types);
+        test!(@binary Div, div[checked_div], call_for_all_types);
+        test!(@binary Mul, mul[checked_mul], call_for_all_types);
+        test!(@binary Rem, rem[checked_rem], call_for_all_types);
+        test!(@binary Sub, sub[checked_sub], call_for_all_types);
+
+        test!(@binary BitAnd, bitand, call_for_unsigned_types, call_for_signed_types);
+        test!(@binary BitOr, bitor, call_for_unsigned_types, call_for_signed_types);
+        test!(@binary BitXor, bitxor, call_for_unsigned_types, call_for_signed_types);
+        test!(@binary Shl, shl[checked_shl], call_for_unsigned_types, call_for_signed_types);
+        test!(@binary Shr, shr[checked_shr], call_for_unsigned_types, call_for_signed_types);
+
+        test!(@unary Not, not, call_for_signed_types, call_for_unsigned_types);
+        test!(@unary Neg, neg, call_for_signed_types, call_for_float_types);
     }
 
     #[test]

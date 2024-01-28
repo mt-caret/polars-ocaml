@@ -11,9 +11,9 @@
 
 [package]
 edition = "2018"
-rust-version = "1.45"
+rust-version = "1.56"
 name = "futures-macro"
-version = "0.3.27"
+version = "0.3.30"
 description = """
 The futures-rs procedural macro implementations.
 """
@@ -25,13 +25,13 @@ repository = "https://github.com/rust-lang/futures-rs"
 proc-macro = true
 
 [dependencies.proc-macro2]
-version = "1.0"
+version = "1.0.60"
 
 [dependencies.quote]
 version = "1.0"
 
 [dependencies.syn]
-version = "1.0.56"
+version = "2.0.8"
 features = ["full"]
 
 [features]

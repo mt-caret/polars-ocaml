@@ -45,7 +45,7 @@ dependencies = [
 
 [[package]]
 name = "mio"
-version = "0.8.9"
+version = "0.8.10"
 dependencies = [
  "env_logger",
  "libc",

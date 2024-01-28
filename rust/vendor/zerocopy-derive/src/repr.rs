@@ -1,6 +1,10 @@
-// Copyright 2019 The Fuchsia Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style license that can be
-// found in the LICENSE file.
+// Copyright 2019 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
 
 use core::fmt::{self, Display, Formatter};
 
@@ -102,23 +106,24 @@ pub trait KindRepr: 'static + Sized + Ord {
 // etc), and provide implementations of `KindRepr`, `Ord`, and `Display`, and
 // those traits' super-traits.
 macro_rules! define_kind_specific_repr {
-    ($type_name:expr, $repr_name:ident, $($repr_variant:ident),*) => {
+    ($type_name:expr, $repr_name:ident, [ $($repr_variant:ident),* ] , [ $($repr_variant_aligned:ident),* ]) => {
         #[derive(Copy, Clone, Debug, Eq, PartialEq)]
         pub enum $repr_name {
             $($repr_variant,)*
-            Align(u64),
+            $($repr_variant_aligned(u64),)*
         }
 
         impl KindRepr for $repr_name {
             fn is_align(&self) -> bool {
                 match self {
-                    $repr_name::Align(_) => true,
+                    $($repr_name::$repr_variant_aligned(_) => true,)*
                     _ => false,
                 }
             }
 
             fn is_align_gt_one(&self) -> bool {
                 match self {
+                    // `packed(n)` only lowers alignment
                     $repr_name::Align(n) => n > &1,
                     _ => false,
                 }
@@ -127,7 +132,7 @@ macro_rules! define_kind_specific_repr {
             fn parse(meta: &Meta) -> syn::Result<$repr_name> {
                 match Repr::from_meta(meta)? {
                     $(Repr::$repr_variant => Ok($repr_name::$repr_variant),)*
-                    Repr::Align(u) => Ok($repr_name::Align(u)),
+                    $(Repr::$repr_variant_aligned(u) => Ok($repr_name::$repr_variant_aligned(u)),)*
                     _ => Err(Error::new_spanned(meta, concat!("unsupported representation for deriving FromBytes, AsBytes, or Unaligned on ", $type_name)))
                 }
             }
@@ -151,20 +156,23 @@ macro_rules! define_kind_specific_repr {
             fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
                 match self {
                     $($repr_name::$repr_variant => Repr::$repr_variant,)*
-                    $repr_name::Align(u) => Repr::Align(*u),
+                    $($repr_name::$repr_variant_aligned(u) => Repr::$repr_variant_aligned(*u),)*
                 }.fmt(f)
             }
         }
     }
 }
 
-define_kind_specific_repr!("a struct", StructRepr, C, Transparent, Packed);
+define_kind_specific_repr!("a struct", StructRepr, [C, Transparent, Packed], [Align, PackedN]);
 define_kind_specific_repr!(
-    "an enum", EnumRepr, C, U8, U16, U32, U64, Usize, I8, I16, I32, I64, Isize
+    "an enum",
+    EnumRepr,
+    [C, U8, U16, U32, U64, Usize, I8, I16, I32, I64, Isize],
+    [Align]
 );
 
 // All representations known to Rust.
-#[derive(Copy, Clone, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub enum Repr {
     U8,
     U16,
@@ -179,40 +187,58 @@ pub enum Repr {
     C,
     Transparent,
     Packed,
+    PackedN(u64),
     Align(u64),
 }
 
 impl Repr {
     fn from_meta(meta: &Meta) -> Result<Repr, Error> {
-        match meta {
-            Meta::Path(path) => {
-                let ident = path
-                    .get_ident()
-                    .ok_or_else(|| Error::new_spanned(meta, "unrecognized representation hint"))?;
-                match format!("{}", ident).as_str() {
-                    "u8" => return Ok(Repr::U8),
-                    "u16" => return Ok(Repr::U16),
-                    "u32" => return Ok(Repr::U32),
-                    "u64" => return Ok(Repr::U64),
-                    "usize" => return Ok(Repr::Usize),
-                    "i8" => return Ok(Repr::I8),
-                    "i16" => return Ok(Repr::I16),
-                    "i32" => return Ok(Repr::I32),
-                    "i64" => return Ok(Repr::I64),
-                    "isize" => return Ok(Repr::Isize),
-                    "C" => return Ok(Repr::C),
-                    "transparent" => return Ok(Repr::Transparent),
-                    "packed" => return Ok(Repr::Packed),
-                    _ => {}
-                }
-            }
-            Meta::List(list) => {
-                return Ok(Repr::Align(list.parse_args::<LitInt>()?.base10_parse::<u64>()?))
-            }
-            _ => {}
-        }
+        let (path, list) = match meta {
+            Meta::Path(path) => (path, None),
+            Meta::List(list) => (&list.path, Some(list)),
+            _ => return Err(Error::new_spanned(meta, "unrecognized representation hint")),
+        };
 
-        Err(Error::new_spanned(meta, "unrecognized representation hint"))
+        let ident = path
+            .get_ident()
+            .ok_or_else(|| Error::new_spanned(meta, "unrecognized representation hint"))?;
+
+        Ok(match (ident.to_string().as_str(), list) {
+            ("u8", None) => Repr::U8,
+            ("u16", None) => Repr::U16,
+            ("u32", None) => Repr::U32,
+            ("u64", None) => Repr::U64,
+            ("usize", None) => Repr::Usize,
+            ("i8", None) => Repr::I8,
+            ("i16", None) => Repr::I16,
+            ("i32", None) => Repr::I32,
+            ("i64", None) => Repr::I64,
+            ("isize", None) => Repr::Isize,
+            ("C", None) => Repr::C,
+            ("transparent", None) => Repr::Transparent,
+            ("packed", None) => Repr::Packed,
+            ("packed", Some(list)) => {
+                Repr::PackedN(list.parse_args::<LitInt>()?.base10_parse::<u64>()?)
+            }
+            ("align", Some(list)) => {
+                Repr::Align(list.parse_args::<LitInt>()?.base10_parse::<u64>()?)
+            }
+            _ => return Err(Error::new_spanned(meta, "unrecognized representation hint")),
+        })
+    }
+}
+
+impl KindRepr for Repr {
+    fn is_align(&self) -> bool {
+        false
+    }
+
+    fn is_align_gt_one(&self) -> bool {
+        false
+    }
+
+    fn parse(meta: &Meta) -> syn::Result<Self> {
+        Self::from_meta(meta)
     }
 }
 
@@ -220,6 +246,9 @@ impl Display for Repr {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), fmt::Error> {
         if let Repr::Align(n) = self {
             return write!(f, "repr(align({}))", n);
+        }
+        if let Repr::PackedN(n) = self {
+            return write!(f, "repr(packed({}))", n);
         }
         write!(
             f,
@@ -244,7 +273,7 @@ impl Display for Repr {
     }
 }
 
-fn reprs<R: KindRepr>(attrs: &[Attribute]) -> Result<Vec<(Meta, R)>, Vec<Error>> {
+pub(crate) fn reprs<R: KindRepr>(attrs: &[Attribute]) -> Result<Vec<(Meta, R)>, Vec<Error>> {
     let mut reprs = Vec::new();
     let mut errors = Vec::new();
     for attr in attrs {

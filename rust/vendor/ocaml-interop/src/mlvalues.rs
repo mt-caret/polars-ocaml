@@ -20,6 +20,20 @@ pub struct OCamlList<A> {
     _marker: PhantomData<A>,
 }
 
+/// [`OCaml`]`<OCamlUniformArray<T>>` is a reference to an OCaml array which is
+/// guaranteed to not contain unboxed floats. If OCaml was configured with
+/// `--disable-flat-float-array` this corresponds to regular `array`s, but if
+/// not, `Uniform_array.t` in the `base` library can be used instead.
+/// See [Lexifi's blog post on the topic](https://www.lexifi.com/blog/ocaml/about-unboxed-float-arrays/)
+/// for more details.
+pub struct OCamlUniformArray<A> {
+    _marker: PhantomData<A>,
+}
+
+/// [`OCaml`]`<OCamlFloatArray<T>>` is a reference to an OCaml `floatarray`
+/// which is an array containing `float`s in an unboxed form.
+pub struct OCamlFloatArray {}
+
 /// `OCaml<DynBox<T>>` is for passing a value of type `T` to OCaml
 ///
 /// To box a Rust value, use [`OCaml::box_value`][crate::OCaml::box_value].
@@ -48,3 +62,6 @@ pub struct OCamlInt64 {}
 
 /// [`OCaml`]`<OCamlFloat>` is a reference to an OCaml `float` (boxed `float`) value.
 pub struct OCamlFloat {}
+
+/// [`OCaml`]`<OCamlException>` is a reference to an OCaml `exn` value.
+pub struct OCamlException {}

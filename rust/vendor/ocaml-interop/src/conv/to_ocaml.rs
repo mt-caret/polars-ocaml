@@ -3,7 +3,10 @@
 
 use core::{borrow::Borrow, str};
 
+use ocaml_sys::{caml_alloc_float_array, caml_sys_store_double_field};
+
 use crate::{
+    internal::{caml_alloc, store_field},
     memory::{
         alloc_bigarray1, alloc_bytes, alloc_cons, alloc_double, alloc_error, alloc_int32,
         alloc_int64, alloc_ok, alloc_some, alloc_string, alloc_tuple, store_raw_field_at, OCamlRef,
@@ -15,10 +18,26 @@ use crate::{
     },
     runtime::OCamlRuntime,
     value::OCaml,
-    BoxRoot,
+    BoxRoot, OCamlFloatArray, OCamlUniformArray,
 };
 
 /// Implements conversion from Rust values into OCaml values.
+///
+/// # Safety
+///
+/// Implementing this trait involves unsafe code that interacts with the OCaml runtime.
+/// Implementors must ensure the following to uphold Rust's safety guarantees:
+///
+/// - **Memory Safety**: Returned OCaml values must be valid and correctly represent
+///   the memory layout expected by the OCaml runtime. Any misrepresentation can lead
+///   to undefined behavior, potentially causing segmentation faults or data corruption.
+///
+/// - **Handling of OCaml Exceptions**: If the OCaml code can raise exceptions, the implementor
+///   must ensure these are appropriately handled. Uncaught OCaml exceptions should not be allowed
+///   to propagate into the Rust code, as they are not compatible with Rust's error handling mechanisms.
+///
+/// Implementors of this trait must have a deep understanding of both Rust's and OCaml's
+/// memory models, garbage collection, and runtime behaviors to ensure safe interoperability.
 pub unsafe trait ToOCaml<T> {
     /// Convert to OCaml value. Return an already rooted value as [`BoxRoot`]`<T>`.
     fn to_boxroot(&self, cr: &mut OCamlRuntime) -> BoxRoot<T> {
@@ -205,6 +224,34 @@ where
             result.keep(cons);
         }
         cr.get(&result)
+    }
+}
+
+unsafe impl<A, OCamlA: 'static> ToOCaml<OCamlUniformArray<OCamlA>> for Vec<A>
+where
+    A: ToOCaml<OCamlA>,
+{
+    fn to_ocaml<'a>(&self, cr: &'a mut OCamlRuntime) -> OCaml<'a, OCamlUniformArray<OCamlA>> {
+        let result = BoxRoot::new(unsafe { OCaml::new(cr, caml_alloc(self.len(), 0)) });
+
+        for (i, elt) in self.iter().enumerate() {
+            let ov = elt.to_ocaml(cr);
+            unsafe { store_field(result.get_raw(), i, ov.raw()) };
+        }
+
+        result.get(cr)
+    }
+}
+
+unsafe impl ToOCaml<OCamlFloatArray> for Vec<f64> {
+    fn to_ocaml<'a>(&self, cr: &'a mut OCamlRuntime) -> OCaml<'a, OCamlFloatArray> {
+        let result = unsafe { OCaml::new(cr, caml_alloc_float_array(self.len())) };
+
+        for (i, elt) in self.iter().enumerate() {
+            unsafe { caml_sys_store_double_field(result.raw(), i, *elt) };
+        }
+
+        result
     }
 }
 

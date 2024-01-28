@@ -6,7 +6,8 @@
 use alloc::boxed::Box;
 use core::cell::UnsafeCell;
 use core::fmt;
-use core::mem::MaybeUninit;
+use core::mem::{self, MaybeUninit};
+use core::panic::{RefUnwindSafe, UnwindSafe};
 use core::sync::atomic::{self, AtomicUsize, Ordering};
 
 use crossbeam_utils::{Backoff, CachePadded};
@@ -75,6 +76,9 @@ pub struct ArrayQueue<T> {
 
 unsafe impl<T: Send> Sync for ArrayQueue<T> {}
 unsafe impl<T: Send> Send for ArrayQueue<T> {}
+
+impl<T> UnwindSafe for ArrayQueue<T> {}
+impl<T> RefUnwindSafe for ArrayQueue<T> {}
 
 impl<T> ArrayQueue<T> {
     /// Creates a new bounded queue with the given capacity.
@@ -443,37 +447,38 @@ impl<T> ArrayQueue<T> {
 
 impl<T> Drop for ArrayQueue<T> {
     fn drop(&mut self) {
-        // Get the index of the head.
-        let head = *self.head.get_mut();
-        let tail = *self.tail.get_mut();
+        if mem::needs_drop::<T>() {
+            // Get the index of the head.
+            let head = *self.head.get_mut();
+            let tail = *self.tail.get_mut();
 
-        let hix = head & (self.one_lap - 1);
-        let tix = tail & (self.one_lap - 1);
+            let hix = head & (self.one_lap - 1);
+            let tix = tail & (self.one_lap - 1);
 
-        let len = if hix < tix {
-            tix - hix
-        } else if hix > tix {
-            self.cap - hix + tix
-        } else if tail == head {
-            0
-        } else {
-            self.cap
-        };
-
-        // Loop over all slots that hold a message and drop them.
-        for i in 0..len {
-            // Compute the index of the next slot holding a message.
-            let index = if hix + i < self.cap {
-                hix + i
+            let len = if hix < tix {
+                tix - hix
+            } else if hix > tix {
+                self.cap - hix + tix
+            } else if tail == head {
+                0
             } else {
-                hix + i - self.cap
+                self.cap
             };
 
-            unsafe {
-                debug_assert!(index < self.buffer.len());
-                let slot = self.buffer.get_unchecked_mut(index);
-                let value = &mut *slot.value.get();
-                value.as_mut_ptr().drop_in_place();
+            // Loop over all slots that hold a message and drop them.
+            for i in 0..len {
+                // Compute the index of the next slot holding a message.
+                let index = if hix + i < self.cap {
+                    hix + i
+                } else {
+                    hix + i - self.cap
+                };
+
+                unsafe {
+                    debug_assert!(index < self.buffer.len());
+                    let slot = self.buffer.get_unchecked_mut(index);
+                    (*slot.value.get()).assume_init_drop();
+                }
             }
         }
     }

@@ -297,10 +297,10 @@ impl ToTokens for ast::Struct {
             }
 
             #[allow(clippy::all)]
-            impl #wasm_bindgen::__rt::core::convert::TryFrom<#wasm_bindgen::JsValue> for #name {
+            impl #wasm_bindgen::convert::TryFromJsValue for #name {
                 type Error = #wasm_bindgen::JsValue;
 
-                fn try_from(value: #wasm_bindgen::JsValue)
+                fn try_from_js_value(value: #wasm_bindgen::JsValue)
                     -> #wasm_bindgen::__rt::std::result::Result<Self, Self::Error> {
                     let idx = #wasm_bindgen::convert::IntoWasmAbi::into_abi(&value);
 
@@ -389,7 +389,14 @@ impl ToTokens for ast::StructField {
         };
         let maybe_assert_copy = respan(maybe_assert_copy, ty);
 
-        let mut val = quote_spanned!(self.rust_name.span()=> (*js).borrow().#rust_name);
+        // Split this out so that it isn't affected by `quote_spanned!`.
+        //
+        // If we don't do this, it might end up being unable to reference `js`
+        // properly because it doesn't have the same span.
+        //
+        // See https://github.com/rustwasm/wasm-bindgen/pull/3725.
+        let js_token = quote! { js };
+        let mut val = quote_spanned!(self.rust_name.span()=> (*#js_token).borrow().#rust_name);
         if let Some(span) = self.getter_with_clone {
             val = quote_spanned!(span=> <#ty as Clone>::clone(&#val) );
         }
@@ -819,6 +826,7 @@ impl ToTokens for ast::ImportType {
 
             #[automatically_derived]
             const _: () = {
+                use #wasm_bindgen::convert::TryFromJsValue;
                 use #wasm_bindgen::convert::{IntoWasmAbi, FromWasmAbi};
                 use #wasm_bindgen::convert::{OptionIntoWasmAbi, OptionFromWasmAbi};
                 use #wasm_bindgen::convert::{RefFromWasmAbi, LongRefFromWasmAbi};
@@ -1452,11 +1460,12 @@ impl ToTokens for ast::Enum {
             }
 
             #[allow(clippy::all)]
-            impl #wasm_bindgen::__rt::core::convert::TryFrom<#wasm_bindgen::JsValue> for #enum_name {
+            impl #wasm_bindgen::convert::TryFromJsValue for #enum_name {
                 type Error = #wasm_bindgen::JsValue;
 
-                fn try_from(value: #wasm_bindgen::JsValue)
-                    -> #wasm_bindgen::__rt::std::result::Result<Self, Self::Error> {
+                fn try_from_js_value(value: #wasm_bindgen::JsValue)
+                    -> #wasm_bindgen::__rt::std::result::Result<Self, <#enum_name as #wasm_bindgen::convert::TryFromJsValue>::Error> {
+                    use #wasm_bindgen::__rt::core::convert::TryFrom;
                     let js = f64::try_from(&value)? as u32;
 
                     #wasm_bindgen::__rt::std::result::Result::Ok(

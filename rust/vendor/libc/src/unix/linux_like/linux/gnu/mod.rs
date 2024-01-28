@@ -3,6 +3,7 @@ pub type __priority_which_t = ::c_uint;
 pub type __rlimit_resource_t = ::c_uint;
 pub type Lmid_t = ::c_long;
 pub type regoff_t = ::c_int;
+pub type __kernel_rwf_t = ::c_int;
 
 cfg_if! {
     if #[cfg(doc)] {
@@ -354,6 +355,104 @@ s! {
         pub stack_pointer: ::__u64,
         #[cfg(libc_union)]
         pub u: __c_anonymous_ptrace_syscall_info_data,
+    }
+
+    // linux/if_xdp.h
+
+    pub struct sockaddr_xdp {
+        pub sxdp_family: ::__u16,
+        pub sxdp_flags: ::__u16,
+        pub sxdp_ifindex: ::__u32,
+        pub sxdp_queue_id: ::__u32,
+        pub sxdp_shared_umem_fd: ::__u32,
+    }
+
+    pub struct xdp_ring_offset {
+        pub producer: ::__u64,
+        pub consumer: ::__u64,
+        pub desc: ::__u64,
+        pub flags: ::__u64,
+    }
+
+    pub struct xdp_mmap_offsets {
+        pub rx: xdp_ring_offset,
+        pub tx: xdp_ring_offset,
+        pub fr: xdp_ring_offset,
+        pub cr: xdp_ring_offset,
+    }
+
+    pub struct xdp_ring_offset_v1 {
+        pub producer: ::__u64,
+        pub consumer: ::__u64,
+        pub desc: ::__u64,
+    }
+
+    pub struct xdp_mmap_offsets_v1 {
+        pub rx: xdp_ring_offset_v1,
+        pub tx: xdp_ring_offset_v1,
+        pub fr: xdp_ring_offset_v1,
+        pub cr: xdp_ring_offset_v1,
+    }
+
+    pub struct xdp_umem_reg {
+        pub addr: ::__u64,
+        pub len: ::__u64,
+        pub chunk_size: ::__u32,
+        pub headroom: ::__u32,
+        pub flags: ::__u32,
+    }
+
+    pub struct xdp_umem_reg_v1 {
+        pub addr: ::__u64,
+        pub len: ::__u64,
+        pub chunk_size: ::__u32,
+        pub headroom: ::__u32,
+    }
+
+    pub struct xdp_statistics {
+        pub rx_dropped: ::__u64,
+        pub rx_invalid_descs: ::__u64,
+        pub tx_invalid_descs: ::__u64,
+        pub rx_ring_full: ::__u64,
+        pub rx_fill_ring_empty_descs: ::__u64,
+        pub tx_ring_empty_descs: ::__u64,
+    }
+
+    pub struct xdp_statistics_v1 {
+        pub rx_dropped: ::__u64,
+        pub rx_invalid_descs: ::__u64,
+        pub tx_invalid_descs: ::__u64,
+    }
+
+    pub struct xdp_options {
+        pub flags: ::__u32,
+    }
+
+    pub struct xdp_desc {
+        pub addr: ::__u64,
+        pub len: ::__u32,
+        pub options: ::__u32,
+    }
+
+    pub struct iocb {
+        pub aio_data: ::__u64,
+        #[cfg(target_endian = "little")]
+        pub aio_key: ::__u32,
+        #[cfg(target_endian = "little")]
+        pub aio_rw_flags: ::__kernel_rwf_t,
+        #[cfg(target_endian = "big")]
+        pub aio_rw_flags: ::__kernel_rwf_t,
+        #[cfg(target_endian = "big")]
+        pub aio_key: ::__u32,
+        pub aio_lio_opcode: ::__u16,
+        pub aio_reqprio: ::__s16,
+        pub aio_fildes: ::__u32,
+        pub aio_buf: ::__u64,
+        pub aio_nbytes: ::__u64,
+        pub aio_offset: ::__s64,
+        aio_reserved2: ::__u64,
+        pub aio_flags: ::__u32,
+        pub aio_resfd: ::__u32,
     }
 }
 
@@ -718,11 +817,6 @@ pub const SOCK_SEQPACKET: ::c_int = 5;
 pub const SOCK_DCCP: ::c_int = 6;
 pub const SOCK_PACKET: ::c_int = 10;
 
-pub const FAN_MARK_INODE: ::c_uint = 0x0000_0000;
-pub const FAN_MARK_MOUNT: ::c_uint = 0x0000_0010;
-// NOTE: FAN_MARK_FILESYSTEM requires Linux Kernel >= 4.20.0
-pub const FAN_MARK_FILESYSTEM: ::c_uint = 0x0000_0100;
-
 pub const AF_IB: ::c_int = 27;
 pub const AF_MPLS: ::c_int = 28;
 pub const AF_NFC: ::c_int = 39;
@@ -857,6 +951,8 @@ pub const PTRACE_SEIZE: ::c_uint = 0x4206;
 pub const PTRACE_INTERRUPT: ::c_uint = 0x4207;
 pub const PTRACE_LISTEN: ::c_uint = 0x4208;
 pub const PTRACE_PEEKSIGINFO: ::c_uint = 0x4209;
+pub const PTRACE_GETSIGMASK: ::c_uint = 0x420a;
+pub const PTRACE_SETSIGMASK: ::c_uint = 0x420b;
 pub const PTRACE_GET_SYSCALL_INFO: ::c_uint = 0x420e;
 pub const PTRACE_SYSCALL_INFO_NONE: ::__u8 = 0;
 pub const PTRACE_SYSCALL_INFO_ENTRY: ::__u8 = 1;
@@ -923,6 +1019,38 @@ pub const GENL_UNS_ADMIN_PERM: ::c_int = 0x10;
 pub const GENL_ID_VFS_DQUOT: ::c_int = ::NLMSG_MIN_TYPE + 1;
 pub const GENL_ID_PMCRAID: ::c_int = ::NLMSG_MIN_TYPE + 2;
 
+// linux/if_xdp.h
+pub const XDP_SHARED_UMEM: ::__u16 = 1 << 0;
+pub const XDP_COPY: ::__u16 = 1 << 1;
+pub const XDP_ZEROCOPY: ::__u16 = 1 << 2;
+pub const XDP_USE_NEED_WAKEUP: ::__u16 = 1 << 3;
+pub const XDP_USE_SG: ::__u16 = 1 << 4;
+
+pub const XDP_UMEM_UNALIGNED_CHUNK_FLAG: ::__u32 = 1 << 0;
+
+pub const XDP_RING_NEED_WAKEUP: ::__u32 = 1 << 0;
+
+pub const XDP_MMAP_OFFSETS: ::c_int = 1;
+pub const XDP_RX_RING: ::c_int = 2;
+pub const XDP_TX_RING: ::c_int = 3;
+pub const XDP_UMEM_REG: ::c_int = 4;
+pub const XDP_UMEM_FILL_RING: ::c_int = 5;
+pub const XDP_UMEM_COMPLETION_RING: ::c_int = 6;
+pub const XDP_STATISTICS: ::c_int = 7;
+pub const XDP_OPTIONS: ::c_int = 8;
+
+pub const XDP_OPTIONS_ZEROCOPY: ::__u32 = 1 << 0;
+
+pub const XDP_PGOFF_RX_RING: ::off_t = 0;
+pub const XDP_PGOFF_TX_RING: ::off_t = 0x80000000;
+pub const XDP_UMEM_PGOFF_FILL_RING: ::c_ulonglong = 0x100000000;
+pub const XDP_UMEM_PGOFF_COMPLETION_RING: ::c_ulonglong = 0x180000000;
+
+pub const XSK_UNALIGNED_BUF_OFFSET_SHIFT: ::c_int = 48;
+pub const XSK_UNALIGNED_BUF_ADDR_MASK: ::c_ulonglong = (1 << XSK_UNALIGNED_BUF_OFFSET_SHIFT) - 1;
+
+pub const XDP_PKT_CONTD: ::__u32 = 1 << 0;
+
 // elf.h
 pub const NT_PRSTATUS: ::c_int = 1;
 pub const NT_PRFPREG: ::c_int = 2;
@@ -943,6 +1071,11 @@ pub const NT_LWPSINFO: ::c_int = 17;
 pub const NT_PRFPXREG: ::c_int = 20;
 
 pub const ELFOSABI_ARM_AEABI: u8 = 64;
+
+// linux/sched.h
+pub const CLONE_NEWTIME: ::c_int = 0x80;
+pub const CLONE_CLEAR_SIGHAND: ::c_int = 0x100000000;
+pub const CLONE_INTO_CGROUP: ::c_int = 0x200000000;
 
 // linux/keyctl.h
 pub const KEYCTL_DH_COMPUTE: u32 = 23;
@@ -1024,7 +1157,17 @@ pub const STATX_ATTR_DAX: ::c_int = 0x00200000;
 
 pub const SOMAXCONN: ::c_int = 4096;
 
-//sys/timex.h
+// linux/mount.h
+pub const MOVE_MOUNT_F_SYMLINKS: ::c_uint = 0x00000001;
+pub const MOVE_MOUNT_F_AUTOMOUNTS: ::c_uint = 0x00000002;
+pub const MOVE_MOUNT_F_EMPTY_PATH: ::c_uint = 0x00000004;
+pub const MOVE_MOUNT_T_SYMLINKS: ::c_uint = 0x00000010;
+pub const MOVE_MOUNT_T_AUTOMOUNTS: ::c_uint = 0x00000020;
+pub const MOVE_MOUNT_T_EMPTY_PATH: ::c_uint = 0x00000040;
+pub const MOVE_MOUNT_SET_GROUP: ::c_uint = 0x00000100;
+pub const MOVE_MOUNT_BENEATH: ::c_uint = 0x00000200;
+
+// sys/timex.h
 pub const ADJ_OFFSET: ::c_uint = 0x0001;
 pub const ADJ_FREQUENCY: ::c_uint = 0x0002;
 pub const ADJ_MAXERROR: ::c_uint = 0x0004;
@@ -1340,6 +1483,13 @@ extern "C" {
         max: ::size_t,
         format: *const ::c_char,
         tm: *const ::tm,
+    ) -> ::size_t;
+    pub fn strftime_l(
+        s: *mut ::c_char,
+        max: ::size_t,
+        format: *const ::c_char,
+        tm: *const ::tm,
+        locale: ::locale_t,
     ) -> ::size_t;
     pub fn strptime(s: *const ::c_char, format: *const ::c_char, tm: *mut ::tm) -> *mut ::c_char;
 

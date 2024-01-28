@@ -42,7 +42,7 @@ impl BSTR {
             return Ok(Self::new());
         }
 
-        let result = unsafe { Self(crate::imp::SysAllocStringLen(value.as_ptr(), value.len() as u32)) };
+        let result = unsafe { Self(crate::imp::SysAllocStringLen(value.as_ptr(), value.len().try_into()?)) };
 
         if result.is_empty() {
             Err(crate::imp::E_OUTOFMEMORY.into())
@@ -51,11 +51,13 @@ impl BSTR {
         }
     }
 
+    /// # Safety
     #[doc(hidden)]
     pub unsafe fn from_raw(raw: *const u16) -> Self {
         Self(raw)
     }
 
+    /// # Safety
     #[doc(hidden)]
     pub fn into_raw(self) -> *const u16 {
         unsafe { std::mem::transmute(self) }

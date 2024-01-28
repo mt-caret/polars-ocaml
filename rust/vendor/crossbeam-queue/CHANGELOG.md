@@ -1,3 +1,19 @@
+# Version 0.3.11
+
+- Remove dependency on `cfg-if`. (#1072)
+
+# Version 0.3.10
+
+- Relax the minimum supported Rust version to 1.60. (#1056)
+- Implement `UnwindSafe` and `RefUnwindSafe` for `ArrayQueue` and `SegQueue`. (#1053)
+- Optimize `Drop` implementation of `ArrayQueue`. (#1057)
+
+# Version 0.3.9
+
+- Bump the minimum supported Rust version to 1.61. (#1037)
+- Improve support for targets without atomic CAS. (#1037)
+- Remove build script. (#1037)
+
 # Version 0.3.8
 
 - Fix build script bug introduced in 0.3.7. (#932)

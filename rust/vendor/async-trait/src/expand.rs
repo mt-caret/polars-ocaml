@@ -2,6 +2,7 @@ use crate::bound::{has_bound, InferredBound, Supertraits};
 use crate::lifetime::{AddLifetimeToImplTrait, CollectLifetimes};
 use crate::parse::Item;
 use crate::receiver::{has_self_in_block, has_self_in_sig, mut_pat, ReplaceSelf};
+use crate::verbatim::VerbatimFn;
 use proc_macro2::{Span, TokenStream};
 use quote::{format_ident, quote, quote_spanned, ToTokens};
 use std::collections::BTreeSet as Set;
@@ -11,7 +12,7 @@ use syn::visit_mut::{self, VisitMut};
 use syn::{
     parse_quote, parse_quote_spanned, Attribute, Block, FnArg, GenericArgument, GenericParam,
     Generics, Ident, ImplItem, Lifetime, LifetimeParam, Pat, PatIdent, PathArguments, Receiver,
-    ReturnType, Signature, Stmt, Token, TraitItem, Type, TypePath, WhereClause,
+    ReturnType, Signature, Token, TraitItem, Type, TypePath, WhereClause,
 };
 
 impl ToTokens for Item {
@@ -94,15 +95,27 @@ pub fn expand(input: &mut Item, is_local: bool) {
                 associated_type_impl_traits: &associated_type_impl_traits,
             };
             for inner in &mut input.items {
-                if let ImplItem::Fn(method) = inner {
-                    let sig = &mut method.sig;
-                    if sig.asyncness.is_some() {
+                match inner {
+                    ImplItem::Fn(method) if method.sig.asyncness.is_some() => {
+                        let sig = &mut method.sig;
                         let block = &mut method.block;
                         let has_self = has_self_in_sig(sig) || has_self_in_block(block);
                         transform_block(context, sig, block);
                         transform_sig(context, sig, has_self, false, is_local);
                         method.attrs.push(lint_suppress_with_body());
                     }
+                    ImplItem::Verbatim(tokens) => {
+                        let mut method = match syn::parse2::<VerbatimFn>(tokens.clone()) {
+                            Ok(method) if method.sig.asyncness.is_some() => method,
+                            _ => continue,
+                        };
+                        let sig = &mut method.sig;
+                        let has_self = has_self_in_sig(sig);
+                        transform_sig(context, sig, has_self, false, is_local);
+                        method.attrs.push(lint_suppress_with_body());
+                        *tokens = quote!(#method);
+                    }
+                    _ => {}
                 }
             }
         }
@@ -113,6 +126,7 @@ fn lint_suppress_with_body() -> Attribute {
     parse_quote! {
         #[allow(
             clippy::async_yields_async,
+            clippy::diverging_sub_expression,
             clippy::let_unit_value,
             clippy::no_effect_underscore_binding,
             clippy::shadow_same,
@@ -161,7 +175,7 @@ fn transform_sig(
     };
 
     let mut lifetimes = CollectLifetimes::new();
-    for arg in sig.inputs.iter_mut() {
+    for arg in &mut sig.inputs {
         match arg {
             FnArg::Receiver(arg) => lifetimes.visit_receiver_mut(arg),
             FnArg::Typed(arg) => lifetimes.visit_type_mut(&mut arg.ty),
@@ -329,12 +343,6 @@ fn transform_sig(
 //         ___ret
 //     })
 fn transform_block(context: Context, sig: &mut Signature, block: &mut Block) {
-    if let Some(Stmt::Item(syn::Item::Verbatim(item))) = block.stmts.first() {
-        if block.stmts.len() == 1 && item.to_string() == ";" {
-            return;
-        }
-    }
-
     let mut self_span = None;
     let decls = sig
         .inputs
@@ -398,7 +406,7 @@ fn transform_block(context: Context, sig: &mut Signature, block: &mut Block) {
     let let_ret = match &mut sig.output {
         ReturnType::Default => quote_spanned! {block.brace_token.span=>
             #(#decls)*
-            let _: () = { #(#stmts)* };
+            let () = { #(#stmts)* };
         },
         ReturnType::Type(_, ret) => {
             if contains_associated_type_impl_trait(context, ret) {
