@@ -3,8 +3,8 @@ use crate::polars_types::*;
 use chrono::naive::{NaiveDate, NaiveDateTime, NaiveTime};
 use chrono::Duration;
 use ocaml_interop::{
-    BoxRoot, DynBox, OCaml, OCamlBytes, OCamlFloat, OCamlInt, OCamlList, OCamlRef, OCamlRuntime,
-    ToOCaml,
+    BoxRoot, DynBox, OCaml, OCamlBytes, OCamlException, OCamlFloat, OCamlInt, OCamlList, OCamlRef,
+    OCamlRuntime, ToOCaml,
 };
 use polars::prelude::prelude::*;
 use polars::prelude::*;
@@ -916,7 +916,72 @@ fn rust_series_map(
     return_type: OCamlRef<GADTDataType>,
     series: OCamlRef<DynBox<PolarsSeries>>,
     f: OCamlRef<fn(DummyBoxRoot) -> DummyBoxRoot>,
-) -> OCaml<DynBox<PolarsSeries>> {
+) -> OCaml<Result<DynBox<PolarsSeries>, OCamlException>> {
+    let arg_type: GADTDataType = arg_type.to_rust(cr);
+    let return_type: GADTDataType = return_type.to_rust(cr);
+    let Abstract(series) = series.to_rust(cr);
+    let f = f.to_boxroot(cr);
+
+    let mut return_values = Vec::new();
+
+    // TODO: Intuitively this try_fold feels quite odd; why not just return
+    // the OCaml exception if f.try_call fails? This doesn't actually do what
+    // you might expect, since the rust_interop_export extracts the body of the
+    // function into a code block inside a larger function, so the return
+    // returns out a scope that actually expects a RawOCaml return value.
+    //
+    // This is quite unfortunate and I think forces users to write quite
+    // non-idiomatic Rust code to work around, which I think should be fixed.
+    // Instead of the current code conversion, perhaps the function annotation
+    // should keep the function intact and create a wrapper that calls the
+    // function with the appropriate arguments. In that world, an implementation
+    // like the one in rust_series_map_idiomatic (below) would work.
+    let result = (0..series.borrow().len()).try_fold((), |(), i| {
+        let arg: DummyBoxRoot = series_get(cr, &arg_type, &series.borrow(), i)
+            .map_err(SeriesMapError::SeriesGetError)?;
+
+        match f.try_call(cr, &arg) {
+            Ok(return_value) => {
+                return_values.push(return_value.to_rust());
+                Ok(())
+            }
+            Err(exception) => {
+                let ocaml_exception = exception.root();
+
+                Err(SeriesMapError::FunctionCallError(ocaml_exception))
+            }
+        }
+    });
+
+    match result {
+        Err(SeriesMapError::SeriesGetError(error)) => Err(error)?,
+        Err(SeriesMapError::FunctionCallError(ocaml_exception)) => {
+            ocaml_interop::alloc_error(cr, &ocaml_exception)
+        }
+        Ok(()) => {
+            let series = series_new(
+                cr,
+                &return_type,
+                series.borrow().name(),
+                return_values.into_iter(),
+                true,
+            )?;
+
+            let ocaml_series = Abstract(Rc::new(RefCell::new(series))).to_ocaml(cr).root();
+
+            ocaml_interop::alloc_ok(cr, &ocaml_series)
+        }
+    }
+}
+
+#[allow(dead_code)]
+fn rust_series_map_idiomatic<'a>(
+    cr: &'a mut &'a mut OCamlRuntime,
+    arg_type: OCamlRef<'a, GADTDataType>,
+    return_type: OCamlRef<'a, GADTDataType>,
+    series: OCamlRef<'a, DynBox<PolarsSeries>>,
+    f: OCamlRef<'a, fn(DummyBoxRoot) -> DummyBoxRoot>,
+) -> Result<OCaml<'a, Result<DynBox<PolarsSeries>, OCamlException>>, String> {
     let arg_type: GADTDataType = arg_type.to_rust(cr);
     let return_type: GADTDataType = return_type.to_rust(cr);
     let Abstract(series) = series.to_rust(cr);
@@ -925,10 +990,15 @@ fn rust_series_map(
     let mut return_values = Vec::new();
     for i in 0..series.borrow().len() {
         let arg: DummyBoxRoot = series_get(cr, &arg_type, &series.borrow(), i)?;
-        let return_value = f
-            .try_call(cr, &arg)
-            .map_err(|exception| exception.message().expect("Empty exception"))?;
-        return_values.push(return_value.to_rust());
+
+        match f.try_call(cr, &arg) {
+            Ok(return_value) => return_values.push(return_value.to_rust()),
+            Err(exception) => {
+                let ocaml_exception = exception.root();
+
+                return Ok(ocaml_interop::alloc_error(cr, &ocaml_exception));
+            }
+        }
     }
 
     let series = series_new(
@@ -938,7 +1008,15 @@ fn rust_series_map(
         return_values.into_iter(),
         true,
     )?;
-    Abstract(Rc::new(RefCell::new(series))).to_ocaml(cr)
+
+    let ocaml_series = Abstract(Rc::new(RefCell::new(series))).to_ocaml(cr).root();
+
+    Ok(ocaml_interop::alloc_ok(cr, &ocaml_series))
+}
+
+enum SeriesMapError {
+    SeriesGetError(String),
+    FunctionCallError(BoxRoot<OCamlException>),
 }
 
 #[ocaml_interop_export]

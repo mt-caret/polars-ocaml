@@ -16,18 +16,15 @@ let%expect_test "Series.map" =
     ] |}];
   let series = Series.into "ints" [ Some 1; Some (-2); Some 3; None ] in
   (* Raising an exception from within a closure works. *)
+  (* TODO: unfortunately, exceptions raised in the closure will cause
+     backtraces to be lost. this is pretty unfortunate, but at the same time it
+     doesn't seem clear that OCaml exposes a way for C/Rust to recover the
+     backtrace associated with calling an OCaml function.
+
+     We could wrap [f] in [Series.map] with a try-catch and explicitly load the
+     backtrace via [Backtrace.Exn.most_recent_for_exn] and thread it through. *)
   Expect_test_helpers_core.require_does_raise [%here] (fun () ->
-    Series.map Int64 Int64 series ~f:(fun _ -> raise_s [%message "Some exception"]));
-  [%expect.output]
-  |> String.substr_replace_all ~pattern:"\\n" ~with_:"\n" (* Expand out newlines *)
-  |> String.split_lines
-  (* Don't bother printing the backtrace since it's super unstable across
-     dev/release profiles, OSes, architectures, etc. *)
-  |> Fn.flip List.take 3
-  |> String.concat_lines
-  |> print_endline;
-  [%expect
-    {|
-    (Failure "Polars panicked: Empty exception
-    backtrace not captured") |}]
+    Series.map Int64 Int64 series ~f:(fun _ -> failwith "Some exception"));
+  [%expect {|
+    (Failure "Some exception") |}]
 ;;

@@ -204,8 +204,12 @@ module T = struct
     -> 'b Data_type.Typed.t
     -> t
     -> f:('a option -> 'b option)
-    -> t
+    -> (t, exn) result
     = "rust_series_map"
+
+  let map input_data_type output_data_type t ~f =
+    map input_data_type output_data_type t ~f |> Result.ok_exn
+  ;;
 
   external name : t -> string = "rust_series_name"
   external rename : t -> name:string -> unit = "rust_series_rename"
