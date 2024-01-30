@@ -16,6 +16,23 @@ val execute_with_data_frames_exn
   -> query:string
   -> Data_frame.t
 
+(** Execute a query over [names_and_data_frames].
+    Unlike [execute_with_data_frames], each data source is a list of
+    data frames that can be concatenated together to produce the final result.
+
+    As an example,
+    [vstack_and_execute ~names_and_data_frames:["data1", [df1; df2; df3]]]
+    roughly translates to
+    {[
+      let df = vstack [df1; df2; df3] in
+      execute_with_data_frames ~names_and_data_frames:["data1", df]
+    ]}
+*)
+val vstack_and_execute
+  :  names_and_data_frames:(string * Data_frame.t list) list
+  -> query:string
+  -> (Data_frame.t, string) result
+
 val unregister : t -> name:string -> unit
 val execute : t -> query:string -> (Lazy_frame.t, string) result
 val execute_exn : t -> query:string -> Lazy_frame.t

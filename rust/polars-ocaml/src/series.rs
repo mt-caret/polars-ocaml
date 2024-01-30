@@ -1,11 +1,16 @@
 use crate::interop::*;
 use crate::polars_types::*;
+
 use chrono::naive::{NaiveDate, NaiveDateTime, NaiveTime};
 use chrono::Duration;
 use ocaml_interop::{
     BoxRoot, DynBox, OCaml, OCamlBytes, OCamlFloat, OCamlInt, OCamlList, OCamlRef, OCamlRuntime,
     ToOCaml,
 };
+
+use polars::export::arrow::array::PrimitiveArray;
+use polars::export::arrow::bitmap::Bitmap;
+use polars::export::arrow::types::NativeType;
 use polars::prelude::prelude::*;
 use polars::prelude::*;
 use polars_ocaml_macros::ocaml_interop_export;
@@ -1046,6 +1051,324 @@ fn rust_series_interpolate(
         let series = series.borrow();
         Rc::new(RefCell::new(interpolate(&series, method)))
     })
+}
+
+fn modify_native_series_at_chunk_index<T: NativeType>(
+    series: &mut Series,
+    chunk_index: usize,
+    indices_and_values: &Vec<(usize, T)>,
+) -> Result<(), String> {
+    unsafe {
+        let chunks = series.chunks_mut();
+        let chunk = chunks
+            .get_mut(chunk_index)
+            .ok_or("modify_series_at_chunk_index: index out of range")?;
+
+        let chunk: &mut PrimitiveArray<T> = chunk
+            .as_any_mut()
+            .downcast_mut()
+            .ok_or("modify_chunk_at_index: unable to downcast to type T")?;
+        let chunk = chunk
+        .get_mut_values()
+        .ok_or("modify_chunk_at_index: unable to get chunk values as mutable. Is someone else accessing the data?")?;
+        for (index, value) in indices_and_values {
+            chunk[*index] = *value;
+        }
+        Ok(())
+    }
+}
+
+fn set_chunk_validity_based_on_null_values<T: NativeType>(
+    chunk: &mut PrimitiveArray<T>,
+    indices_and_values: &Vec<(usize, Option<T>)>,
+) {
+    if !chunk.has_validity() {
+        // Construct a bitmap that only contains true. Constructing a bitmap from
+        // u8 means filling the bitmap vector with 0b11111111 = 255
+        let bytes: Vec<u8> = vec![255u8; chunk.len().saturating_add(7) / 8];
+
+        chunk.set_validity(Some(Bitmap::from_u8_vec(bytes, chunk.len())));
+    }
+    chunk.apply_validity(|validity: Bitmap| {
+        let mut validity = match validity.into_mut() {
+            // The Left case generally means that someone else is referencing
+            // the same memory, which is usually a bad state to be in, but we
+            // can try to work around it with a clone.
+            arrow2::Either::Left(validity) => validity.clone().into_mut().right().unwrap(),
+            arrow2::Either::Right(validity) => validity,
+        };
+        for (index, value) in indices_and_values {
+            match *value {
+                Some(_) => validity.set(*index, true),
+                None => validity.set(*index, false),
+            }
+        }
+
+        // Warning: validity.into() calls Bitmap::try_new(), which is an O(chunk_length)
+        // operation.
+        validity.into()
+    });
+}
+
+fn modify_optional_native_series_at_chunk_index<T: NativeType>(
+    series: &mut Series,
+    chunk_index: usize,
+    indices_and_values: &Vec<(usize, Option<T>)>,
+) -> Result<(), String> {
+    unsafe {
+        // CR-someday mtakeda: I think Series/ChunkedArrays store a null_count
+        // separately, so I think we want to explicitly update that as well, if
+        // I'm not mistaken. See
+        // https://docs.rs/polars/latest/polars/series/struct.Series.html#method.chunks_mut
+        // I'm not sure how costly the mentioned [compute_len()] is, though...
+        //
+        // ozeng: https://docs.pola.rs/docs/rust/dev/src/polars_core/chunked_array/ops/chunkops.rs.html#87
+        // I believe this operation is O(n_chunks) btw, as arr.null_count() is O(1) --
+        // each chunk also keeps track of its null count.
+        //
+        // also -- I just added an expect test that prints out the null counts,
+        // and it seems correct? I don't think I did anything to make sure that
+        // the null counts are correct
+        //
+        // mtakeda: Hmmm, maybe things are just fine; let's punt on this. I'll
+        // try looking into this later. cr-someday-ing
+
+        let chunks = series.chunks_mut();
+        let chunk = chunks
+            .get_mut(chunk_index)
+            .ok_or("modify_series_at_chunk_index: index out of range")?;
+
+        let chunk: &mut PrimitiveArray<T> = chunk
+            .as_any_mut()
+            .downcast_mut()
+            .ok_or("modify_chunk_at_index: unable to downcast to type T")?;
+
+        set_chunk_validity_based_on_null_values(chunk, indices_and_values);
+
+        let chunk = chunk
+        .get_mut_values()
+        .ok_or("modify_chunk_at_index: unable to get chunk values as mutable. Is someone else accessing the data?")?;
+        for (index, value) in indices_and_values {
+            match value {
+                Some(value) => chunk[*index] = *value,
+                None => (),
+            }
+        }
+
+        Ok(())
+    }
+}
+
+pub fn modify_series_at_chunk_index(
+    cr: &mut &mut OCamlRuntime,
+    series: &mut Series,
+    data_type: OCamlRef<GADTDataType>,
+    chunk_index: OCamlRef<OCamlInt>,
+    indices_and_values: OCamlRef<OCamlList<(OCamlInt, DummyBoxRoot)>>,
+    are_values_options: bool,
+) -> Result<(), String> {
+    let chunk_index = chunk_index.to_rust::<Coerce<_, i64, usize>>(cr).get()?;
+    let indices_and_values: Vec<(i64, DummyBoxRoot)> = indices_and_values.to_rust(cr);
+    let data_type: GADTDataType = data_type.to_rust(cr);
+
+    macro_rules! modify_series {
+        ($ocaml_type:ty, $rust_type:ty) => {{
+            if are_values_options {
+                let indices_and_values: Vec<(usize, Option<$rust_type>)> = indices_and_values
+                    .into_iter()
+                    .map(|(index, v)| {
+                        (
+                            index as usize,
+                            v.interpret::<Option<$ocaml_type>>(cr).to_rust(),
+                        )
+                    })
+                    .collect();
+                modify_optional_native_series_at_chunk_index(
+                    series,
+                    chunk_index,
+                    &indices_and_values,
+                )
+            } else {
+                let indices_and_values: Vec<(usize, $rust_type)> = indices_and_values
+                    .into_iter()
+                    .map(|(index, v)| (index as usize, v.interpret::<$ocaml_type>(cr).to_rust()))
+                    .collect();
+                modify_native_series_at_chunk_index(series, chunk_index, &indices_and_values)
+            }
+        }};
+    }
+
+    macro_rules! modify_series_with_cast {
+        ($ocaml_type:ty, $rust_type:ty, $downcast_to:ty, $perform_cast:expr) => {{
+            if are_values_options {
+                let indices_and_values: Vec<(usize, Option<$downcast_to>)> = indices_and_values
+                    .into_iter()
+                    .map(|(index, v)| {
+                        (
+                            index as usize,
+                            v.interpret::<Option<$ocaml_type>>(cr)
+                                .to_rust::<Option<$rust_type>>()
+                                .map(|v| $perform_cast(v)),
+                        )
+                    })
+                    .collect();
+                modify_optional_native_series_at_chunk_index(
+                    series,
+                    chunk_index,
+                    &indices_and_values,
+                )
+            } else {
+                let indices_and_values: Vec<(usize, $downcast_to)> = indices_and_values
+                    .into_iter()
+                    .map(|(index, v)| {
+                        (
+                            index as usize,
+                            $perform_cast(v.interpret::<$ocaml_type>(cr).to_rust::<$rust_type>()),
+                        )
+                    })
+                    .collect();
+                modify_native_series_at_chunk_index(series, chunk_index, &indices_and_values)
+            }
+        }};
+    }
+
+    match data_type {
+        GADTDataType::Boolean => {
+            Err("Modifying bool series in place is not supported yet!".to_string())
+        }
+        GADTDataType::UInt8 => {
+            modify_series_with_cast!(OCamlInt, i64, u8, |v: i64| v.try_into().unwrap())
+        }
+        GADTDataType::UInt16 => {
+            modify_series_with_cast!(OCamlInt, i64, u16, |v: i64| v.try_into().unwrap())
+        }
+        GADTDataType::UInt32 => {
+            modify_series_with_cast!(OCamlInt, i64, u32, |v: i64| v.try_into().unwrap())
+        }
+        GADTDataType::UInt64 => {
+            modify_series_with_cast!(OCamlInt, i64, u64, |v: i64| v.try_into().unwrap())
+        }
+        GADTDataType::Int8 => {
+            modify_series_with_cast!(OCamlInt, i64, i8, |v: i64| v.try_into().unwrap())
+        }
+        GADTDataType::Int16 => {
+            modify_series_with_cast!(OCamlInt, i64, i16, |v: i64| v.try_into().unwrap())
+        }
+        GADTDataType::Int32 => {
+            modify_series_with_cast!(OCamlInt, i64, i32, |v: i64| v.try_into().unwrap())
+        }
+        GADTDataType::Int64 => {
+            modify_series!(OCamlInt, i64)
+        }
+        GADTDataType::Float32 => {
+            modify_series_with_cast!(OCamlFloat, f64, f32, |v| v as f32)
+        }
+        GADTDataType::Float64 => {
+            modify_series!(OCamlFloat, f64)
+        }
+        GADTDataType::Utf8 => {
+            Err("Modifying string series in place is not supported yet!".to_string())
+        }
+        GADTDataType::Binary => {
+            Err("Modifying binary series in place is not supported yet!".to_string())
+        }
+        GADTDataType::Date => {
+            Err("Modifying date series in place is not supported yet!".to_string())
+        }
+        GADTDataType::Datetime(PolarsTimeUnit(_time_unit), _time_zone) => {
+            Err("Modifying datetime series in place is not supported yet!".to_string())
+        }
+        GADTDataType::Duration(PolarsTimeUnit(_time_unit)) => {
+            Err("Modifying duration series in place is not supported yet!".to_string())
+        }
+        GADTDataType::Time => {
+            Err("Modifying time series in place is not supported yet!".to_string())
+        }
+        GADTDataType::List(_data_type) => {
+            Err("Modifying list series in place is not supported yet!".to_string())
+        }
+    }
+}
+
+#[ocaml_interop_export(raise_on_err)]
+fn rust_series_modify_at_chunk_index(
+    cr: &mut &mut OCamlRuntime,
+    series: OCamlRef<DynBox<PolarsSeries>>,
+    data_type: OCamlRef<GADTDataType>,
+    chunk_index: OCamlRef<OCamlInt>,
+    indices_and_values: OCamlRef<OCamlList<(OCamlInt, DummyBoxRoot)>>,
+) -> OCaml<Result<DynBox<()>, String>> {
+    let Abstract(series) = series.to_rust(cr);
+    let mut series = series.borrow_mut();
+
+    modify_series_at_chunk_index(
+        cr,
+        &mut series,
+        data_type,
+        chunk_index,
+        indices_and_values,
+        false,
+    )
+    .map(Abstract)
+    .map_err(|err| err.to_string())
+    .to_ocaml(cr)
+}
+
+#[ocaml_interop_export(raise_on_err)]
+fn rust_series_modify_optional_at_chunk_index(
+    cr: &mut &mut OCamlRuntime,
+    series: OCamlRef<DynBox<PolarsSeries>>,
+    data_type: OCamlRef<GADTDataType>,
+    chunk_index: OCamlRef<OCamlInt>,
+    indices_and_values: OCamlRef<OCamlList<(OCamlInt, DummyBoxRoot)>>,
+) -> OCaml<Result<DynBox<()>, String>> {
+    let Abstract(series) = series.to_rust(cr);
+    let mut series = series.borrow_mut();
+
+    modify_series_at_chunk_index(
+        cr,
+        &mut series,
+        data_type,
+        chunk_index,
+        indices_and_values,
+        true,
+    )
+    .map(Abstract)
+    .map_err(|err| err.to_string())
+    .to_ocaml(cr)
+}
+
+#[ocaml_interop_export(raise_on_err)]
+fn rust_series_clear(
+    cr: &mut &mut OCamlRuntime,
+    series: OCamlRef<DynBox<PolarsSeries>>,
+) -> OCaml<()> {
+    let Abstract(series) = series.to_rust(cr);
+    let mut series = series.borrow_mut();
+    *series = series.clear();
+
+    OCaml::unit()
+}
+
+#[ocaml_interop_export(raise_on_err)]
+fn rust_series_compute_null_count(
+    cr: &mut &mut OCamlRuntime,
+    series: OCamlRef<DynBox<PolarsSeries>>,
+) -> OCaml<OCamlInt> {
+    let Abstract(series) = series.to_rust(cr);
+    let series = series.borrow_mut();
+    // CR-someday ozeng: consider using the function series.compute_len(),
+    // which to my knowledge will re-calculate the null counts. Based on tests,
+    // the null count is accurate even if we don't call compute_len(), but
+    // the rust docs seem to indicate that we need to call this function to keep
+    // the null counts accurate after modifying a series.
+
+    // Dumb hack: try using append() to recalculate the null count
+    // let empty = Series::new_empty(series.name(), series.dtype());
+    // series.append(&empty).unwrap();
+    let null_count = series.null_count() as i64;
+
+    null_count.to_ocaml(cr)
 }
 
 macro_rules! series_op {

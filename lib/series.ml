@@ -247,6 +247,12 @@ module T = struct
     = "rust_series_interpolate"
 
   let interpolate_exn t ~method_ = interpolate t ~method_ |> Utils.string_result_ok_exn
+
+  external clear
+    : t
+    -> unit
+    = "rust_series_clear"
+
   let binary_op op t1 t2 = op t1 t2 |> Utils.string_result_ok_exn
 
   external equal : t -> t -> (t, string) result = "rust_series_eq"
@@ -292,3 +298,42 @@ include Pretty_printer.Register (struct
   end)
 
 include Common.Make_numeric (T)
+
+module Expert = struct
+  external modify_at_chunk_index_exn
+    : t
+    -> dtype:'a Data_type.Typed.t
+    -> chunk_index:int
+    -> indices_and_values:(int * 'a) list
+    -> (unit, string) result
+    = "rust_series_modify_at_chunk_index"
+
+  let modify_at_chunk_index t ~dtype ~chunk_index ~indices_and_values =
+    match Or_error.try_with (fun () ->
+      modify_at_chunk_index_exn t ~dtype ~chunk_index ~indices_and_values
+    ) with
+    | Ok result -> result
+    | Error error -> Error (sprintf "modify_at_chunk_index_exn raised an exception. Usually this happens when accessing an index out of bounds of the chunk or passing in a value outside of the domain of dtype: %s" (Error.to_string_hum error))
+  ;;
+
+  external modify_optional_at_chunk_index_exn
+    : t
+    -> dtype:'a Data_type.Typed.t
+    -> chunk_index:int
+    -> indices_and_values:(int * 'a option) list
+    -> (unit, string) result
+    = "rust_series_modify_optional_at_chunk_index"
+
+  let modify_optional_at_chunk_index t ~dtype ~chunk_index ~indices_and_values =
+    match Or_error.try_with (fun () ->
+      modify_optional_at_chunk_index_exn t ~dtype ~chunk_index ~indices_and_values
+    ) with
+    | Ok result -> result
+    | Error error -> Error (sprintf "modify_optional_at_chunk_index_exn raised an exception. Usually this happens when accessing an index out of bounds of the chunk: %s" (Error.to_string_hum error))
+  ;;
+
+  external compute_null_count
+    : t
+    -> int
+    = "rust_series_compute_null_count"
+end
