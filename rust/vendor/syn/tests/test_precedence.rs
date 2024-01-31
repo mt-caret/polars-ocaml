@@ -30,12 +30,12 @@ extern crate rustc_ast_pretty;
 extern crate rustc_data_structures;
 extern crate rustc_driver;
 extern crate rustc_span;
+extern crate smallvec;
 extern crate thin_vec;
 
 use crate::common::eq::SpanlessEq;
 use crate::common::parse;
 use quote::quote;
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use regex::Regex;
 use rustc_ast::ast;
 use rustc_ast::ptr::P;
@@ -45,7 +45,6 @@ use std::fs;
 use std::path::Path;
 use std::process;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use walkdir::{DirEntry, WalkDir};
 
 #[macro_use]
 mod macros;
@@ -70,48 +69,36 @@ fn test_rustc_precedence() {
     // 2018 edition is hard
     let edition_regex = Regex::new(r"\b(async|try)[!(]").unwrap();
 
-    WalkDir::new("tests/rust")
-        .sort_by(|a, b| a.file_name().cmp(b.file_name()))
-        .into_iter()
-        .filter_entry(repo::base_dir_filter)
-        .collect::<Result<Vec<DirEntry>, walkdir::Error>>()
-        .unwrap()
-        .into_par_iter()
-        .for_each(|entry| {
-            let path = entry.path();
-            if path.is_dir() {
-                return;
+    repo::for_each_rust_file(|path| {
+        let content = fs::read_to_string(path).unwrap();
+        let content = edition_regex.replace_all(&content, "_$0");
+
+        let (l_passed, l_failed) = match syn::parse_file(&content) {
+            Ok(file) => {
+                let edition = repo::edition(path).parse().unwrap();
+                let exprs = collect_exprs(file);
+                let (l_passed, l_failed) = test_expressions(path, edition, exprs);
+                errorf!(
+                    "=== {}: {} passed | {} failed\n",
+                    path.display(),
+                    l_passed,
+                    l_failed,
+                );
+                (l_passed, l_failed)
             }
-
-            let content = fs::read_to_string(path).unwrap();
-            let content = edition_regex.replace_all(&content, "_$0");
-
-            let (l_passed, l_failed) = match syn::parse_file(&content) {
-                Ok(file) => {
-                    let edition = repo::edition(path).parse().unwrap();
-                    let exprs = collect_exprs(file);
-                    let (l_passed, l_failed) = test_expressions(path, edition, exprs);
-                    errorf!(
-                        "=== {}: {} passed | {} failed\n",
-                        path.display(),
-                        l_passed,
-                        l_failed,
-                    );
-                    (l_passed, l_failed)
-                }
-                Err(msg) => {
-                    errorf!("\nFAIL {} - syn failed to parse: {}\n", path.display(), msg);
-                    (0, 1)
-                }
-            };
-
-            passed.fetch_add(l_passed, Ordering::Relaxed);
-            let prev_failed = failed.fetch_add(l_failed, Ordering::Relaxed);
-
-            if prev_failed + l_failed >= abort_after {
-                process::exit(1);
+            Err(msg) => {
+                errorf!("\nFAIL {} - syn failed to parse: {}\n", path.display(), msg);
+                (0, 1)
             }
-        });
+        };
+
+        passed.fetch_add(l_passed, Ordering::Relaxed);
+        let prev_failed = failed.fetch_add(l_failed, Ordering::Relaxed);
+
+        if prev_failed + l_failed >= abort_after {
+            process::exit(1);
+        }
+    });
 
     let passed = passed.load(Ordering::Relaxed);
     let failed = failed.load(Ordering::Relaxed);
@@ -182,15 +169,17 @@ fn librustc_parse_and_rewrite(input: &str) -> Option<P<ast::Expr>> {
 /// This method operates on librustc objects.
 fn librustc_brackets(mut librustc_expr: P<ast::Expr>) -> Option<P<ast::Expr>> {
     use rustc_ast::ast::{
-        Attribute, BinOpKind, Block, BorrowKind, Expr, ExprField, ExprKind, GenericArg,
-        GenericBound, Local, LocalKind, Pat, Stmt, StmtKind, StructExpr, StructRest,
-        TraitBoundModifier, Ty,
+        AssocItem, AssocItemKind, Attribute, BinOpKind, Block, BorrowKind, Expr, ExprField,
+        ExprKind, GenericArg, GenericBound, ItemKind, Local, LocalKind, Pat, Stmt, StmtKind,
+        StructExpr, StructRest, TraitBoundModifier, Ty,
     };
     use rustc_ast::mut_visit::{
-        noop_visit_generic_arg, noop_visit_local, noop_visit_param_bound, MutVisitor,
+        noop_flat_map_assoc_item, noop_visit_generic_arg, noop_visit_item_kind, noop_visit_local,
+        noop_visit_param_bound, MutVisitor,
     };
     use rustc_data_structures::flat_map_in_place::FlatMapInPlace;
     use rustc_span::DUMMY_SP;
+    use smallvec::SmallVec;
     use std::mem;
     use std::ops::DerefMut;
     use thin_vec::ThinVec;
@@ -311,6 +300,39 @@ fn librustc_brackets(mut librustc_expr: P<ast::Expr>) -> Option<P<ast::Expr>> {
             match local.kind {
                 LocalKind::InitElse(..) => {}
                 _ => noop_visit_local(local, self),
+            }
+        }
+
+        fn visit_item_kind(&mut self, item: &mut ItemKind) {
+            match item {
+                ItemKind::Const(const_item)
+                    if !const_item.generics.params.is_empty()
+                        || !const_item.generics.where_clause.predicates.is_empty() => {}
+                _ => noop_visit_item_kind(item, self),
+            }
+        }
+
+        fn flat_map_trait_item(&mut self, item: P<AssocItem>) -> SmallVec<[P<AssocItem>; 1]> {
+            match &item.kind {
+                AssocItemKind::Const(const_item)
+                    if !const_item.generics.params.is_empty()
+                        || !const_item.generics.where_clause.predicates.is_empty() =>
+                {
+                    SmallVec::from([item])
+                }
+                _ => noop_flat_map_assoc_item(item, self),
+            }
+        }
+
+        fn flat_map_impl_item(&mut self, item: P<AssocItem>) -> SmallVec<[P<AssocItem>; 1]> {
+            match &item.kind {
+                AssocItemKind::Const(const_item)
+                    if !const_item.generics.params.is_empty()
+                        || !const_item.generics.where_clause.predicates.is_empty() =>
+                {
+                    SmallVec::from([item])
+                }
+                _ => noop_flat_map_assoc_item(item, self),
             }
         }
 

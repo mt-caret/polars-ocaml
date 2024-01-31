@@ -1,7 +1,7 @@
 // Copyright (c) Viable Systems and TezEdge Contributors
 // SPDX-License-Identifier: MIT
 
-#![doc(html_root_url = "https://docs.rs/ocaml-interop/0.9.2")]
+#![doc(html_root_url = "https://docs.rs/ocaml-interop/0.10.0")]
 
 //! _Zinc-iron alloy coating is used in parts that need very good corrosion protection._
 //!
@@ -296,11 +296,12 @@ pub use crate::boxroot::BoxRoot;
 
 pub use crate::closure::{OCamlFn1, OCamlFn2, OCamlFn3, OCamlFn4, OCamlFn5};
 pub use crate::conv::{FromOCaml, ToOCaml};
-pub use crate::error::OCamlException;
 pub use crate::memory::alloc_cons as cons;
 pub use crate::memory::OCamlRef;
+pub use crate::memory::{alloc_error, alloc_ok};
 pub use crate::mlvalues::{
-    bigarray, DynBox, OCamlBytes, OCamlFloat, OCamlInt, OCamlInt32, OCamlInt64, OCamlList, RawOCaml,
+    bigarray, DynBox, OCamlBytes, OCamlException, OCamlFloat, OCamlFloatArray, OCamlInt,
+    OCamlInt32, OCamlInt64, OCamlList, OCamlUniformArray, RawOCaml,
 };
 pub use crate::runtime::OCamlRuntime;
 pub use crate::value::OCaml;

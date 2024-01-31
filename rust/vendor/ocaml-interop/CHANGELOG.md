@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2024-01-28
+
+### Added
+
+- Support for OCaml arrays (PR #61 by @mt-caret).
+- Support for OCaml float arrays (PR #61 by @mt-caret).
+
+### Changed
+
+- OCaml exceptions are now represented by `OCaml<OCamlException>` values instead of custom `OCamlException` values. This makes them first-class and safer to use because the fact that executing the garbage collector can invalidate references is now encoded in the type (PR #60 by @mt-caret)
+
 ## [0.9.2] - 2023-07-27
 
 ### Fixed
@@ -256,7 +267,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `OCaml<f64>` is no longer a valid representation for OCaml floats, use `OCaml<OCamlFloat>` instead.
 - `keep` method in GC handles and `OCaml<T>` values was removed. The `keep` method in root variables should be used instead, or the third optional parameter of the `to_ocaml!` macro.
 
-[Unreleased]: https://github.com/tizoc/ocaml-interop/compare/v0.9.2...HEAD
+[Unreleased]: https://github.com/tizoc/ocaml-interop/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/tizoc/ocaml-interop/compare/v0.9.2...v0.10.0
 [0.9.2]: https://github.com/tizoc/ocaml-interop/compare/v0.9.1...v0.9.2
 [0.9.1]: https://github.com/tizoc/ocaml-interop/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/tizoc/ocaml-interop/compare/v0.8.8...v0.9.0

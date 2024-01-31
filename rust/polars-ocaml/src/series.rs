@@ -3,8 +3,8 @@ use crate::polars_types::*;
 use chrono::naive::{NaiveDate, NaiveDateTime, NaiveTime};
 use chrono::Duration;
 use ocaml_interop::{
-    BoxRoot, DynBox, OCaml, OCamlBytes, OCamlFloat, OCamlInt, OCamlList, OCamlRef, OCamlRuntime,
-    ToOCaml,
+    BoxRoot, DynBox, OCaml, OCamlBytes, OCamlException, OCamlFloat, OCamlInt, OCamlList, OCamlRef,
+    OCamlRuntime, ToOCaml,
 };
 use polars::prelude::prelude::*;
 use polars::prelude::*;
@@ -22,25 +22,26 @@ pub type PolarsSeries = Rc<RefCell<Series>>;
 //
 // In the case of series_new takes a vec of DummyBoxRoots, and we recurse when
 // data_type turns out to be a GADTDataType::List(inner_data_type).
-pub fn series_new(
+pub fn series_new<I>(
     cr: &mut &mut OCamlRuntime,
     data_type: &GADTDataType,
     name: &str,
     // TODO: can we just pass a DummyBoxRoot here instead of a Vec, and save a copy?
-    values: Vec<DummyBoxRoot>,
+    values: I,
     are_values_options: bool,
-) -> Result<Series, String> {
+) -> Result<Series, String>
+where
+    I: Iterator<Item = DummyBoxRoot>,
+{
     macro_rules! create_series {
         ($ocaml_type:ty, $rust_type:ty) => {{
             if are_values_options {
                 let values: Vec<Option<$rust_type>> = values
-                    .into_iter()
                     .map(|v| v.interpret::<Option<$ocaml_type>>(cr).to_rust())
                     .collect();
                 Ok(Series::new(&name, values))
             } else {
                 let values: Vec<$rust_type> = values
-                    .into_iter()
                     .map(|v| v.interpret::<$ocaml_type>(cr).to_rust())
                     .collect();
                 Ok(Series::new(&name, values))
@@ -64,7 +65,6 @@ pub fn series_new(
                 Ok(Series::new(&name, values))
             } else {
                 let values = values
-                    .into_iter()
                     .map(|v| v.interpret::<OCamlInt>(cr).to_rust::<i64>().try_into())
                     .collect::<Result<Vec<$rust_type>, _>>()
                     .map_err(|err| err.to_string())?;
@@ -86,7 +86,6 @@ pub fn series_new(
         GADTDataType::Float32 => {
             if are_values_options {
                 let values: Vec<Option<f32>> = values
-                    .into_iter()
                     .map(|v| {
                         v.interpret::<Option<OCamlFloat>>(cr)
                             .to_rust::<Option<f64>>()
@@ -96,7 +95,6 @@ pub fn series_new(
                 Ok(Series::new(name, values))
             } else {
                 let values: Vec<f32> = values
-                    .into_iter()
                     .map(|v| v.interpret::<OCamlFloat>(cr).to_rust::<f64>() as f32)
                     .collect();
                 Ok(Series::new(name, values))
@@ -187,22 +185,28 @@ pub fn series_new(
             }
         }
         GADTDataType::List(data_type) => {
+            let mut values = values.peekable();
             // Series creation doesn't work for empty lists and use of
             // `Series::new_empty` is suggested instead.
             // https://github.com/pola-rs/polars/pull/10558#issuecomment-1684923274
-            if values.is_empty() {
+            if values.peek().is_none() {
                 let data_type = DataType::List(Box::new(data_type.to_data_type()));
                 return Ok(Series::new_empty(name, &data_type));
             }
 
             if are_values_options {
                 let values: Vec<Option<Series>> = values
-                    .into_iter()
                     .map(|v| {
-                        match v.interpret::<Option<OCamlList<DummyBoxRoot>>>(cr).to_rust() {
+                        match v
+                            .interpret::<Option<OCamlList<DummyBoxRoot>>>(cr)
+                            .to_rust::<Option<Vec<DummyBoxRoot>>>()
+                        {
                             None => Ok(None),
                             Some(list) => series_new(
-                                cr, data_type, name, list,
+                                cr,
+                                data_type,
+                                name,
+                                list.into_iter(),
                                 // The OCaml GADT's type assumes all values are non-null for simplicity,
                                 // but we expose a top-level function that allows the outermost layer
                                 // to be optional. So, all recursive layers are non-optional so
@@ -216,11 +220,14 @@ pub fn series_new(
                 Ok(Series::new(name, values))
             } else {
                 let values: Vec<Series> = values
-                    .into_iter()
                     .map(|v| {
-                        let list = v.interpret::<OCamlList<DummyBoxRoot>>(cr).to_rust();
+                        let list: Vec<DummyBoxRoot> =
+                            v.interpret::<OCamlList<DummyBoxRoot>>(cr).to_rust();
                         series_new(
-                            cr, data_type, name, list, // See call above to series_new
+                            cr,
+                            data_type,
+                            name,
+                            list.into_iter(), // See call above to series_new
                             false,
                         )
                     })
@@ -243,7 +250,7 @@ fn rust_series_new(
     let data_type: GADTDataType = data_type.to_rust(cr);
     let values: Vec<DummyBoxRoot> = values.to_rust(cr);
 
-    let series = series_new(cr, &data_type, &name, values, false)?;
+    let series = series_new(cr, &data_type, &name, values.into_iter(), false)?;
 
     OCaml::box_value(cr, Rc::new(RefCell::new(series)))
 }
@@ -259,7 +266,7 @@ fn rust_series_new_option(
     let data_type: GADTDataType = data_type.to_rust(cr);
     let values: Vec<DummyBoxRoot> = values.to_rust(cr);
 
-    let series = series_new(cr, &data_type, &name, values, true)?;
+    let series = series_new(cr, &data_type, &name, values.into_iter(), true)?;
 
     OCaml::box_value(cr, Rc::new(RefCell::new(series)))
 }
@@ -275,7 +282,7 @@ fn rust_series_new_array(
     let data_type: GADTDataType = data_type.to_rust(cr);
     let values: Vec<DummyBoxRoot> = values.to_rust(cr);
 
-    let series = series_new(cr, &data_type, &name, values, false)?;
+    let series = series_new(cr, &data_type, &name, values.into_iter(), false)?;
 
     OCaml::box_value(cr, Rc::new(RefCell::new(series)))
 }
@@ -291,7 +298,7 @@ fn rust_series_new_option_array(
     let data_type: GADTDataType = data_type.to_rust(cr);
     let values: Vec<DummyBoxRoot> = values.to_rust(cr);
 
-    let series = series_new(cr, &data_type, &name, values, true)?;
+    let series = series_new(cr, &data_type, &name, values.into_iter(), true)?;
 
     OCaml::box_value(cr, Rc::new(RefCell::new(series)))
 }
@@ -900,6 +907,116 @@ fn rust_series_get(
     let index = index.to_rust::<Coerce<_, i64, usize>>(cr).get()?;
 
     series_get(cr, &data_type, &series, index)?.to_ocaml(cr)
+}
+
+#[ocaml_interop_export(raise_on_err)]
+fn rust_series_map(
+    cr: &mut &mut OCamlRuntime,
+    arg_type: OCamlRef<GADTDataType>,
+    return_type: OCamlRef<GADTDataType>,
+    series: OCamlRef<DynBox<PolarsSeries>>,
+    f: OCamlRef<fn(DummyBoxRoot) -> DummyBoxRoot>,
+) -> OCaml<Result<DynBox<PolarsSeries>, OCamlException>> {
+    let arg_type: GADTDataType = arg_type.to_rust(cr);
+    let return_type: GADTDataType = return_type.to_rust(cr);
+    let Abstract(series) = series.to_rust(cr);
+    let f = f.to_boxroot(cr);
+
+    let mut return_values = Vec::new();
+
+    // TODO: Intuitively this try_fold feels quite odd; why not just return
+    // the OCaml exception if f.try_call fails? This doesn't actually do what
+    // you might expect, since the rust_interop_export extracts the body of the
+    // function into a code block inside a larger function, so the return
+    // returns out a scope that actually expects a RawOCaml return value.
+    //
+    // This is quite unfortunate and I think forces users to write quite
+    // non-idiomatic Rust code to work around, which I think should be fixed.
+    // Instead of the current code conversion, perhaps the function annotation
+    // should keep the function intact and create a wrapper that calls the
+    // function with the appropriate arguments. In that world, an implementation
+    // like the one in rust_series_map_idiomatic (below) would work.
+    let result = (0..series.borrow().len()).try_fold((), |(), i| {
+        let arg: DummyBoxRoot = series_get(cr, &arg_type, &series.borrow(), i)
+            .map_err(SeriesMapError::SeriesGetError)?;
+
+        match f.try_call(cr, &arg) {
+            Ok(return_value) => {
+                return_values.push(return_value.to_rust());
+                Ok(())
+            }
+            Err(exception) => {
+                let ocaml_exception = exception.root();
+
+                Err(SeriesMapError::FunctionCallError(ocaml_exception))
+            }
+        }
+    });
+
+    match result {
+        Err(SeriesMapError::SeriesGetError(error)) => Err(error)?,
+        Err(SeriesMapError::FunctionCallError(ocaml_exception)) => {
+            ocaml_interop::alloc_error(cr, &ocaml_exception)
+        }
+        Ok(()) => {
+            let series = series_new(
+                cr,
+                &return_type,
+                series.borrow().name(),
+                return_values.into_iter(),
+                true,
+            )?;
+
+            let ocaml_series = Abstract(Rc::new(RefCell::new(series))).to_ocaml(cr).root();
+
+            ocaml_interop::alloc_ok(cr, &ocaml_series)
+        }
+    }
+}
+
+#[allow(dead_code)]
+fn rust_series_map_idiomatic<'a>(
+    cr: &'a mut &'a mut OCamlRuntime,
+    arg_type: OCamlRef<'a, GADTDataType>,
+    return_type: OCamlRef<'a, GADTDataType>,
+    series: OCamlRef<'a, DynBox<PolarsSeries>>,
+    f: OCamlRef<'a, fn(DummyBoxRoot) -> DummyBoxRoot>,
+) -> Result<OCaml<'a, Result<DynBox<PolarsSeries>, OCamlException>>, String> {
+    let arg_type: GADTDataType = arg_type.to_rust(cr);
+    let return_type: GADTDataType = return_type.to_rust(cr);
+    let Abstract(series) = series.to_rust(cr);
+    let f = f.to_boxroot(cr);
+
+    let mut return_values = Vec::new();
+    for i in 0..series.borrow().len() {
+        let arg: DummyBoxRoot = series_get(cr, &arg_type, &series.borrow(), i)?;
+
+        match f.try_call(cr, &arg) {
+            Ok(return_value) => return_values.push(return_value.to_rust()),
+            Err(exception) => {
+                let ocaml_exception = exception.root();
+
+                return Ok(ocaml_interop::alloc_error(cr, &ocaml_exception));
+            }
+        }
+    }
+
+    let series = series_new(
+        cr,
+        &return_type,
+        series.borrow().name(),
+        return_values.into_iter(),
+        true,
+    )?;
+
+    let ocaml_series = Abstract(Rc::new(RefCell::new(series))).to_ocaml(cr).root();
+
+    Ok(ocaml_interop::alloc_ok(cr, &ocaml_series))
+}
+
+enum SeriesMapError {
+    SeriesGetError(String),
+    FunctionCallError(BoxRoot<OCamlException>),
 }
 
 #[ocaml_interop_export]

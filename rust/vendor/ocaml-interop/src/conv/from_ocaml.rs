@@ -2,11 +2,32 @@
 // SPDX-License-Identifier: MIT
 
 use crate::{
-    mlvalues::{field_val, OCamlBytes, OCamlFloat, OCamlInt, OCamlInt32, OCamlInt64, OCamlList},
+    mlvalues::{
+        field_val, tag, OCamlBytes, OCamlFloat, OCamlFloatArray, OCamlInt, OCamlInt32, OCamlInt64,
+        OCamlList, OCamlUniformArray,
+    },
     value::OCaml,
 };
+use ocaml_sys::caml_sys_double_field;
 
 /// Implements conversion from OCaml values into Rust values.
+///
+/// # Safety
+///
+/// Implementing this trait involves unsafe code that interacts with the OCaml runtime.
+/// Implementors must adhere to the following safety guidelines:
+///
+/// - **Valid OCaml Values**: The OCaml value passed to the `from_ocaml` function must be valid.
+///   The implementor is responsible for ensuring that the value is a correct and valid representation
+///   of the type `T` in OCaml. Passing an invalid or unrelated value may lead to undefined behavior.
+///
+/// - **Handling of OCaml Exceptions**: If the OCaml code can raise exceptions, the implementor
+///   must ensure these are appropriately handled. Uncaught OCaml exceptions should not be allowed
+///   to propagate into the Rust code, as they are not compatible with Rust's error handling mechanisms.
+///
+/// Implementors of this trait need to have a thorough understanding of the OCaml runtime, especially
+/// regarding value representation and memory management, to ensure safe and correct conversions
+/// from OCaml to Rust.
 pub unsafe trait FromOCaml<T> {
     /// Convert from OCaml value.
     fn from_ocaml(v: OCaml<T>) -> Self;
@@ -132,6 +153,43 @@ where
         while let Some((hd, tl)) = current.uncons() {
             current = tl;
             vec.push(A::from_ocaml(hd));
+        }
+        vec
+    }
+}
+
+unsafe impl<A, OCamlA> FromOCaml<OCamlUniformArray<OCamlA>> for Vec<A>
+where
+    A: FromOCaml<OCamlA>,
+{
+    fn from_ocaml(v: OCaml<OCamlUniformArray<OCamlA>>) -> Self {
+        assert!(
+            v.tag_value() != tag::DOUBLE_ARRAY,
+            "unboxed float arrays are not supported"
+        );
+
+        let size = unsafe { v.size() };
+        let mut vec = Vec::with_capacity(size);
+        for i in 0..size {
+            vec.push(A::from_ocaml(unsafe { v.field(i) }));
+        }
+        vec
+    }
+}
+
+unsafe impl FromOCaml<OCamlFloatArray> for Vec<f64> {
+    fn from_ocaml(v: OCaml<OCamlFloatArray>) -> Self {
+        let size = unsafe { v.size() };
+
+        // an empty floatarray doesn't have the double array tag, but otherwise
+        // we always expect an unboxed float array.
+        if size > 0 {
+            assert_eq!(v.tag_value(), tag::DOUBLE_ARRAY)
+        };
+
+        let mut vec = Vec::with_capacity(size);
+        for i in 0..size {
+            vec.push(unsafe { caml_sys_double_field(v.raw(), i) });
         }
         vec
     }

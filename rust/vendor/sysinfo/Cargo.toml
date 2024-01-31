@@ -13,7 +13,7 @@
 edition = "2018"
 rust-version = "1.63"
 name = "sysinfo"
-version = "0.29.10"
+version = "0.29.11"
 authors = ["Guillaume Gomez <guillaume1.gomez@gmail.com>"]
 exclude = ["/test-unknown"]
 description = "Library to get system information such as processes, CPUs, disks, components and networks"

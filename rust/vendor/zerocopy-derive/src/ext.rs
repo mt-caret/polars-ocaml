@@ -1,35 +1,44 @@
-// Copyright 2019 The Fuchsia Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style license that can be
-// found in the LICENSE file.
+// Copyright 2019 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
 
-use syn::{Data, DataEnum, DataStruct, DataUnion, Field, Fields, Type};
+use syn::{Data, DataEnum, DataStruct, DataUnion, Type};
 
 pub trait DataExt {
-    fn nested_types(&self) -> Vec<&Type>;
+    /// Extract the types of all fields. For enums, extract the types of fields
+    /// from each variant.
+    fn field_types(&self) -> Vec<&Type>;
 }
 
 impl DataExt for Data {
-    fn nested_types(&self) -> Vec<&Type> {
+    fn field_types(&self) -> Vec<&Type> {
         match self {
-            Data::Struct(strc) => strc.nested_types(),
-            Data::Enum(enm) => enm.nested_types(),
-            Data::Union(un) => un.nested_types(),
+            Data::Struct(strc) => strc.field_types(),
+            Data::Enum(enm) => enm.field_types(),
+            Data::Union(un) => un.field_types(),
         }
     }
 }
 
 impl DataExt for DataStruct {
-    fn nested_types(&self) -> Vec<&Type> {
-        fields_to_types(&self.fields)
+    fn field_types(&self) -> Vec<&Type> {
+        self.fields.iter().map(|f| &f.ty).collect()
     }
 }
 
 impl DataExt for DataEnum {
-    fn nested_types(&self) -> Vec<&Type> {
-        self.variants.iter().map(|var| fields_to_types(&var.fields)).fold(Vec::new(), |mut a, b| {
-            a.extend(b);
-            a
-        })
+    fn field_types(&self) -> Vec<&Type> {
+        self.variants.iter().flat_map(|var| &var.fields).map(|f| &f.ty).collect()
+    }
+}
+
+impl DataExt for DataUnion {
+    fn field_types(&self) -> Vec<&Type> {
+        self.fields.named.iter().map(|f| &f.ty).collect()
     }
 }
 
@@ -39,24 +48,6 @@ pub trait EnumExt {
 
 impl EnumExt for DataEnum {
     fn is_c_like(&self) -> bool {
-        self.nested_types().is_empty()
+        self.field_types().is_empty()
     }
-}
-
-impl DataExt for DataUnion {
-    fn nested_types(&self) -> Vec<&Type> {
-        field_iter_to_types(&self.fields.named)
-    }
-}
-
-fn fields_to_types(fields: &Fields) -> Vec<&Type> {
-    match fields {
-        Fields::Named(named) => field_iter_to_types(&named.named),
-        Fields::Unnamed(unnamed) => field_iter_to_types(&unnamed.unnamed),
-        Fields::Unit => Vec::new(),
-    }
-}
-
-fn field_iter_to_types<'a, I: IntoIterator<Item = &'a Field>>(fields: I) -> Vec<&'a Type> {
-    fields.into_iter().map(|f| &f.ty).collect()
 }

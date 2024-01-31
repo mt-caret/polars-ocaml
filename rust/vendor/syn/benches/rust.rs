@@ -18,6 +18,7 @@
 #[path = "../tests/macros/mod.rs"]
 mod macros;
 
+#[allow(dead_code)]
 #[path = "../tests/repo/mod.rs"]
 mod repo;
 
@@ -79,7 +80,7 @@ mod librustc_parse {
         rustc_span::create_session_if_not_set_then(Edition::Edition2018, |_| {
             let cm = Lrc::new(SourceMap::new(FilePathMapping::empty()));
             let emitter = Box::new(SilentEmitter);
-            let handler = Handler::with_emitter(false, None, emitter);
+            let handler = Handler::with_emitter(emitter);
             let sess = ParseSess::with_span_handler(handler, cm);
             if let Err(diagnostic) = rustc_parse::parse_crate_from_source_str(
                 FileName::Custom("bench".to_owned()),
@@ -107,9 +108,13 @@ fn exec(mut codepath: impl FnMut(&str) -> Result<(), ()>) -> Duration {
     let mut success = 0;
     let mut total = 0;
 
-    walkdir::WalkDir::new("tests/rust/src")
-        .into_iter()
-        .filter_entry(repo::base_dir_filter)
+    ["tests/rust/compiler", "tests/rust/library"]
+        .iter()
+        .flat_map(|dir| {
+            walkdir::WalkDir::new(dir)
+                .into_iter()
+                .filter_entry(repo::base_dir_filter)
+        })
         .for_each(|entry| {
             let entry = entry.unwrap();
             let path = entry.path();
