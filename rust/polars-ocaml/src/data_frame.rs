@@ -707,7 +707,7 @@ fn rust_data_frame_partition_by(
 }
 
 fn modify_series_at_chunk_index(
-    cr: &mut &mut OCamlRuntime,
+    cr: &&mut OCamlRuntime,
     data_frame: OCamlRef<DynBox<PolarsDataFrame>>,
     data_type: OCamlRef<GADTDataType>,
     series_index: OCamlRef<OCamlInt>,

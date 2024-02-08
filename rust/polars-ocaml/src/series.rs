@@ -1,3 +1,13 @@
+// Note: The macro modify_series_with_cast expands to contain a closure inside of a
+// closure, like this:
+//
+// .map(|(index, v)| {
+//     (
+//         index as usize,
+//         $perform_cast(v.interpret::<$ocaml_type>(cr).to_rust::<$rust_type>()),
+//     )
+// })
+#![allow(clippy::redundant_closure_call)]
 use crate::interop::*;
 use crate::polars_types::*;
 
@@ -1277,7 +1287,7 @@ fn modify_optional_native_series_at_chunk_index<T: NativeType>(
 }
 
 pub fn modify_series_at_chunk_index(
-    cr: &mut &mut OCamlRuntime,
+    cr: &&mut OCamlRuntime,
     series: &mut Series,
     data_type: OCamlRef<GADTDataType>,
     chunk_index: OCamlRef<OCamlInt>,
@@ -1325,7 +1335,7 @@ pub fn modify_series_at_chunk_index(
                             index as usize,
                             v.interpret::<Option<$ocaml_type>>(cr)
                                 .to_rust::<Option<$rust_type>>()
-                                .map(|v| $perform_cast(v)),
+                                .map($perform_cast),
                         )
                     })
                     .collect();
