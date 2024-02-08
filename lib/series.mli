@@ -103,9 +103,8 @@ val interpolate_exn : t -> method_:[ `Linear | `Nearest ] -> t
     the series, clearing this series will not clear the dataframe or clear the slice.
 
     Clearing the series will cause the series to lose access to its previous underlying
-    chunks, which will decrement any reference counts to those chunks.
-*)
-val clear: t -> unit
+    chunks, which will decrement any reference counts to those chunks. *)
+val clear : t -> unit
 
 val to_string_hum : t -> string
 val print : t -> unit
@@ -119,27 +118,26 @@ module Expert : sig
 
       This function will result in undesired behavior when applied to a series containing
       any null values -- use [modify_optional_series_at_chunk_index] to get proper null
-      handling.
-  *)
-  val modify_at_chunk_index :
-    t
+      handling. *)
+  val modify_at_chunk_index
+    :  t
     -> dtype:'a Data_type.Typed.t
-    -> chunk_index:int
-    (** The index of the chunk to modify, 0-indexed. *)
+    -> chunk_index:int (** The index of the chunk to modify, 0-indexed. *)
     -> indices_and_values:(int * 'a) list
-    (** A list of (index, value) tuples to set within the chunk. The index is 0-indexed
-        and refers to an index within the chunk, not the entire series. Therefore, index
-        should satisfy 0 <= index < chunk_length. *)
+         (** A list of (index, value) tuples to set within the chunk. The index is 0-indexed
+             and refers to an index within the chunk, not the entire series. Therefore, index
+             should satisfy 0 <= index < chunk_length. *)
     -> (unit, string) result
 
   (** Edit the values of a chunk in a nullable series. This does not automatically update
-    the null counts for the series; call [compute_null_count] after updating chunks. *)
-  val modify_optional_at_chunk_index:
-    t ->
-    dtype:'a Data_type.Typed.t ->
-    chunk_index:int ->
-    indices_and_values:(int * 'a option) list -> (unit, string) result
+      the null counts for the series; call [compute_null_count] after updating chunks. *)
+  val modify_optional_at_chunk_index
+    :  t
+    -> dtype:'a Data_type.Typed.t
+    -> chunk_index:int
+    -> indices_and_values:(int * 'a option) list
+    -> (unit, string) result
 
   (** Recompute the null counts for the series, if the cached null counts are stale. *)
-  val compute_null_count: t -> int
+  val compute_null_count : t -> int
 end

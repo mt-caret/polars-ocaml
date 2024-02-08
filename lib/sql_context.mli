@@ -24,10 +24,9 @@ val execute_with_data_frames_exn
     [vstack_and_execute ~names_and_data_frames:["data1", [df1; df2; df3]]]
     roughly translates to
     {[
-      let df = vstack [df1; df2; df3] in
-      execute_with_data_frames ~names_and_data_frames:["data1", df]
-    ]}
-*)
+      let df = vstack [ df1; df2; df3 ] in
+      execute_with_data_frames ~names_and_data_frames:[ "data1", df ]
+    ]} *)
 val vstack_and_execute
   :  names_and_data_frames:(string * Data_frame.t list) list
   -> query:string

@@ -142,7 +142,9 @@ module type Value_module = sig
   type t [@@deriving sexp_of, compare, quickcheck]
 end
 
-let data_type_value (type a) (data_type: a Data_type.Typed.t) : (module Value_module with type t = a) =
+let data_type_value (type a) (data_type : a Data_type.Typed.t)
+  : (module Value_module with type t = a)
+  =
   (module struct
     type t = a
 
@@ -152,3 +154,4 @@ let data_type_value (type a) (data_type: a Data_type.Typed.t) : (module Value_mo
     let sexp_of_t = value_to_sexp data_type
     let compare = value_compare data_type
   end)
+;;
