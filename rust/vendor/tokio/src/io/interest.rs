@@ -239,7 +239,7 @@ impl Interest {
 
         if self.is_error() {
             // There is no error interest in mio, because error events are always reported.
-            // But mio interests cannot be empty and an interest is needed just for the registeration.
+            // But mio interests cannot be empty and an interest is needed just for the registration.
             //
             // read readiness is filtered out in `Interest::mask` or `Ready::from_interest` if
             // the read interest was not specified by the user.
@@ -279,7 +279,7 @@ impl ops::BitOr for Interest {
 impl ops::BitOrAssign for Interest {
     #[inline]
     fn bitor_assign(&mut self, other: Self) {
-        *self = *self | other
+        *self = *self | other;
     }
 }
 

@@ -422,7 +422,7 @@ pub(crate) mod parsing {
     fn pat_box(begin: ParseBuffer, input: ParseStream) -> Result<Pat> {
         input.parse::<Token![box]>()?;
         Pat::parse_single(input)?;
-        Ok(Pat::Verbatim(verbatim::between(begin, input)))
+        Ok(Pat::Verbatim(verbatim::between(&begin, input)))
     }
 
     fn pat_ident(input: ParseStream) -> Result<PatIdent> {
@@ -543,17 +543,17 @@ pub(crate) mod parsing {
             Member::Unnamed(_) => unreachable!(),
         };
 
-        let mut pat = Pat::Ident(PatIdent {
-            attrs: Vec::new(),
-            by_ref,
-            mutability,
-            ident: ident.clone(),
-            subpat: None,
-        });
-
-        if boxed.is_some() {
-            pat = Pat::Verbatim(verbatim::between(begin, input));
-        }
+        let pat = if boxed.is_some() {
+            Pat::Verbatim(verbatim::between(&begin, input))
+        } else {
+            Pat::Ident(PatIdent {
+                attrs: Vec::new(),
+                by_ref,
+                mutability,
+                ident: ident.clone(),
+                subpat: None,
+            })
+        };
 
         Ok(FieldPat {
             attrs: Vec::new(),
@@ -762,7 +762,7 @@ pub(crate) mod parsing {
         content.call(Attribute::parse_inner)?;
         content.call(Block::parse_within)?;
 
-        Ok(verbatim::between(begin, input))
+        Ok(verbatim::between(&begin, input))
     }
 }
 

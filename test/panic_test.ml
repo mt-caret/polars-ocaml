@@ -16,8 +16,6 @@ let%expect_test "test" =
   [%expect.output]
   |> String.substr_replace_all ~pattern:"\\n" ~with_:"\n" (* Expand out newlines *)
   |> String.split_lines
-  |> List.filter ~f:(Fn.non (String.is_substring ~substring:" at "))
-     (* Lines containing " at " correpond to file paths, which are noisy *)
   |> Fn.flip List.take 3
      (* Don't bother printing the backtrace since it's super unstable across
         dev/release profiles, OSes, architectures, etc. *)

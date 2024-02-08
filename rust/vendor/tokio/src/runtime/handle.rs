@@ -228,7 +228,7 @@ impl Handle {
     /// When this is used on a `current_thread` runtime, only the
     /// [`Runtime::block_on`] method can drive the IO and timer drivers, but the
     /// `Handle::block_on` method cannot drive them. This means that, when using
-    /// this method on a current_thread runtime, anything that relies on IO or
+    /// this method on a `current_thread` runtime, anything that relies on IO or
     /// timers will not work unless there is another thread currently calling
     /// [`Runtime::block_on`] on the same runtime.
     ///
@@ -487,7 +487,7 @@ cfg_taskdump! {
         /// `.cargo/config.toml`:
         /// ```text
         /// [build]
-        /// rustflags = ["--cfg tokio_unstable", "--cfg tokio_taskdump"]
+        /// rustflags = ["--cfg", "tokio_unstable", "--cfg", "tokio_taskdump"]
         /// ```
         ///
         /// [cargo-config]:

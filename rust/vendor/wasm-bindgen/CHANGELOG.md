@@ -1,6 +1,76 @@
 # `wasm-bindgen` Change Log
 --------------------------------------------------------------------------------
 
+## [0.2.90](https://github.com/rustwasm/wasm-bindgen/compare/0.2.89...0.2.90)
+
+Released 2024-01-06
+
+### Fixed
+
+* Fix JS shim default path detection for the no-modules target.
+  [#3748](https://github.com/rustwasm/wasm-bindgen/pull/3748)
+
+### Added
+
+* Add bindings for `HTMLFormElement.requestSubmit()`.
+  [#3747](https://github.com/rustwasm/wasm-bindgen/pull/3747)
+
+* Add bindings for `RTCRtpSender.getCapabilities(DOMString)` method, `RTCRtpCapabilities`, `RTCRtpCodecCapability` and `RTCRtpHeaderExtensionCapability`.
+  [#3737](https://github.com/rustwasm/wasm-bindgen/pull/3737)
+
+* Add bindings for `UserActivation`.
+  [#3719](https://github.com/rustwasm/wasm-bindgen/pull/3719)
+
+* Add unstable bindings for the Compression Streams API.
+  [#3752](https://github.com/rustwasm/wasm-bindgen/pull/3752)
+
+### Changed
+
+* Stabilize File System API.
+  [#3745](https://github.com/rustwasm/wasm-bindgen/pull/3745)
+
+* Stabilize `QueuingStrategy`.
+  [#3753](https://github.com/rustwasm/wasm-bindgen/pull/3753)
+
+### Fixed
+
+* Fixed a compiler error when using `#[wasm_bindgen]` inside `macro_rules!`.
+  [#3725](https://github.com/rustwasm/wasm-bindgen/pull/3725)
+
+### Removed
+
+* Removed Gecko-only `InstallTriggerData` and Gecko-internal `FlexLineGrowthState`, `GridDeclaration`, `GridTrackState`,
+  `RtcLifecycleEvent` and `WebrtcGlobalStatisticsReport` features.
+  [#3723](https://github.com/rustwasm/wasm-bindgen/pull/3723)
+
+## [0.2.89](https://github.com/rustwasm/wasm-bindgen/compare/0.2.88...0.2.89)
+
+Released 2023-11-27.
+
+### Added
+
+* Add additional constructor to `DataView` for `SharedArrayBuffer`.
+  [#3695](https://github.com/rustwasm/wasm-bindgen/pull/3695)
+
+* Stabilize `wasm_bindgen::module()`.
+  [#3690](https://github.com/rustwasm/wasm-bindgen/pull/3690)
+
+### Fixed
+
+* The DWARF section is now correctly modified instead of leaving it in a broken state.
+  [#3483](https://github.com/rustwasm/wasm-bindgen/pull/3483)
+
+* Fixed an issue where `#[wasm_bindgen]` automatically derived the `TryFrom` trait for any struct, preventing custom `TryFrom<JsValue>` implementations. It has been updated to utilize a new `TryFromJsValue` trait instead.
+  [#3709](https://github.com/rustwasm/wasm-bindgen/pull/3709)
+
+* Update the TypeScript signature of `__wbindgen_thread_destroy` to indicate that it's parameters are optional.
+  [#3703](https://github.com/rustwasm/wasm-bindgen/pull/3703)
+
+### Removed
+
+* Removed Gecko-internal dictionary bindings `Csp`, `CspPolicies`, `CspReport` and `CspReportProperties`.
+  [#3721](https://github.com/rustwasm/wasm-bindgen/pull/3721)
+
 ## [0.2.88](https://github.com/rustwasm/wasm-bindgen/compare/0.2.87...0.2.88)
 
 Released 2023-11-01

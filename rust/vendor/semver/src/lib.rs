@@ -60,7 +60,7 @@
 //!
 //! [Specifying Dependencies]: https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html
 
-#![doc(html_root_url = "https://docs.rs/semver/1.0.20")]
+#![doc(html_root_url = "https://docs.rs/semver/1.0.21")]
 #![cfg_attr(doc_cfg, feature(doc_cfg))]
 #![cfg_attr(all(not(feature = "std"), not(no_alloc_crate)), no_std)]
 #![cfg_attr(not(no_unsafe_op_in_unsafe_fn_lint), deny(unsafe_op_in_unsafe_fn))]
@@ -76,7 +76,6 @@
     clippy::missing_errors_doc,
     clippy::must_use_candidate,
     clippy::needless_doctest_main,
-    clippy::option_if_let_else,
     clippy::ptr_as_ptr,
     clippy::redundant_else,
     clippy::semicolon_if_nothing_returned, // https://github.com/rust-lang/rust-clippy/issues/7324

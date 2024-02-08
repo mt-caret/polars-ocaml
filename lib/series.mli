@@ -67,6 +67,14 @@ val to_list : 'a Data_type.Typed.t -> t -> 'a list
 val to_option_list : 'a Data_type.Typed.t -> t -> 'a option list
 val get : 'a Data_type.Typed.t -> t -> int -> 'a option
 val get_exn : 'a Data_type.Typed.t -> t -> int -> 'a
+
+val map
+  :  'a Data_type.Typed.t
+  -> 'b Data_type.Typed.t
+  -> t
+  -> f:('a option -> 'b option)
+  -> t
+
 val name : t -> string
 val rename : t -> name:string -> unit
 val dtype : t -> Data_type.t

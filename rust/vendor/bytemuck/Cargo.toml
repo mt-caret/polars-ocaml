@@ -12,7 +12,7 @@
 [package]
 edition = "2018"
 name = "bytemuck"
-version = "1.14.0"
+version = "1.14.1"
 authors = ["Lokathor <zefria@gmail.com>"]
 exclude = ["/pedantic.bat"]
 description = "A crate for mucking around with piles of bytes."

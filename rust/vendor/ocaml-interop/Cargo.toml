@@ -12,7 +12,7 @@
 [package]
 edition = "2018"
 name = "ocaml-interop"
-version = "0.9.2"
+version = "0.10.0"
 authors = ["Bruno Deferrari <utizoc@gmail.com>"]
 exclude = [".github/*"]
 description = "Utilities for Rust and OCaml interoperability"
@@ -34,7 +34,7 @@ features = ["without-ocamlopt"]
 version = "0.2"
 
 [dependencies.ocaml-sys]
-version = "0.22"
+version = "0.23"
 
 [dependencies.static_assertions]
 version = "1.1.0"

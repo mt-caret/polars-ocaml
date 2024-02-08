@@ -1,6 +1,10 @@
-// Copyright 2019 The Fuchsia Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style license that can be
-// found in the LICENSE file.
+// Copyright 2019 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
 
 #![allow(warnings)]
 
@@ -58,3 +62,18 @@ struct TypeParams<'a, T: ?Sized, I: Iterator> {
 assert_impl_all!(TypeParams<'static, (), IntoIter<()>>: FromBytes);
 assert_impl_all!(TypeParams<'static, AU16, IntoIter<()>>: FromBytes);
 assert_impl_all!(TypeParams<'static, [AU16], IntoIter<()>>: FromBytes);
+
+// Deriving `FromBytes` should work if the struct has bounded parameters.
+
+#[derive(FromZeroes, FromBytes)]
+#[repr(transparent)]
+struct WithParams<'a: 'b, 'b: 'a, const N: usize, T: 'a + 'b + FromBytes>(
+    [T; N],
+    PhantomData<&'a &'b ()>,
+)
+where
+    'a: 'b,
+    'b: 'a,
+    T: 'a + 'b + FromBytes;
+
+assert_impl_all!(WithParams<'static, 'static, 42, u8>: FromBytes);

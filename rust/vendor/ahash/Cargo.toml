@@ -11,8 +11,9 @@
 
 [package]
 edition = "2018"
+rust-version = "1.60.0"
 name = "ahash"
-version = "0.8.5"
+version = "0.8.7"
 authors = ["Tom Kaitchuck <Tom.Kaitchuck@gmail.com>"]
 build = "./build.rs"
 exclude = [
@@ -92,7 +93,7 @@ optional = true
 version = "1.0"
 
 [dependencies.const-random]
-version = "0.1.12"
+version = "0.1.17"
 optional = true
 
 [dependencies.getrandom]
@@ -104,7 +105,7 @@ version = "1.0.117"
 optional = true
 
 [dependencies.zerocopy]
-version = "0.7.0"
+version = "0.7.31"
 features = ["simd"]
 default-features = false
 
@@ -149,14 +150,12 @@ default = [
     "std",
     "runtime-rng",
 ]
+nightly-arm-aes = []
 no-rng = []
 runtime-rng = ["getrandom"]
 std = []
 
 [target."cfg(not(all(target_arch = \"arm\", target_os = \"none\")))".dependencies.once_cell]
-version = "1.13.1"
-features = [
-    "unstable",
-    "alloc",
-]
+version = "1.18.0"
+features = ["alloc"]
 default-features = false

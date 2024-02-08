@@ -215,7 +215,7 @@ pub mod error {
 
     use std::fmt;
 
-    /// Error returned by from the [`send`] function on a [`Sender`].
+    /// Error returned by the [`send`] function on a [`Sender`].
     ///
     /// A **send** operation can only fail if there are no active receivers,
     /// implying that the message could never be received. The error contains the
@@ -299,7 +299,7 @@ pub mod error {
     impl std::error::Error for TryRecvError {}
 }
 
-use self::error::*;
+use self::error::{RecvError, SendError, TryRecvError};
 
 /// Data shared between senders and receivers.
 struct Shared<T> {
@@ -479,7 +479,7 @@ impl<T> Sender<T> {
     /// See the documentation of [`broadcast::channel`] for more information on this method.
     ///
     /// [`broadcast`]: crate::sync::broadcast
-    /// [`broadcast::channel`]: crate::sync::broadcast
+    /// [`broadcast::channel`]: crate::sync::broadcast::channel
     #[track_caller]
     pub fn new(capacity: usize) -> Self {
         // SAFETY: We don't create extra receivers, so there are 0.
@@ -817,9 +817,7 @@ impl<T> Sender<T> {
 fn new_receiver<T>(shared: Arc<Shared<T>>) -> Receiver<T> {
     let mut tail = shared.tail.lock();
 
-    if tail.rx_cnt == MAX_RECEIVERS {
-        panic!("max receivers");
-    }
+    assert!(tail.rx_cnt != MAX_RECEIVERS, "max receivers");
 
     tail.rx_cnt = tail.rx_cnt.checked_add(1).expect("overflow");
 

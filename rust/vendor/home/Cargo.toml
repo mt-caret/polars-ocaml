@@ -10,9 +10,10 @@
 # See Cargo.toml.orig for the original contents.
 
 [package]
-edition = "2018"
+edition = "2021"
+rust-version = "1.70.0"
 name = "home"
-version = "0.5.5"
+version = "0.5.9"
 authors = ["Brian Anderson <andersrb@gmail.com>"]
 include = [
     "/src",
@@ -26,11 +27,28 @@ documentation = "https://docs.rs/home"
 readme = "README.md"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/rust-lang/cargo"
-resolver = "2"
 
 [target."cfg(windows)".dependencies.windows-sys]
-version = "0.48.0"
+version = "0.52"
 features = [
     "Win32_Foundation",
     "Win32_UI_Shell",
+    "Win32_System_Com",
 ]
+
+[lints.clippy]
+dbg_macro = "warn"
+disallowed_methods = "warn"
+print_stderr = "warn"
+print_stdout = "warn"
+self_named_module_files = "warn"
+
+[lints.clippy.all]
+level = "allow"
+priority = -1
+
+[lints.rust]
+rust_2018_idioms = "warn"
+
+[lints.rustdoc]
+private_intra_doc_links = "allow"

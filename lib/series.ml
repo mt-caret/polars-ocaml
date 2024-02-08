@@ -199,6 +199,18 @@ module T = struct
 
   let get_exn data_type t i = get data_type t i |> Option.value_exn ~here:[%here]
 
+  external map
+    :  'a Data_type.Typed.t
+    -> 'b Data_type.Typed.t
+    -> t
+    -> f:('a option -> 'b option)
+    -> (t, exn) result
+    = "rust_series_map"
+
+  let map input_data_type output_data_type t ~f =
+    map input_data_type output_data_type t ~f |> Result.ok_exn
+  ;;
+
   external name : t -> string = "rust_series_name"
   external rename : t -> name:string -> unit = "rust_series_rename"
   external dtype : t -> Data_type.t = "rust_series_dtype"
