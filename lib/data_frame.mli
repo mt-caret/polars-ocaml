@@ -220,3 +220,32 @@ val schema : t -> Schema.t
 val to_string_hum : t -> string
 val print : t -> unit
 val pp : Format.formatter -> t -> unit [@@ocaml.toplevel_printer]
+
+module Expert : sig
+  (** Edit the values of a chunk of a non-nullable series in a dataframe.
+
+      This function will result in undesired behavior when applied to a series containing
+      any null values -- use [modify_optional_series_at_chunk_index] to get proper null
+      handling. *)
+  val modify_series_at_chunk_index
+    :  t
+    -> dtype:'a Data_type.Typed.t
+    -> series_index:int (** The column number of the series to modify, 0-indexed. *)
+    -> chunk_index:int
+         (** Within the series, this is the index of the chunk to modify, 0-indexed. *)
+    -> indices_and_values:(int * 'a) list
+         (** A list of (index, value) tuples to set within the chunk. The index is 0-indexed
+             and refers to an index within the chunk, not the entire series. Therefore, index
+             should satisfy 0 <= index < chunk_length. *)
+    -> (unit, string) result
+
+  val modify_optional_series_at_chunk_index
+    :  t
+    -> dtype:'a Data_type.Typed.t
+    -> series_index:int
+    -> chunk_index:int
+    -> indices_and_values:(int * 'a option) list
+    -> (unit, string) result
+
+  val clear_mut : t -> unit
+end

@@ -366,3 +366,72 @@ include Pretty_printer.Register (struct
     let module_name = "Polars.Data_frame"
     let to_string = to_string_hum
   end)
+
+module Expert = struct
+  external modify_series_at_chunk_index_exn
+    :  t
+    -> dtype:'a Data_type.Typed.t
+    -> series_index:int
+    -> chunk_index:int
+    -> indices_and_values:(int * 'a) list
+    -> (unit, string) result
+    = "rust_data_frame_modify_series_at_chunk_index"
+
+  let modify_series_at_chunk_index t ~dtype ~series_index ~chunk_index ~indices_and_values
+    =
+    match
+      Or_error.try_with (fun () ->
+        modify_series_at_chunk_index_exn
+          t
+          ~dtype
+          ~series_index
+          ~chunk_index
+          ~indices_and_values)
+    with
+    | Ok result -> result
+    | Error error ->
+      Error
+        (sprintf
+           "modify_series_at_chunk_index_exn raised an exception. Usually this happens \
+            when accessing an index out of bounds of the chunk or passing in a value \
+            outside of the domain of dtype: %s"
+           (Error.to_string_hum error))
+  ;;
+
+  external modify_optional_series_at_chunk_index_exn
+    :  t
+    -> dtype:'a Data_type.Typed.t
+    -> series_index:int
+    -> chunk_index:int
+    -> indices_and_values:(int * 'a option) list
+    -> (unit, string) result
+    = "rust_data_frame_modify_optional_series_at_chunk_index"
+
+  let modify_optional_series_at_chunk_index
+    t
+    ~dtype
+    ~series_index
+    ~chunk_index
+    ~indices_and_values
+    =
+    match
+      Or_error.try_with (fun () ->
+        modify_optional_series_at_chunk_index_exn
+          t
+          ~dtype
+          ~series_index
+          ~chunk_index
+          ~indices_and_values)
+    with
+    | Ok result -> result
+    | Error error ->
+      Error
+        (sprintf
+           "modify_series_at_chunk_index_exn raised an exception. Usually this happens \
+            when accessing an index out of bounds of the chunk or passing in a value \
+            outside of the domain of dtype: %s"
+           (Error.to_string_hum error))
+  ;;
+
+  external clear_mut : t -> unit = "rust_data_frame_clear_mut"
+end
