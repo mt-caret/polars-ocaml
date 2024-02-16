@@ -3,6 +3,7 @@ FROM ubuntu:22.04
 LABEL org.opencontainers.image.source=https://github.com/mt-caret/polars-ocaml
 
 RUN apt-get update && apt-get install -y \
+    tar \
     curl \
     build-essential \
     opam \
