@@ -206,8 +206,8 @@ let%expect_test "Multiple" =
           Exn.to_string exn
           (* We truncate the directory portion of the path since it is unstable. *)
           |> Re2.replace_exn
-               ~f:(fun _ -> "my_many_files")
-               (Re2.create_exn "/.*my_many_files")
+               ~f:(fun _ -> ": my_many_files")
+               (Re2.create_exn ":.*my_many_files")
           |> Failure
         in
         raise exn));

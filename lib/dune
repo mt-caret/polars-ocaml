@@ -1,39 +1,12 @@
-(rule
- (deps
-  (source_tree ../rust))
- (targets libpolars_ocaml.a dllpolars_ocaml.so)
- (enabled_if
-  (= %{profile} release))
- (action
-  (no-infer
-   (progn
-    (chdir
-     ../rust
-     (run cargo build --release))
-    (copy ../rust/target/release/libpolars_ocaml.so dllpolars_ocaml.so)
-    (copy ../rust/target/release/libpolars_ocaml.a libpolars_ocaml.a)))))
-
-(rule
- (deps
-  (source_tree ../rust))
- (targets libpolars_ocaml.a dllpolars_ocaml.so)
- (enabled_if
-  (not
-   (= %{profile} release)))
- (action
-  (no-infer
-   (progn
-    (chdir
-     ../rust
-     (run cargo build))
-    (copy ../rust/target/debug/libpolars_ocaml.so dllpolars_ocaml.so)
-    (copy ../rust/target/debug/libpolars_ocaml.a libpolars_ocaml.a)))))
-
 (library
  (name polars)
  (public_name polars)
- (foreign_archives polars_ocaml)
- (libraries core core_kernel.nonempty_list core_unix core_unix.time_ns_unix)
+ (libraries
+  core
+  core_kernel.nonempty_list
+  core_unix
+  core_unix.time_ns_unix
+  polars_bindings)
  (inline_tests)
  (preprocess
   (pps ppx_jane ppx_typed_fields)))
@@ -42,8 +15,3 @@
  (files :standard - *.mli)
  (libraries core core_kernel.nonempty_list polars)
  (preludes mdx_prelude/mdx_prelude.txt))
-
-(env
- (utop
-  (env-vars
-   (OCAML_INTEROP_NO_CAML_STARTUP true))))
