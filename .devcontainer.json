@@ -1,15 +1,14 @@
 {
-    "name": "polars-ocaml dev",
-    "build": {
-        "cacheFrom": "ghcr.io/mt-caret/polars-ocaml",
-        "dockerfile": "Dockerfile"
-    },
-    "customizations": {
-        "vscode": {
-            "extensions": [
-                "rust-lang.rust-analyzer",
-                "ocamllabs.ocaml-platform"
-            ]
-        }
+  "name": "polars-ocaml dev",
+  "build": {
+    "cacheFrom": "ghcr.io/mt-caret/polars-ocaml"
+  },
+  "containerUser": "opam",
+  "customizations": {
+    "vscode": {
+      "extensions": ["rust-lang.rust-analyzer", "ocamllabs.ocaml-platform"]
     }
+  },
+  "dockerFile": "Dockerfile",
+  "remoteUser": "opam"
 }
