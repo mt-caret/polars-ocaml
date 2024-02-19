@@ -5,9 +5,8 @@ use ocaml_interop::{
     polymorphic_variant_tag_hash, DynBox, FromOCaml, OCaml, OCamlInt, OCamlList, OCamlRuntime,
     ToOCaml,
 };
-use polars::datatypes::RevMapping;
+use polars::prelude::*;
 use polars::series::IsSorted;
-use polars::{lazy::dsl::WindowMapping, prelude::*};
 use smartstring::{LazyCompact, SmartString};
 
 #[derive(Debug, Clone)]
