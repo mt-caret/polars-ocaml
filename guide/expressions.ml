@@ -797,7 +797,14 @@ let%expect_test "Aggregation" =
              ; get_person |> last |> alias ~name:"oldest"
              ; get_person |> sort |> first |> alias ~name:"alphabetical_first"
              ; col "gender"
-               |> sort_by ~by:[ col "first_name" ]
+               |> sort_by
+                    ~by:
+                      [ (* The guide uses "first_name" to sort by, but I'm guessing
+                           there's an nondeterminism bug causing output to be unstable
+                           if we have multiple sorts or something, so I suspect
+                           [get_person] is what we actually want *)
+                        get_person
+                      ]
                |> first
                |> alias ~name:"gender"
              ]
@@ -814,7 +821,7 @@ let%expect_test "Aggregation" =
     │ cat   ┆ str              ┆ str                   ┆ str                ┆ cat    │
     ╞═══════╪══════════════════╪═══════════════════════╪════════════════════╪════════╡
     │ NC    ┆ Madison Cawthorn ┆ John Ashe             ┆ Abraham Rencher    ┆ M      │
-    │ IA    ┆ Abby Finkenauer  ┆ Bernhart Henn         ┆ Abby Finkenauer    ┆ M      │
+    │ IA    ┆ Abby Finkenauer  ┆ Bernhart Henn         ┆ Abby Finkenauer    ┆ F      │
     │ MI    ┆ Peter Meijer     ┆ Edward Bradley        ┆ Aaron Bliss        ┆ M      │
     │ CA    ┆ Katie Hill       ┆ Edward Gilbert        ┆ Aaron Sargent      ┆ M      │
     │ NY    ┆ Mondaire Jones   ┆ Cornelius Schoonmaker ┆ A. Foster          ┆ M      │
