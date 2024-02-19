@@ -20,11 +20,12 @@ type t =
   | Time
   | List of t
   | Null
+  | Categorical of Rev_mapping.t option
   | Struct of (string * t) list
   | Unknown
-[@@deriving compare, sexp, quickcheck]
+[@@deriving compare, sexp_of, quickcheck]
 
-include Stringable.S with type t := t
+val to_string : t -> string
 
 module Typed : sig
     type untyped

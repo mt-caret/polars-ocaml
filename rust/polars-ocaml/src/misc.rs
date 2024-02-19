@@ -32,6 +32,17 @@ fn rust_schema_to_fields(
 }
 
 #[ocaml_interop_export]
+fn rust_rev_mapping_get_categories(
+    cr: &mut &mut OCamlRuntime,
+    rev_mapping: OCamlRef<DynBox<Arc<RevMapping>>>,
+) -> OCaml<OCamlList<String>> {
+    let Abstract(rev_mapping) = rev_mapping.to_rust(cr);
+    let rev_mapping: Vec<_> = rev_mapping.get_categories().values_iter().collect();
+
+    rev_mapping.to_ocaml(cr)
+}
+
+#[ocaml_interop_export]
 fn rust_test_panic(cr: &mut &mut OCamlRuntime, error_message: OCamlRef<String>) -> OCaml<()> {
     let error_message: String = error_message.to_rust(cr);
 

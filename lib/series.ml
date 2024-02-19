@@ -211,6 +211,15 @@ module T = struct
     map input_data_type output_data_type t ~f |> Result.ok_exn
   ;;
 
+  external cast
+    :  t
+    -> to_:Data_type.t
+    -> strict:bool
+    -> (t, string) result
+    = "rust_series_cast"
+
+  let cast ?(strict = true) t ~to_ = cast t ~to_ ~strict |> Utils.string_result_ok_exn
+
   external name : t -> string = "rust_series_name"
   external rename : t -> name:string -> unit = "rust_series_rename"
   external dtype : t -> Data_type.t = "rust_series_dtype"
