@@ -924,6 +924,11 @@ fn rust_series_get(
     series_get(cr, &data_type, &series, index)?.to_ocaml(cr)
 }
 
+enum SeriesMapError {
+    SeriesGetError(String),
+    FunctionCallError(BoxRoot<OCamlException>),
+}
+
 #[ocaml_interop_export(raise_on_err)]
 fn rust_series_map(
     cr: &mut &mut OCamlRuntime,
@@ -1029,9 +1034,25 @@ fn rust_series_map_idiomatic<'a>(
     Ok(ocaml_interop::alloc_ok(cr, &ocaml_series))
 }
 
-enum SeriesMapError {
-    SeriesGetError(String),
-    FunctionCallError(BoxRoot<OCamlException>),
+#[ocaml_interop_export]
+fn rust_series_cast(
+    cr: &mut &mut OCamlRuntime,
+    series: OCamlRef<DynBox<PolarsSeries>>,
+    dtype: OCamlRef<DataType>,
+    is_strict: OCamlRef<bool>,
+) -> OCaml<Result<DynBox<PolarsSeries>, String>> {
+    let PolarsDataType(dtype) = dtype.to_rust(cr);
+    let is_strict: bool = is_strict.to_rust(cr);
+
+    dyn_box_result(cr, series, |series| {
+        let series = series.borrow();
+        if is_strict {
+            series.strict_cast(&dtype)
+        } else {
+            series.cast(&dtype)
+        }
+        .map(|s| Rc::new(RefCell::new(s)))
+    })
 }
 
 #[ocaml_interop_export]

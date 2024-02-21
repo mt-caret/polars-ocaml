@@ -75,6 +75,7 @@ val map
   -> f:('a option -> 'b option)
   -> t
 
+val cast : ?strict:bool -> t -> to_:Data_type.t -> t
 val name : t -> string
 val rename : t -> name:string -> unit
 val dtype : t -> Data_type.t

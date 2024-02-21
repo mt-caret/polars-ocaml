@@ -561,11 +561,11 @@ let%expect_test "Casting" =
 let%expect_test "Aggregation" =
   let schema =
     Schema.create
-      [ "first_name", Utf8
-      ; "gender", Utf8
-      ; "type", Utf8
-      ; "state", Utf8
-      ; "party", Utf8
+      [ "first_name", Categorical None
+      ; "gender", Categorical None
+      ; "type", Categorical None
+      ; "state", Categorical None
+      ; "party", Categorical None
       ; "birthday", Date
       ]
   in
@@ -582,7 +582,7 @@ let%expect_test "Aggregation" =
     ┌────────────┬────────────┬────────────┬────────┬───┬───────────┬───────────┬──────────┬───────────┐
     │ last_name  ┆ first_name ┆ middle_nam ┆ suffix ┆ … ┆ ballotped ┆ washingto ┆ icpsr_id ┆ wikipedia │
     │ ---        ┆ ---        ┆ e          ┆ ---    ┆   ┆ ia_id     ┆ n_post_id ┆ ---      ┆ _id       │
-    │ str        ┆ str        ┆ ---        ┆ str    ┆   ┆ ---       ┆ ---       ┆ i64      ┆ ---       │
+    │ str        ┆ cat        ┆ ---        ┆ str    ┆   ┆ ---       ┆ ---       ┆ i64      ┆ ---       │
     │            ┆            ┆ str        ┆        ┆   ┆ str       ┆ str       ┆          ┆ str       │
     ╞════════════╪════════════╪════════════╪════════╪═══╪═══════════╪═══════════╪══════════╪═══════════╡
     │ Bassett    ┆ Richard    ┆ null       ┆ null   ┆ … ┆ null      ┆ null      ┆ 507      ┆ Richard   │
@@ -627,7 +627,7 @@ let%expect_test "Aggregation" =
     ┌────────────┬───────┬───────────────────┬───────────┐
     │ first_name ┆ count ┆ gender            ┆ last_name │
     │ ---        ┆ ---   ┆ ---               ┆ ---       │
-    │ str        ┆ u32   ┆ list[str]         ┆ str       │
+    │ cat        ┆ u32   ┆ list[cat]         ┆ str       │
     ╞════════════╪═══════╪═══════════════════╪═══════════╡
     │ John       ┆ 1256  ┆ ["M", "M", … "M"] ┆ Walker    │
     │ William    ┆ 1022  ┆ ["M", "M", … "M"] ┆ Few       │
@@ -655,7 +655,7 @@ let%expect_test "Aggregation" =
     ┌───────┬──────┬─────┐
     │ state ┆ anti ┆ pro │
     │ ---   ┆ ---  ┆ --- │
-    │ str   ┆ u32  ┆ u32 │
+    │ cat   ┆ u32  ┆ u32 │
     ╞═══════╪══════╪═════╡
     │ NJ    ┆ 0    ┆ 3   │
     │ CT    ┆ 0    ┆ 3   │
@@ -684,7 +684,7 @@ let%expect_test "Aggregation" =
     ┌───────┬─────────────────────┬───────┐
     │ state ┆ party               ┆ count │
     │ ---   ┆ ---                 ┆ ---   │
-    │ str   ┆ str                 ┆ u32   │
+    │ cat   ┆ cat                 ┆ u32   │
     ╞═══════╪═════════════════════╪═══════╡
     │ NJ    ┆ Pro-Administration  ┆ 3     │
     │ VA    ┆ Anti-Administration ┆ 3     │
@@ -720,7 +720,7 @@ let%expect_test "Aggregation" =
     ┌───────┬────────────────┬────────────────┬────────┬──────────┐
     │ state ┆ avg M birthday ┆ avg F birthday ┆ # male ┆ # female │
     │ ---   ┆ ---            ┆ ---            ┆ ---    ┆ ---      │
-    │ str   ┆ f64            ┆ f64            ┆ u32    ┆ u32      │
+    │ cat   ┆ f64            ┆ f64            ┆ u32    ┆ u32      │
     ╞═══════╪════════════════╪════════════════╪════════╪══════════╡
     │ DE    ┆ 182.593407     ┆ null           ┆ 97     ┆ 0        │
     │ VA    ┆ 192.542781     ┆ 66.2           ┆ 430    ┆ 5        │
@@ -749,7 +749,7 @@ let%expect_test "Aggregation" =
     ┌───────┬──────────────────┬───────────────────────┐
     │ state ┆ youngest         ┆ oldest                │
     │ ---   ┆ ---              ┆ ---                   │
-    │ str   ┆ str              ┆ str                   │
+    │ cat   ┆ str              ┆ str                   │
     ╞═══════╪══════════════════╪═══════════════════════╡
     │ NC    ┆ Madison Cawthorn ┆ John Ashe             │
     │ IA    ┆ Abby Finkenauer  ┆ Bernhart Henn         │
@@ -778,7 +778,7 @@ let%expect_test "Aggregation" =
     ┌───────┬──────────────────┬───────────────────────┬────────────────────┐
     │ state ┆ youngest         ┆ oldest                ┆ alphabetical_first │
     │ ---   ┆ ---              ┆ ---                   ┆ ---                │
-    │ str   ┆ str              ┆ str                   ┆ str                │
+    │ cat   ┆ str              ┆ str                   ┆ str                │
     ╞═══════╪══════════════════╪═══════════════════════╪════════════════════╡
     │ NC    ┆ Madison Cawthorn ┆ John Ashe             ┆ Abraham Rencher    │
     │ IA    ┆ Abby Finkenauer  ┆ Bernhart Henn         ┆ Abby Finkenauer    │
@@ -797,11 +797,17 @@ let%expect_test "Aggregation" =
              ; get_person |> last |> alias ~name:"oldest"
              ; get_person |> sort |> first |> alias ~name:"alphabetical_first"
              ; col "gender"
-               |> sort_by ~by:[ col "first_name" ]
+               |> sort_by
+                    ~by:
+                      [ (* The guide uses "first_name" to sort by, but I'm guessing
+                           there's an nondeterminism bug causing output to be unstable
+                           if we have multiple sorts or something, so I suspect
+                           [get_person] is what we actually want *)
+                        get_person
+                      ]
                |> first
                |> alias ~name:"gender"
              ]
-    |> Lazy_frame.sort ~by_column:"state"
     |> Lazy_frame.limit ~n:5
     |> Lazy_frame.collect_exn
   in
@@ -809,17 +815,17 @@ let%expect_test "Aggregation" =
   [%expect
     {|
     shape: (5, 5)
-    ┌───────┬──────────────────┬────────────────┬────────────────────┬────────┐
-    │ state ┆ youngest         ┆ oldest         ┆ alphabetical_first ┆ gender │
-    │ ---   ┆ ---              ┆ ---            ┆ ---                ┆ ---    │
-    │ str   ┆ str              ┆ str            ┆ str                ┆ str    │
-    ╞═══════╪══════════════════╪════════════════╪════════════════════╪════════╡
-    │ AK    ┆ Mark Begich      ┆ Thomas Cale    ┆ Anthony Dimond     ┆ M      │
-    │ AL    ┆ Martha Roby      ┆ John McKee     ┆ Albert Goodwyn     ┆ M      │
-    │ AR    ┆ Tim Griffin      ┆ Archibald Yell ┆ Albert Rust        ┆ M      │
-    │ AS    ┆ Eni Faleomavaega ┆ Fofó Sunia     ┆ Eni Faleomavaega   ┆ M      │
-    │ AZ    ┆ Ben Quayle       ┆ Coles Bashford ┆ Ann Kirkpatrick    ┆ F      │
-    └───────┴──────────────────┴────────────────┴────────────────────┴────────┘ |}]
+    ┌───────┬──────────────────┬───────────────────────┬────────────────────┬────────┐
+    │ state ┆ youngest         ┆ oldest                ┆ alphabetical_first ┆ gender │
+    │ ---   ┆ ---              ┆ ---                   ┆ ---                ┆ ---    │
+    │ cat   ┆ str              ┆ str                   ┆ str                ┆ cat    │
+    ╞═══════╪══════════════════╪═══════════════════════╪════════════════════╪════════╡
+    │ NC    ┆ Madison Cawthorn ┆ John Ashe             ┆ Abraham Rencher    ┆ M      │
+    │ IA    ┆ Abby Finkenauer  ┆ Bernhart Henn         ┆ Abby Finkenauer    ┆ F      │
+    │ MI    ┆ Peter Meijer     ┆ Edward Bradley        ┆ Aaron Bliss        ┆ M      │
+    │ CA    ┆ Katie Hill       ┆ Edward Gilbert        ┆ Aaron Sargent      ┆ M      │
+    │ NY    ┆ Mondaire Jones   ┆ Cornelius Schoonmaker ┆ A. Foster          ┆ M      │
+    └───────┴──────────────────┴───────────────────────┴────────────────────┴────────┘ |}]
 ;;
 
 (* Examples from https://pola-rs.github.io/polars-book/user-guide/expressions/null/ *)

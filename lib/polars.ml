@@ -14,5 +14,6 @@ module Naive_time = Naive_time
 module Schema = Schema
 module Series = Series
 module Sql_context = Sql_context
+module Rev_mapping = Rev_mapping
 module Time_unit = Time_unit
 module Tz = Tz

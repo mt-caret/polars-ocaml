@@ -1,40 +1,38 @@
 open! Core
 
-module T = struct
-  type t =
-    | Boolean
-    | UInt8
-    | UInt16
-    | UInt32
-    | UInt64
-    | Int8
-    | Int16
-    | Int32
-    | Int64
-    | Float32
-    | Float64
-    | Utf8
-    | Binary
-    | Date
-    | Datetime of Time_unit.t * Tz.t option
-    | Duration of Time_unit.t
-    | Time
-    | List of t
-    (* We want this branch to be tested very well, since code dealing with
-       this recursive case is usually the most non-trivial portion of the
-       logic. *)
-    [@quickcheck.weight 10.]
-    | Null
-    | Struct of (string * t) list
-    | Unknown
-  [@@deriving compare, sexp, quickcheck]
-end
+type t =
+  | Boolean
+  | UInt8
+  | UInt16
+  | UInt32
+  | UInt64
+  | Int8
+  | Int16
+  | Int32
+  | Int64
+  | Float32
+  | Float64
+  | Utf8
+  | Binary
+  | Date
+  | Datetime of Time_unit.t * Tz.t option
+  | Duration of Time_unit.t
+  | Time
+  | List of t
+  (* We want this branch to be tested very well, since code dealing with
+     this recursive case is usually the most non-trivial portion of the
+     logic. *)
+  [@quickcheck.weight 10.]
+  | Null
+  | Categorical of (Rev_mapping.t[@compare.ignore]) option [@quickcheck.do_not_generate]
+  | Struct of (string * t) list
+  | Unknown
+[@@deriving compare, sexp_of, quickcheck]
 
-include T
-include Sexpable.To_stringable (T)
+let to_string t = Sexp.to_string ([%sexp_of: t] t)
 
 module Typed = struct
-  type untyped = t [@@deriving compare, sexp, quickcheck]
+  type untyped = t [@@deriving compare, sexp_of, quickcheck]
 
   (* TODO: Consider mapping to smaller OCaml values like Int8, Float32, etc instead of
      casting up *)
@@ -157,7 +155,7 @@ module Typed = struct
     | Duration time_unit -> Some (T (Duration time_unit))
     | Time -> Some (T Time)
     | List t -> of_untyped t |> Option.map ~f:(fun (T t) -> T (List t))
-    | Null | Struct _ | Unknown -> None
+    | Null | Categorical _ | Struct _ | Unknown -> None
   ;;
 
   let rec sexp_of_packed (T t) =

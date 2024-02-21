@@ -5,7 +5,6 @@ use chrono::{Duration, NaiveDate, NaiveDateTime, NaiveTime};
 use ocaml_interop::{
     DynBox, OCaml, OCamlBytes, OCamlFloat, OCamlInt, OCamlList, OCamlRef, OCamlRuntime, ToOCaml,
 };
-use polars::lazy::dsl::GetOutput;
 use polars::prelude::*;
 use polars::series::IsSorted;
 use polars_ocaml_macros::ocaml_interop_export;

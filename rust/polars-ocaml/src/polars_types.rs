@@ -5,8 +5,8 @@ use ocaml_interop::{
     polymorphic_variant_tag_hash, DynBox, FromOCaml, OCaml, OCamlInt, OCamlList, OCamlRuntime,
     ToOCaml,
 };
+use polars::prelude::*;
 use polars::series::IsSorted;
-use polars::{lazy::dsl::WindowMapping, prelude::*};
 use smartstring::{LazyCompact, SmartString};
 
 #[derive(Debug, Clone)]
@@ -71,6 +71,10 @@ unsafe impl FromOCaml<DataType> for PolarsDataType {
                     DataType::List(Box::new(datatype))
                 },
                 DataType::Null,
+                DataType::Categorical(local_rev_mapping_opt: Option<DynBox<Arc<RevMapping>>>) => {
+                    let local_rev_mapping_opt: Option<Abstract<Arc<RevMapping>>> = local_rev_mapping_opt;
+                    DataType::Categorical(local_rev_mapping_opt.map(Abstract::get))
+                },
                 DataType::Struct(fields: OCamlList<(String, DataType)>) => {
                     let fields_: Vec<(String, PolarsDataType)> = fields;
                     let fields: Vec<Field> =
@@ -134,12 +138,16 @@ unsafe impl ToOCaml<DataType> for PolarsDataType {
                     ocaml_alloc_tagged_block!(cr, 2, datatype: DataType)
                 }
                 DataType::Null => ocaml_value(cr, 15),
+                DataType::Categorical(local_rev_mapping_opt) => {
+                    let local_rev_mapping_opt = local_rev_mapping_opt.clone().map(Abstract);
+                    ocaml_alloc_tagged_block!(cr, 3, local_rev_mapping_opt: Option<DynBox<Arc<RevMapping>>>)
+                }
                 DataType::Struct(fields) => {
                     let fields: Vec<(String, PolarsDataType)> = fields
                         .iter()
                         .map(|field| (field.name.to_string(), PolarsDataType(field.dtype.clone())))
                         .collect();
-                    ocaml_alloc_tagged_block!(cr, 3, fields: OCamlList<(String, DataType)>)
+                    ocaml_alloc_tagged_block!(cr, 4, fields: OCamlList<(String, DataType)>)
                 }
                 DataType::Unknown => ocaml_value(cr, 16),
             }
