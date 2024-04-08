@@ -3,12 +3,15 @@ use crate::Runtime;
 /// Initialize the OCaml runtime, the runtime will be
 /// freed when the value goes out of scope
 pub fn init() -> Runtime {
-    Runtime::init()
+    let rt = Runtime::init();
+    crate::initial_setup();
+    rt
 }
 
 /// Initialize the OCaml runtime
 pub fn init_persistent() {
-    Runtime::init_persistent()
+    Runtime::init_persistent();
+    crate::initial_setup();
 }
 
 /// Run minor GC collection

@@ -12,7 +12,7 @@
 [package]
 edition = "2021"
 name = "multiversion"
-version = "0.7.3"
+version = "0.7.4"
 authors = ["Caleb Zulawski <caleb.zulawski@gmail.com>"]
 include = [
     "/Cargo.toml",
@@ -38,7 +38,7 @@ name = "benchmark"
 harness = false
 
 [dependencies.multiversion-macros]
-version = "0.7.3"
+version = "0.7.4"
 default-features = false
 
 [dependencies.target-features]

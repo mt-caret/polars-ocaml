@@ -226,6 +226,10 @@ cpu = cortex-m4
 arch = Arm
 features = dsp mclass thumb-mode thumb2 v5te v6 v6k v6t2 v7 vfp2
 
+cpu = cortex-m52
+arch = Arm
+features = dsp mclass thumb-mode thumb2 v5te v6 v6k v6t2 v7 vfp2
+
 cpu = cortex-m55
 arch = Arm
 features = dsp mclass thumb-mode thumb2 v5te v6 v6k v6t2 v7 vfp2
@@ -370,6 +374,10 @@ cpu = ampere1a
 arch = AArch64
 features = aes bf16 bti crc dit dotprod dpb dpb2 fcma flagm frintts i8mm jsconv lor lse mte neon paca pacg pan pmuv3 rand ras rcpc rcpc2 rdm sb sha2 sha3 sm4 ssbs v8.1a v8.2a v8.3a v8.4a v8.5a v8.6a vh
 
+cpu = ampere1b
+arch = AArch64
+features = aes bf16 bti crc dit dotprod dpb dpb2 fcma flagm fp16 frintts i8mm jsconv lor lse mte neon paca pacg pan pmuv3 rand ras rcpc rcpc2 rdm sb sha2 sha3 sm4 ssbs v8.1a v8.2a v8.3a v8.4a v8.5a v8.6a v8.7a vh
+
 cpu = apple-a10
 arch = AArch64
 features = aes crc lor neon pan pmuv3 rdm sha2 vh
@@ -398,6 +406,10 @@ cpu = apple-a16
 arch = AArch64
 features = aes bf16 bti crc dit dotprod dpb dpb2 fcma fhm flagm fp16 frintts i8mm jsconv lor lse neon paca pacg pan pmuv3 ras rcpc rcpc2 rdm sb sha2 sha3 ssbs v8.1a v8.2a v8.3a v8.4a v8.5a v8.6a vh
 
+cpu = apple-a17
+arch = AArch64
+features = aes bf16 bti crc dit dotprod dpb dpb2 fcma fhm flagm fp16 frintts i8mm jsconv lor lse neon paca pacg pan pmuv3 ras rcpc rcpc2 rdm sb sha2 sha3 ssbs v8.1a v8.2a v8.3a v8.4a v8.5a v8.6a vh
+
 cpu = apple-a7
 arch = AArch64
 features = aes neon pmuv3 sha2
@@ -419,6 +431,10 @@ arch = AArch64
 features = aes crc dit dotprod dpb dpb2 fcma fhm flagm fp16 frintts jsconv lor lse neon paca pacg pan pmuv3 ras rcpc rcpc2 rdm sb sha2 sha3 ssbs v8.1a v8.2a v8.3a v8.4a vh
 
 cpu = apple-m2
+arch = AArch64
+features = aes bf16 bti crc dit dotprod dpb dpb2 fcma fhm flagm fp16 frintts i8mm jsconv lor lse neon paca pacg pan pmuv3 ras rcpc rcpc2 rdm sb sha2 sha3 ssbs v8.1a v8.2a v8.3a v8.4a v8.5a v8.6a vh
+
+cpu = apple-m3
 arch = AArch64
 features = aes bf16 bti crc dit dotprod dpb dpb2 fcma fhm flagm fp16 frintts i8mm jsconv lor lse neon paca pacg pan pmuv3 ras rcpc rcpc2 rdm sb sha2 sha3 ssbs v8.1a v8.2a v8.3a v8.4a v8.5a v8.6a vh
 
@@ -445,6 +461,10 @@ features = aes crc neon pmuv3 sha2
 cpu = cortex-a510
 arch = AArch64
 features = bf16 bti crc dit dotprod dpb dpb2 fcma fhm flagm fp16 frintts i8mm jsconv lor lse mte neon paca pacg pan pmuv3 ras rcpc rcpc2 rdm sb ssbs sve sve2 sve2-bitperm v8.1a v8.2a v8.3a v8.4a v8.5a vh
+
+cpu = cortex-a520
+arch = AArch64
+features = bf16 bti crc dit dotprod dpb dpb2 fcma fhm flagm fp16 frintts i8mm jsconv lor lse mte neon paca pacg pan pmuv3 ras rcpc rcpc2 rdm sb ssbs sve sve2 sve2-bitperm v8.1a v8.2a v8.3a v8.4a v8.5a v8.6a v8.7a vh
 
 cpu = cortex-a53
 arch = AArch64
@@ -478,6 +498,10 @@ cpu = cortex-a72
 arch = AArch64
 features = aes crc neon pmuv3 sha2
 
+cpu = cortex-a720
+arch = AArch64
+features = bf16 bti crc dit dotprod dpb dpb2 fcma fhm flagm fp16 frintts i8mm jsconv lor lse mte neon paca pacg pan pmuv3 ras rcpc rcpc2 rdm sb spe ssbs sve sve2 sve2-bitperm v8.1a v8.2a v8.3a v8.4a v8.5a v8.6a v8.7a vh
+
 cpu = cortex-a73
 arch = AArch64
 features = aes crc neon pmuv3 sha2
@@ -504,7 +528,7 @@ features = aes crc dotprod dpb fp16 lor lse neon pan pmuv3 ras rcpc rdm sha2 spe
 
 cpu = cortex-a78c
 arch = AArch64
-features = aes crc dotprod dpb fhm flagm fp16 lor lse neon paca pacg pan pmuv3 ras rcpc rdm sha2 spe ssbs v8.1a v8.2a vh
+features = aes crc dotprod dpb flagm fp16 lor lse neon paca pacg pan pmuv3 ras rcpc rdm sha2 spe ssbs v8.1a v8.2a vh
 
 cpu = cortex-r82
 arch = AArch64
@@ -525,6 +549,10 @@ features = bf16 bti crc dit dotprod dpb dpb2 fcma fhm flagm fp16 frintts i8mm js
 cpu = cortex-x3
 arch = AArch64
 features = bf16 bti crc dit dotprod dpb dpb2 fcma fhm flagm fp16 frintts i8mm jsconv lor lse mte neon paca pacg pan pmuv3 ras rcpc rcpc2 rdm sb spe ssbs sve sve2 sve2-bitperm v8.1a v8.2a v8.3a v8.4a v8.5a vh
+
+cpu = cortex-x4
+arch = AArch64
+features = bf16 bti crc dit dotprod dpb dpb2 fcma fhm flagm fp16 frintts i8mm jsconv lor lse mte neon paca pacg pan pmuv3 ras rcpc rcpc2 rdm sb spe ssbs sve sve2 sve2-bitperm v8.1a v8.2a v8.3a v8.4a v8.5a v8.6a v8.7a vh
 
 cpu = cyclone
 arch = AArch64
@@ -568,7 +596,7 @@ features = aes crc dotprod dpb fp16 lor lse neon pan pmuv3 ras rcpc rdm sha2 spe
 
 cpu = neoverse-n2
 arch = AArch64
-features = aes bf16 bti crc dit dotprod dpb dpb2 fcma flagm fp16 frintts i8mm jsconv lor lse mte neon paca pacg pan pmuv3 ras rcpc rcpc2 rdm sb sha2 ssbs sve sve2 sve2-bitperm v8.1a v8.2a v8.3a v8.4a v8.5a vh
+features = bf16 bti crc dit dotprod dpb dpb2 fcma flagm fp16 frintts i8mm jsconv lor lse mte neon paca pacg pan pmuv3 ras rcpc rcpc2 rdm sb ssbs sve sve2 sve2-bitperm v8.1a v8.2a v8.3a v8.4a v8.5a vh
 
 cpu = neoverse-v1
 arch = AArch64
@@ -608,7 +636,7 @@ features = aes crc neon pmuv3 sha2
 
 cpu = tsv110
 arch = AArch64
-features = aes crc dotprod dpb fhm fp16 lor lse neon pan pmuv3 ras rdm sha2 spe v8.1a v8.2a vh
+features = aes crc dotprod dpb fcma fhm fp16 jsconv lor lse neon pan pmuv3 ras rdm sha2 spe v8.1a v8.2a vh
 
 cpu = generic
 arch = Bpf
@@ -627,6 +655,10 @@ arch = Bpf
 features = 
 
 cpu = v3
+arch = Bpf
+features = alu32
+
+cpu = v4
 arch = Bpf
 features = alu32
 
@@ -966,6 +998,14 @@ cpu = sifive-e76
 arch = RiscV
 features = a c d f m
 
+cpu = sifive-p450
+arch = RiscV
+features = a c d f fast-unaligned-access m zba zbb zbs zfhmin
+
+cpu = sifive-p670
+arch = RiscV
+features = a c d f fast-unaligned-access m v zba zbb zbs zfhmin
+
 cpu = sifive-s21
 arch = RiscV
 features = a c d f m
@@ -1002,6 +1042,14 @@ cpu = syntacore-scr1-max
 arch = RiscV
 features = a c d f m
 
+cpu = veyron-v1
+arch = RiscV
+features = a c d f m zba zbb zbc zbs
+
+cpu = xiangshan-nanhu
+arch = RiscV
+features = a c d f m zba zbb zbc zbkb zbkc zbkx zbs zkn zknd zkne zknh zksed zksh
+
 cpu = bleeding-edge
 arch = Wasm
 features = atomics bulk-memory mutable-globals nontrapping-fptoint sign-ext simd128
@@ -1016,11 +1064,23 @@ features =
 
 cpu = alderlake
 arch = X86
-features = adx aes avx avx2 bmi1 bmi2 cmpxchg16b f16c fma fxsr gfni lzcnt movbe pclmulqdq popcnt rdrand rdseed sha sse sse2 sse3 sse4.1 sse4.2 ssse3 vaes vpclmulqdq xsave xsavec xsaveopt xsaves
+features = adx aes avx avx2 bmi1 bmi2 cmpxchg16b f16c fma fxsr gfni lahfsahf lzcnt movbe pclmulqdq popcnt prfchw rdrand rdseed sha sse sse2 sse3 sse4.1 sse4.2 ssse3 vaes vpclmulqdq xsave xsavec xsaveopt xsaves
 
 cpu = amdfam10
 arch = X86
-features = cmpxchg16b fxsr lzcnt popcnt sse sse2 sse3 sse4a
+features = cmpxchg16b fxsr lahfsahf lzcnt popcnt prfchw sse sse2 sse3 sse4a
+
+cpu = arrowlake
+arch = X86
+features = adx aes avx avx2 bmi1 bmi2 cmpxchg16b f16c fma fxsr gfni lahfsahf lzcnt movbe pclmulqdq popcnt prfchw rdrand rdseed sha sse sse2 sse3 sse4.1 sse4.2 ssse3 vaes vpclmulqdq xsave xsavec xsaveopt xsaves
+
+cpu = arrowlake-s
+arch = X86
+features = adx aes avx avx2 bmi1 bmi2 cmpxchg16b f16c fma fxsr gfni lahfsahf lzcnt movbe pclmulqdq popcnt prfchw rdrand rdseed sha sse sse2 sse3 sse4.1 sse4.2 ssse3 vaes vpclmulqdq xsave xsavec xsaveopt xsaves
+
+cpu = arrowlake_s
+arch = X86
+features = adx aes avx avx2 bmi1 bmi2 cmpxchg16b f16c fma fxsr gfni lahfsahf lzcnt movbe pclmulqdq popcnt prfchw rdrand rdseed sha sse sse2 sse3 sse4.1 sse4.2 ssse3 vaes vpclmulqdq xsave xsavec xsaveopt xsaves
 
 cpu = athlon
 arch = X86
@@ -1056,51 +1116,51 @@ features = cmpxchg16b fxsr sse sse2 sse3
 
 cpu = atom
 arch = X86
-features = cmpxchg16b fxsr movbe sse sse2 sse3 ssse3
+features = cmpxchg16b fxsr lahfsahf movbe sse sse2 sse3 ssse3
 
 cpu = atom_sse4_2
 arch = X86
-features = cmpxchg16b fxsr movbe pclmulqdq popcnt rdrand sse sse2 sse3 sse4.1 sse4.2 ssse3
+features = cmpxchg16b fxsr lahfsahf movbe pclmulqdq popcnt prfchw rdrand sse sse2 sse3 sse4.1 sse4.2 ssse3
 
 cpu = atom_sse4_2_movbe
 arch = X86
-features = aes cmpxchg16b fxsr movbe pclmulqdq popcnt rdrand rdseed sha sse sse2 sse3 sse4.1 sse4.2 ssse3 xsave xsavec xsaveopt xsaves
+features = aes cmpxchg16b fxsr lahfsahf movbe pclmulqdq popcnt prfchw rdrand rdseed sha sse sse2 sse3 sse4.1 sse4.2 ssse3 xsave xsavec xsaveopt xsaves
 
 cpu = barcelona
 arch = X86
-features = cmpxchg16b fxsr lzcnt popcnt sse sse2 sse3 sse4a
+features = cmpxchg16b fxsr lahfsahf lzcnt popcnt prfchw sse sse2 sse3 sse4a
 
 cpu = bdver1
 arch = X86
-features = aes avx cmpxchg16b fxsr lzcnt pclmulqdq popcnt sse sse2 sse3 sse4.1 sse4.2 sse4a ssse3 xsave
+features = aes avx cmpxchg16b fxsr lahfsahf lzcnt pclmulqdq popcnt prfchw sse sse2 sse3 sse4.1 sse4.2 sse4a ssse3 xsave
 
 cpu = bdver2
 arch = X86
-features = aes avx bmi1 cmpxchg16b f16c fma fxsr lzcnt pclmulqdq popcnt sse sse2 sse3 sse4.1 sse4.2 sse4a ssse3 tbm xsave
+features = aes avx bmi1 cmpxchg16b f16c fma fxsr lahfsahf lzcnt pclmulqdq popcnt prfchw sse sse2 sse3 sse4.1 sse4.2 sse4a ssse3 tbm xsave
 
 cpu = bdver3
 arch = X86
-features = aes avx bmi1 cmpxchg16b f16c fma fxsr lzcnt pclmulqdq popcnt sse sse2 sse3 sse4.1 sse4.2 sse4a ssse3 tbm xsave xsaveopt
+features = aes avx bmi1 cmpxchg16b f16c fma fxsr lahfsahf lzcnt pclmulqdq popcnt prfchw sse sse2 sse3 sse4.1 sse4.2 sse4a ssse3 tbm xsave xsaveopt
 
 cpu = bdver4
 arch = X86
-features = aes avx avx2 bmi1 bmi2 cmpxchg16b f16c fma fxsr lzcnt movbe pclmulqdq popcnt rdrand sse sse2 sse3 sse4.1 sse4.2 sse4a ssse3 tbm xsave xsaveopt
+features = aes avx avx2 bmi1 bmi2 cmpxchg16b f16c fma fxsr lahfsahf lzcnt movbe pclmulqdq popcnt prfchw rdrand sse sse2 sse3 sse4.1 sse4.2 sse4a ssse3 tbm xsave xsaveopt
 
 cpu = bonnell
 arch = X86
-features = cmpxchg16b fxsr movbe sse sse2 sse3 ssse3
+features = cmpxchg16b fxsr lahfsahf movbe sse sse2 sse3 ssse3
 
 cpu = broadwell
 arch = X86
-features = adx avx avx2 bmi1 bmi2 cmpxchg16b ermsb f16c fma fxsr lzcnt movbe pclmulqdq popcnt rdrand rdseed sse sse2 sse3 sse4.1 sse4.2 ssse3 xsave xsaveopt
+features = adx avx avx2 bmi1 bmi2 cmpxchg16b ermsb f16c fma fxsr lahfsahf lzcnt movbe pclmulqdq popcnt prfchw rdrand rdseed sse sse2 sse3 sse4.1 sse4.2 ssse3 xsave xsaveopt
 
 cpu = btver1
 arch = X86
-features = cmpxchg16b fxsr lzcnt popcnt sse sse2 sse3 sse4a ssse3
+features = cmpxchg16b fxsr lahfsahf lzcnt popcnt prfchw sse sse2 sse3 sse4a ssse3
 
 cpu = btver2
 arch = X86
-features = aes avx bmi1 cmpxchg16b f16c fxsr lzcnt movbe pclmulqdq popcnt sse sse2 sse3 sse4.1 sse4.2 sse4a ssse3 xsave xsaveopt
+features = aes avx bmi1 cmpxchg16b f16c fxsr lahfsahf lzcnt movbe pclmulqdq popcnt prfchw sse sse2 sse3 sse4.1 sse4.2 sse4a ssse3 xsave xsaveopt
 
 cpu = c3
 arch = X86
@@ -1112,79 +1172,83 @@ features = fxsr sse sse2
 
 cpu = cannonlake
 arch = X86
-features = adx aes avx avx2 avx512bw avx512cd avx512dq avx512f avx512ifma avx512vbmi avx512vl bmi1 bmi2 cmpxchg16b ermsb f16c fma fxsr lzcnt movbe pclmulqdq popcnt rdrand rdseed sha sse sse2 sse3 sse4.1 sse4.2 ssse3 xsave xsavec xsaveopt xsaves
+features = adx aes avx avx2 avx512bw avx512cd avx512dq avx512f avx512ifma avx512vbmi avx512vl bmi1 bmi2 cmpxchg16b ermsb f16c fma fxsr lahfsahf lzcnt movbe pclmulqdq popcnt prfchw rdrand rdseed sha sse sse2 sse3 sse4.1 sse4.2 ssse3 xsave xsavec xsaveopt xsaves
 
 cpu = cascadelake
 arch = X86
-features = adx aes avx avx2 avx512bw avx512cd avx512dq avx512f avx512vl avx512vnni bmi1 bmi2 cmpxchg16b ermsb f16c fma fxsr lzcnt movbe pclmulqdq popcnt rdrand rdseed sse sse2 sse3 sse4.1 sse4.2 ssse3 xsave xsavec xsaveopt xsaves
+features = adx aes avx avx2 avx512bw avx512cd avx512dq avx512f avx512vl avx512vnni bmi1 bmi2 cmpxchg16b ermsb f16c fma fxsr lahfsahf lzcnt movbe pclmulqdq popcnt prfchw rdrand rdseed sse sse2 sse3 sse4.1 sse4.2 ssse3 xsave xsavec xsaveopt xsaves
+
+cpu = clearwaterforest
+arch = X86
+features = adx aes avx avx2 bmi1 bmi2 cmpxchg16b f16c fma fxsr gfni lahfsahf lzcnt movbe pclmulqdq popcnt prfchw rdrand rdseed sha sse sse2 sse3 sse4.1 sse4.2 ssse3 vaes vpclmulqdq xsave xsavec xsaveopt xsaves
 
 cpu = cooperlake
 arch = X86
-features = adx aes avx avx2 avx512bf16 avx512bw avx512cd avx512dq avx512f avx512vl avx512vnni bmi1 bmi2 cmpxchg16b ermsb f16c fma fxsr lzcnt movbe pclmulqdq popcnt rdrand rdseed sse sse2 sse3 sse4.1 sse4.2 ssse3 xsave xsavec xsaveopt xsaves
+features = adx aes avx avx2 avx512bf16 avx512bw avx512cd avx512dq avx512f avx512vl avx512vnni bmi1 bmi2 cmpxchg16b ermsb f16c fma fxsr lahfsahf lzcnt movbe pclmulqdq popcnt prfchw rdrand rdseed sse sse2 sse3 sse4.1 sse4.2 ssse3 xsave xsavec xsaveopt xsaves
 
 cpu = core-avx-i
 arch = X86
-features = avx cmpxchg16b f16c fxsr pclmulqdq popcnt rdrand sse sse2 sse3 sse4.1 sse4.2 ssse3 xsave xsaveopt
+features = avx cmpxchg16b f16c fxsr lahfsahf pclmulqdq popcnt rdrand sse sse2 sse3 sse4.1 sse4.2 ssse3 xsave xsaveopt
 
 cpu = core-avx2
 arch = X86
-features = avx avx2 bmi1 bmi2 cmpxchg16b ermsb f16c fma fxsr lzcnt movbe pclmulqdq popcnt rdrand sse sse2 sse3 sse4.1 sse4.2 ssse3 xsave xsaveopt
+features = avx avx2 bmi1 bmi2 cmpxchg16b ermsb f16c fma fxsr lahfsahf lzcnt movbe pclmulqdq popcnt rdrand sse sse2 sse3 sse4.1 sse4.2 ssse3 xsave xsaveopt
 
 cpu = core2
 arch = X86
-features = cmpxchg16b fxsr sse sse2 sse3 ssse3
+features = cmpxchg16b fxsr lahfsahf sse sse2 sse3 ssse3
 
 cpu = core_2_duo_sse4_1
 arch = X86
-features = cmpxchg16b fxsr sse sse2 sse3 sse4.1 ssse3
+features = cmpxchg16b fxsr lahfsahf sse sse2 sse3 sse4.1 ssse3
 
 cpu = core_2_duo_ssse3
 arch = X86
-features = cmpxchg16b fxsr sse sse2 sse3 ssse3
+features = cmpxchg16b fxsr lahfsahf sse sse2 sse3 ssse3
 
 cpu = core_2nd_gen_avx
 arch = X86
-features = avx cmpxchg16b fxsr pclmulqdq popcnt sse sse2 sse3 sse4.1 sse4.2 ssse3 xsave xsaveopt
+features = avx cmpxchg16b fxsr lahfsahf pclmulqdq popcnt sse sse2 sse3 sse4.1 sse4.2 ssse3 xsave xsaveopt
 
 cpu = core_3rd_gen_avx
 arch = X86
-features = avx cmpxchg16b f16c fxsr pclmulqdq popcnt rdrand sse sse2 sse3 sse4.1 sse4.2 ssse3 xsave xsaveopt
+features = avx cmpxchg16b f16c fxsr lahfsahf pclmulqdq popcnt rdrand sse sse2 sse3 sse4.1 sse4.2 ssse3 xsave xsaveopt
 
 cpu = core_4th_gen_avx
 arch = X86
-features = avx avx2 bmi1 bmi2 cmpxchg16b ermsb f16c fma fxsr lzcnt movbe pclmulqdq popcnt rdrand sse sse2 sse3 sse4.1 sse4.2 ssse3 xsave xsaveopt
+features = avx avx2 bmi1 bmi2 cmpxchg16b ermsb f16c fma fxsr lahfsahf lzcnt movbe pclmulqdq popcnt rdrand sse sse2 sse3 sse4.1 sse4.2 ssse3 xsave xsaveopt
 
 cpu = core_4th_gen_avx_tsx
 arch = X86
-features = avx avx2 bmi1 bmi2 cmpxchg16b ermsb f16c fma fxsr lzcnt movbe pclmulqdq popcnt rdrand sse sse2 sse3 sse4.1 sse4.2 ssse3 xsave xsaveopt
+features = avx avx2 bmi1 bmi2 cmpxchg16b ermsb f16c fma fxsr lahfsahf lzcnt movbe pclmulqdq popcnt rdrand sse sse2 sse3 sse4.1 sse4.2 ssse3 xsave xsaveopt
 
 cpu = core_5th_gen_avx
 arch = X86
-features = adx avx avx2 bmi1 bmi2 cmpxchg16b ermsb f16c fma fxsr lzcnt movbe pclmulqdq popcnt rdrand rdseed sse sse2 sse3 sse4.1 sse4.2 ssse3 xsave xsaveopt
+features = adx avx avx2 bmi1 bmi2 cmpxchg16b ermsb f16c fma fxsr lahfsahf lzcnt movbe pclmulqdq popcnt prfchw rdrand rdseed sse sse2 sse3 sse4.1 sse4.2 ssse3 xsave xsaveopt
 
 cpu = core_5th_gen_avx_tsx
 arch = X86
-features = adx avx avx2 bmi1 bmi2 cmpxchg16b ermsb f16c fma fxsr lzcnt movbe pclmulqdq popcnt rdrand rdseed sse sse2 sse3 sse4.1 sse4.2 ssse3 xsave xsaveopt
+features = adx avx avx2 bmi1 bmi2 cmpxchg16b ermsb f16c fma fxsr lahfsahf lzcnt movbe pclmulqdq popcnt prfchw rdrand rdseed sse sse2 sse3 sse4.1 sse4.2 ssse3 xsave xsaveopt
 
 cpu = core_aes_pclmulqdq
 arch = X86
-features = cmpxchg16b fxsr pclmulqdq popcnt sse sse2 sse3 sse4.1 sse4.2 ssse3
+features = cmpxchg16b fxsr lahfsahf pclmulqdq popcnt sse sse2 sse3 sse4.1 sse4.2 ssse3
 
 cpu = core_i7_sse4_2
 arch = X86
-features = cmpxchg16b fxsr popcnt sse sse2 sse3 sse4.1 sse4.2 ssse3
+features = cmpxchg16b fxsr lahfsahf popcnt sse sse2 sse3 sse4.1 sse4.2 ssse3
 
 cpu = corei7
 arch = X86
-features = cmpxchg16b fxsr popcnt sse sse2 sse3 sse4.1 sse4.2 ssse3
+features = cmpxchg16b fxsr lahfsahf popcnt sse sse2 sse3 sse4.1 sse4.2 ssse3
 
 cpu = corei7-avx
 arch = X86
-features = avx cmpxchg16b fxsr pclmulqdq popcnt sse sse2 sse3 sse4.1 sse4.2 ssse3 xsave xsaveopt
+features = avx cmpxchg16b fxsr lahfsahf pclmulqdq popcnt sse sse2 sse3 sse4.1 sse4.2 ssse3 xsave xsaveopt
 
 cpu = emeraldrapids
 arch = X86
-features = adx aes avx avx2 avx512bf16 avx512bitalg avx512bw avx512cd avx512dq avx512f avx512ifma avx512vbmi avx512vbmi2 avx512vl avx512vnni avx512vpopcntdq bmi1 bmi2 cmpxchg16b ermsb f16c fma fxsr gfni lzcnt movbe pclmulqdq popcnt rdrand rdseed sha sse sse2 sse3 sse4.1 sse4.2 ssse3 vaes vpclmulqdq xsave xsavec xsaveopt xsaves
+features = adx aes avx avx2 avx512bf16 avx512bitalg avx512bw avx512cd avx512dq avx512f avx512fp16 avx512ifma avx512vbmi avx512vbmi2 avx512vl avx512vnni avx512vpopcntdq bmi1 bmi2 cmpxchg16b ermsb f16c fma fxsr gfni lahfsahf lzcnt movbe pclmulqdq popcnt prfchw rdrand rdseed sha sse sse2 sse3 sse4.1 sse4.2 ssse3 vaes vpclmulqdq xsave xsavec xsaveopt xsaves
 
 cpu = generic
 arch = X86
@@ -1196,35 +1260,39 @@ features = sse sse2
 
 cpu = goldmont
 arch = X86
-features = aes cmpxchg16b fxsr movbe pclmulqdq popcnt rdrand rdseed sha sse sse2 sse3 sse4.1 sse4.2 ssse3 xsave xsavec xsaveopt xsaves
+features = aes cmpxchg16b fxsr lahfsahf movbe pclmulqdq popcnt prfchw rdrand rdseed sha sse sse2 sse3 sse4.1 sse4.2 ssse3 xsave xsavec xsaveopt xsaves
 
 cpu = goldmont-plus
 arch = X86
-features = aes cmpxchg16b fxsr movbe pclmulqdq popcnt rdrand rdseed sha sse sse2 sse3 sse4.1 sse4.2 ssse3 xsave xsavec xsaveopt xsaves
+features = aes cmpxchg16b fxsr lahfsahf movbe pclmulqdq popcnt prfchw rdrand rdseed sha sse sse2 sse3 sse4.1 sse4.2 ssse3 xsave xsavec xsaveopt xsaves
 
 cpu = goldmont_plus
 arch = X86
-features = aes cmpxchg16b fxsr movbe pclmulqdq popcnt rdrand rdseed sha sse sse2 sse3 sse4.1 sse4.2 ssse3 xsave xsavec xsaveopt xsaves
+features = aes cmpxchg16b fxsr lahfsahf movbe pclmulqdq popcnt prfchw rdrand rdseed sha sse sse2 sse3 sse4.1 sse4.2 ssse3 xsave xsavec xsaveopt xsaves
+
+cpu = gracemont
+arch = X86
+features = adx aes avx avx2 bmi1 bmi2 cmpxchg16b f16c fma fxsr gfni lahfsahf lzcnt movbe pclmulqdq popcnt prfchw rdrand rdseed sha sse sse2 sse3 sse4.1 sse4.2 ssse3 vaes vpclmulqdq xsave xsavec xsaveopt xsaves
 
 cpu = grandridge
 arch = X86
-features = adx aes avx avx2 bmi1 bmi2 cmpxchg16b f16c fma fxsr gfni lzcnt movbe pclmulqdq popcnt rdrand rdseed sha sse sse2 sse3 sse4.1 sse4.2 ssse3 vaes vpclmulqdq xsave xsavec xsaveopt xsaves
+features = adx aes avx avx2 bmi1 bmi2 cmpxchg16b f16c fma fxsr gfni lahfsahf lzcnt movbe pclmulqdq popcnt prfchw rdrand rdseed sha sse sse2 sse3 sse4.1 sse4.2 ssse3 vaes vpclmulqdq xsave xsavec xsaveopt xsaves
 
 cpu = graniterapids
 arch = X86
-features = adx aes avx avx2 avx512bf16 avx512bitalg avx512bw avx512cd avx512dq avx512f avx512ifma avx512vbmi avx512vbmi2 avx512vl avx512vnni avx512vpopcntdq bmi1 bmi2 cmpxchg16b ermsb f16c fma fxsr gfni lzcnt movbe pclmulqdq popcnt rdrand rdseed sha sse sse2 sse3 sse4.1 sse4.2 ssse3 vaes vpclmulqdq xsave xsavec xsaveopt xsaves
+features = adx aes avx avx2 avx512bf16 avx512bitalg avx512bw avx512cd avx512dq avx512f avx512fp16 avx512ifma avx512vbmi avx512vbmi2 avx512vl avx512vnni avx512vpopcntdq bmi1 bmi2 cmpxchg16b ermsb f16c fma fxsr gfni lahfsahf lzcnt movbe pclmulqdq popcnt prfchw rdrand rdseed sha sse sse2 sse3 sse4.1 sse4.2 ssse3 vaes vpclmulqdq xsave xsavec xsaveopt xsaves
 
 cpu = graniterapids-d
 arch = X86
-features = adx aes avx avx2 avx512bf16 avx512bitalg avx512bw avx512cd avx512dq avx512f avx512ifma avx512vbmi avx512vbmi2 avx512vl avx512vnni avx512vpopcntdq bmi1 bmi2 cmpxchg16b ermsb f16c fma fxsr gfni lzcnt movbe pclmulqdq popcnt rdrand rdseed sha sse sse2 sse3 sse4.1 sse4.2 ssse3 vaes vpclmulqdq xsave xsavec xsaveopt xsaves
+features = adx aes avx avx2 avx512bf16 avx512bitalg avx512bw avx512cd avx512dq avx512f avx512fp16 avx512ifma avx512vbmi avx512vbmi2 avx512vl avx512vnni avx512vpopcntdq bmi1 bmi2 cmpxchg16b ermsb f16c fma fxsr gfni lahfsahf lzcnt movbe pclmulqdq popcnt prfchw rdrand rdseed sha sse sse2 sse3 sse4.1 sse4.2 ssse3 vaes vpclmulqdq xsave xsavec xsaveopt xsaves
 
 cpu = graniterapids_d
 arch = X86
-features = adx aes avx avx2 avx512bf16 avx512bitalg avx512bw avx512cd avx512dq avx512f avx512ifma avx512vbmi avx512vbmi2 avx512vl avx512vnni avx512vpopcntdq bmi1 bmi2 cmpxchg16b ermsb f16c fma fxsr gfni lzcnt movbe pclmulqdq popcnt rdrand rdseed sha sse sse2 sse3 sse4.1 sse4.2 ssse3 vaes vpclmulqdq xsave xsavec xsaveopt xsaves
+features = adx aes avx avx2 avx512bf16 avx512bitalg avx512bw avx512cd avx512dq avx512f avx512fp16 avx512ifma avx512vbmi avx512vbmi2 avx512vl avx512vnni avx512vpopcntdq bmi1 bmi2 cmpxchg16b ermsb f16c fma fxsr gfni lahfsahf lzcnt movbe pclmulqdq popcnt prfchw rdrand rdseed sha sse sse2 sse3 sse4.1 sse4.2 ssse3 vaes vpclmulqdq xsave xsavec xsaveopt xsaves
 
 cpu = haswell
 arch = X86
-features = avx avx2 bmi1 bmi2 cmpxchg16b ermsb f16c fma fxsr lzcnt movbe pclmulqdq popcnt rdrand sse sse2 sse3 sse4.1 sse4.2 ssse3 xsave xsaveopt
+features = avx avx2 bmi1 bmi2 cmpxchg16b ermsb f16c fma fxsr lahfsahf lzcnt movbe pclmulqdq popcnt rdrand sse sse2 sse3 sse4.1 sse4.2 ssse3 xsave xsaveopt
 
 cpu = i386
 arch = X86
@@ -1244,23 +1312,23 @@ features = sse sse2
 
 cpu = icelake-client
 arch = X86
-features = adx aes avx avx2 avx512bitalg avx512bw avx512cd avx512dq avx512f avx512ifma avx512vbmi avx512vbmi2 avx512vl avx512vnni avx512vpopcntdq bmi1 bmi2 cmpxchg16b ermsb f16c fma fxsr gfni lzcnt movbe pclmulqdq popcnt rdrand rdseed sha sse sse2 sse3 sse4.1 sse4.2 ssse3 vaes vpclmulqdq xsave xsavec xsaveopt xsaves
+features = adx aes avx avx2 avx512bitalg avx512bw avx512cd avx512dq avx512f avx512ifma avx512vbmi avx512vbmi2 avx512vl avx512vnni avx512vpopcntdq bmi1 bmi2 cmpxchg16b ermsb f16c fma fxsr gfni lahfsahf lzcnt movbe pclmulqdq popcnt prfchw rdrand rdseed sha sse sse2 sse3 sse4.1 sse4.2 ssse3 vaes vpclmulqdq xsave xsavec xsaveopt xsaves
 
 cpu = icelake-server
 arch = X86
-features = adx aes avx avx2 avx512bitalg avx512bw avx512cd avx512dq avx512f avx512ifma avx512vbmi avx512vbmi2 avx512vl avx512vnni avx512vpopcntdq bmi1 bmi2 cmpxchg16b ermsb f16c fma fxsr gfni lzcnt movbe pclmulqdq popcnt rdrand rdseed sha sse sse2 sse3 sse4.1 sse4.2 ssse3 vaes vpclmulqdq xsave xsavec xsaveopt xsaves
+features = adx aes avx avx2 avx512bitalg avx512bw avx512cd avx512dq avx512f avx512ifma avx512vbmi avx512vbmi2 avx512vl avx512vnni avx512vpopcntdq bmi1 bmi2 cmpxchg16b ermsb f16c fma fxsr gfni lahfsahf lzcnt movbe pclmulqdq popcnt prfchw rdrand rdseed sha sse sse2 sse3 sse4.1 sse4.2 ssse3 vaes vpclmulqdq xsave xsavec xsaveopt xsaves
 
 cpu = icelake_client
 arch = X86
-features = adx aes avx avx2 avx512bitalg avx512bw avx512cd avx512dq avx512f avx512ifma avx512vbmi avx512vbmi2 avx512vl avx512vnni avx512vpopcntdq bmi1 bmi2 cmpxchg16b ermsb f16c fma fxsr gfni lzcnt movbe pclmulqdq popcnt rdrand rdseed sha sse sse2 sse3 sse4.1 sse4.2 ssse3 vaes vpclmulqdq xsave xsavec xsaveopt xsaves
+features = adx aes avx avx2 avx512bitalg avx512bw avx512cd avx512dq avx512f avx512ifma avx512vbmi avx512vbmi2 avx512vl avx512vnni avx512vpopcntdq bmi1 bmi2 cmpxchg16b ermsb f16c fma fxsr gfni lahfsahf lzcnt movbe pclmulqdq popcnt prfchw rdrand rdseed sha sse sse2 sse3 sse4.1 sse4.2 ssse3 vaes vpclmulqdq xsave xsavec xsaveopt xsaves
 
 cpu = icelake_server
 arch = X86
-features = adx aes avx avx2 avx512bitalg avx512bw avx512cd avx512dq avx512f avx512ifma avx512vbmi avx512vbmi2 avx512vl avx512vnni avx512vpopcntdq bmi1 bmi2 cmpxchg16b ermsb f16c fma fxsr gfni lzcnt movbe pclmulqdq popcnt rdrand rdseed sha sse sse2 sse3 sse4.1 sse4.2 ssse3 vaes vpclmulqdq xsave xsavec xsaveopt xsaves
+features = adx aes avx avx2 avx512bitalg avx512bw avx512cd avx512dq avx512f avx512ifma avx512vbmi avx512vbmi2 avx512vl avx512vnni avx512vpopcntdq bmi1 bmi2 cmpxchg16b ermsb f16c fma fxsr gfni lahfsahf lzcnt movbe pclmulqdq popcnt prfchw rdrand rdseed sha sse sse2 sse3 sse4.1 sse4.2 ssse3 vaes vpclmulqdq xsave xsavec xsaveopt xsaves
 
 cpu = ivybridge
 arch = X86
-features = avx cmpxchg16b f16c fxsr pclmulqdq popcnt rdrand sse sse2 sse3 sse4.1 sse4.2 ssse3 xsave xsaveopt
+features = avx cmpxchg16b f16c fxsr lahfsahf pclmulqdq popcnt rdrand sse sse2 sse3 sse4.1 sse4.2 ssse3 xsave xsaveopt
 
 cpu = k6
 arch = X86
@@ -1284,27 +1352,31 @@ features = cmpxchg16b fxsr sse sse2 sse3
 
 cpu = knl
 arch = X86
-features = adx aes avx avx2 avx512cd avx512er avx512f avx512pf bmi1 bmi2 cmpxchg16b f16c fma fxsr lzcnt movbe pclmulqdq popcnt rdrand rdseed sse sse2 sse3 sse4.1 sse4.2 ssse3 xsave xsaveopt
+features = adx aes avx avx2 avx512cd avx512er avx512f avx512pf bmi1 bmi2 cmpxchg16b f16c fma fxsr lahfsahf lzcnt movbe pclmulqdq popcnt prfchw rdrand rdseed sse sse2 sse3 sse4.1 sse4.2 ssse3 xsave xsaveopt
 
 cpu = knm
 arch = X86
-features = adx aes avx avx2 avx512cd avx512er avx512f avx512pf avx512vpopcntdq bmi1 bmi2 cmpxchg16b f16c fma fxsr lzcnt movbe pclmulqdq popcnt rdrand rdseed sse sse2 sse3 sse4.1 sse4.2 ssse3 xsave xsaveopt
+features = adx aes avx avx2 avx512cd avx512er avx512f avx512pf avx512vpopcntdq bmi1 bmi2 cmpxchg16b f16c fma fxsr lahfsahf lzcnt movbe pclmulqdq popcnt prfchw rdrand rdseed sse sse2 sse3 sse4.1 sse4.2 ssse3 xsave xsaveopt
 
 cpu = lakemont
 arch = X86
 features = sse sse2
 
+cpu = lunarlake
+arch = X86
+features = adx aes avx avx2 bmi1 bmi2 cmpxchg16b f16c fma fxsr gfni lahfsahf lzcnt movbe pclmulqdq popcnt prfchw rdrand rdseed sha sse sse2 sse3 sse4.1 sse4.2 ssse3 vaes vpclmulqdq xsave xsavec xsaveopt xsaves
+
 cpu = meteorlake
 arch = X86
-features = adx aes avx avx2 bmi1 bmi2 cmpxchg16b f16c fma fxsr gfni lzcnt movbe pclmulqdq popcnt rdrand rdseed sha sse sse2 sse3 sse4.1 sse4.2 ssse3 vaes vpclmulqdq xsave xsavec xsaveopt xsaves
+features = adx aes avx avx2 bmi1 bmi2 cmpxchg16b f16c fma fxsr gfni lahfsahf lzcnt movbe pclmulqdq popcnt prfchw rdrand rdseed sha sse sse2 sse3 sse4.1 sse4.2 ssse3 vaes vpclmulqdq xsave xsavec xsaveopt xsaves
 
 cpu = mic_avx512
 arch = X86
-features = adx aes avx avx2 avx512cd avx512er avx512f avx512pf bmi1 bmi2 cmpxchg16b f16c fma fxsr lzcnt movbe pclmulqdq popcnt rdrand rdseed sse sse2 sse3 sse4.1 sse4.2 ssse3 xsave xsaveopt
+features = adx aes avx avx2 avx512cd avx512er avx512f avx512pf bmi1 bmi2 cmpxchg16b f16c fma fxsr lahfsahf lzcnt movbe pclmulqdq popcnt prfchw rdrand rdseed sse sse2 sse3 sse4.1 sse4.2 ssse3 xsave xsaveopt
 
 cpu = nehalem
 arch = X86
-features = cmpxchg16b fxsr popcnt sse sse2 sse3 sse4.1 sse4.2 ssse3
+features = cmpxchg16b fxsr lahfsahf popcnt sse sse2 sse3 sse4.1 sse4.2 ssse3
 
 cpu = nocona
 arch = X86
@@ -1318,9 +1390,13 @@ cpu = opteron-sse3
 arch = X86
 features = cmpxchg16b fxsr sse sse2 sse3
 
+cpu = pantherlake
+arch = X86
+features = adx aes avx avx2 bmi1 bmi2 cmpxchg16b f16c fma fxsr gfni lahfsahf lzcnt movbe pclmulqdq popcnt prfchw rdrand rdseed sha sse sse2 sse3 sse4.1 sse4.2 ssse3 vaes vpclmulqdq xsave xsavec xsaveopt xsaves
+
 cpu = penryn
 arch = X86
-features = cmpxchg16b fxsr sse sse2 sse3 sse4.1 ssse3
+features = cmpxchg16b fxsr lahfsahf sse sse2 sse3 sse4.1 ssse3
 
 cpu = pentium
 arch = X86
@@ -1396,59 +1472,59 @@ features = fxsr sse sse2 sse3
 
 cpu = raptorlake
 arch = X86
-features = adx aes avx avx2 bmi1 bmi2 cmpxchg16b f16c fma fxsr gfni lzcnt movbe pclmulqdq popcnt rdrand rdseed sha sse sse2 sse3 sse4.1 sse4.2 ssse3 vaes vpclmulqdq xsave xsavec xsaveopt xsaves
+features = adx aes avx avx2 bmi1 bmi2 cmpxchg16b f16c fma fxsr gfni lahfsahf lzcnt movbe pclmulqdq popcnt prfchw rdrand rdseed sha sse sse2 sse3 sse4.1 sse4.2 ssse3 vaes vpclmulqdq xsave xsavec xsaveopt xsaves
 
 cpu = rocketlake
 arch = X86
-features = adx aes avx avx2 avx512bitalg avx512bw avx512cd avx512dq avx512f avx512ifma avx512vbmi avx512vbmi2 avx512vl avx512vnni avx512vpopcntdq bmi1 bmi2 cmpxchg16b ermsb f16c fma fxsr gfni lzcnt movbe pclmulqdq popcnt rdrand rdseed sha sse sse2 sse3 sse4.1 sse4.2 ssse3 vaes vpclmulqdq xsave xsavec xsaveopt xsaves
+features = adx aes avx avx2 avx512bitalg avx512bw avx512cd avx512dq avx512f avx512ifma avx512vbmi avx512vbmi2 avx512vl avx512vnni avx512vpopcntdq bmi1 bmi2 cmpxchg16b ermsb f16c fma fxsr gfni lahfsahf lzcnt movbe pclmulqdq popcnt prfchw rdrand rdseed sha sse sse2 sse3 sse4.1 sse4.2 ssse3 vaes vpclmulqdq xsave xsavec xsaveopt xsaves
 
 cpu = sandybridge
 arch = X86
-features = avx cmpxchg16b fxsr pclmulqdq popcnt sse sse2 sse3 sse4.1 sse4.2 ssse3 xsave xsaveopt
+features = avx cmpxchg16b fxsr lahfsahf pclmulqdq popcnt sse sse2 sse3 sse4.1 sse4.2 ssse3 xsave xsaveopt
 
 cpu = sapphirerapids
 arch = X86
-features = adx aes avx avx2 avx512bf16 avx512bitalg avx512bw avx512cd avx512dq avx512f avx512ifma avx512vbmi avx512vbmi2 avx512vl avx512vnni avx512vpopcntdq bmi1 bmi2 cmpxchg16b ermsb f16c fma fxsr gfni lzcnt movbe pclmulqdq popcnt rdrand rdseed sha sse sse2 sse3 sse4.1 sse4.2 ssse3 vaes vpclmulqdq xsave xsavec xsaveopt xsaves
+features = adx aes avx avx2 avx512bf16 avx512bitalg avx512bw avx512cd avx512dq avx512f avx512fp16 avx512ifma avx512vbmi avx512vbmi2 avx512vl avx512vnni avx512vpopcntdq bmi1 bmi2 cmpxchg16b ermsb f16c fma fxsr gfni lahfsahf lzcnt movbe pclmulqdq popcnt prfchw rdrand rdseed sha sse sse2 sse3 sse4.1 sse4.2 ssse3 vaes vpclmulqdq xsave xsavec xsaveopt xsaves
 
 cpu = sierraforest
 arch = X86
-features = adx aes avx avx2 bmi1 bmi2 cmpxchg16b f16c fma fxsr gfni lzcnt movbe pclmulqdq popcnt rdrand rdseed sha sse sse2 sse3 sse4.1 sse4.2 ssse3 vaes vpclmulqdq xsave xsavec xsaveopt xsaves
+features = adx aes avx avx2 bmi1 bmi2 cmpxchg16b f16c fma fxsr gfni lahfsahf lzcnt movbe pclmulqdq popcnt prfchw rdrand rdseed sha sse sse2 sse3 sse4.1 sse4.2 ssse3 vaes vpclmulqdq xsave xsavec xsaveopt xsaves
 
 cpu = silvermont
 arch = X86
-features = cmpxchg16b fxsr movbe pclmulqdq popcnt rdrand sse sse2 sse3 sse4.1 sse4.2 ssse3
+features = cmpxchg16b fxsr lahfsahf movbe pclmulqdq popcnt prfchw rdrand sse sse2 sse3 sse4.1 sse4.2 ssse3
 
 cpu = skx
 arch = X86
-features = adx aes avx avx2 avx512bw avx512cd avx512dq avx512f avx512vl bmi1 bmi2 cmpxchg16b ermsb f16c fma fxsr lzcnt movbe pclmulqdq popcnt rdrand rdseed sse sse2 sse3 sse4.1 sse4.2 ssse3 xsave xsavec xsaveopt xsaves
+features = adx aes avx avx2 avx512bw avx512cd avx512dq avx512f avx512vl bmi1 bmi2 cmpxchg16b ermsb f16c fma fxsr lahfsahf lzcnt movbe pclmulqdq popcnt prfchw rdrand rdseed sse sse2 sse3 sse4.1 sse4.2 ssse3 xsave xsavec xsaveopt xsaves
 
 cpu = skylake
 arch = X86
-features = adx aes avx avx2 bmi1 bmi2 cmpxchg16b ermsb f16c fma fxsr lzcnt movbe pclmulqdq popcnt rdrand rdseed sse sse2 sse3 sse4.1 sse4.2 ssse3 xsave xsavec xsaveopt xsaves
+features = adx aes avx avx2 bmi1 bmi2 cmpxchg16b ermsb f16c fma fxsr lahfsahf lzcnt movbe pclmulqdq popcnt prfchw rdrand rdseed sse sse2 sse3 sse4.1 sse4.2 ssse3 xsave xsavec xsaveopt xsaves
 
 cpu = skylake-avx512
 arch = X86
-features = adx aes avx avx2 avx512bw avx512cd avx512dq avx512f avx512vl bmi1 bmi2 cmpxchg16b ermsb f16c fma fxsr lzcnt movbe pclmulqdq popcnt rdrand rdseed sse sse2 sse3 sse4.1 sse4.2 ssse3 xsave xsavec xsaveopt xsaves
+features = adx aes avx avx2 avx512bw avx512cd avx512dq avx512f avx512vl bmi1 bmi2 cmpxchg16b ermsb f16c fma fxsr lahfsahf lzcnt movbe pclmulqdq popcnt prfchw rdrand rdseed sse sse2 sse3 sse4.1 sse4.2 ssse3 xsave xsavec xsaveopt xsaves
 
 cpu = skylake_avx512
 arch = X86
-features = adx aes avx avx2 avx512bw avx512cd avx512dq avx512f avx512vl bmi1 bmi2 cmpxchg16b ermsb f16c fma fxsr lzcnt movbe pclmulqdq popcnt rdrand rdseed sse sse2 sse3 sse4.1 sse4.2 ssse3 xsave xsavec xsaveopt xsaves
+features = adx aes avx avx2 avx512bw avx512cd avx512dq avx512f avx512vl bmi1 bmi2 cmpxchg16b ermsb f16c fma fxsr lahfsahf lzcnt movbe pclmulqdq popcnt prfchw rdrand rdseed sse sse2 sse3 sse4.1 sse4.2 ssse3 xsave xsavec xsaveopt xsaves
 
 cpu = slm
 arch = X86
-features = cmpxchg16b fxsr movbe pclmulqdq popcnt rdrand sse sse2 sse3 sse4.1 sse4.2 ssse3
+features = cmpxchg16b fxsr lahfsahf movbe pclmulqdq popcnt prfchw rdrand sse sse2 sse3 sse4.1 sse4.2 ssse3
 
 cpu = tigerlake
 arch = X86
-features = adx aes avx avx2 avx512bitalg avx512bw avx512cd avx512dq avx512f avx512ifma avx512vbmi avx512vbmi2 avx512vl avx512vnni avx512vp2intersect avx512vpopcntdq bmi1 bmi2 cmpxchg16b ermsb f16c fma fxsr gfni lzcnt movbe pclmulqdq popcnt rdrand rdseed sha sse sse2 sse3 sse4.1 sse4.2 ssse3 vaes vpclmulqdq xsave xsavec xsaveopt xsaves
+features = adx aes avx avx2 avx512bitalg avx512bw avx512cd avx512dq avx512f avx512ifma avx512vbmi avx512vbmi2 avx512vl avx512vnni avx512vp2intersect avx512vpopcntdq bmi1 bmi2 cmpxchg16b ermsb f16c fma fxsr gfni lahfsahf lzcnt movbe pclmulqdq popcnt prfchw rdrand rdseed sha sse sse2 sse3 sse4.1 sse4.2 ssse3 vaes vpclmulqdq xsave xsavec xsaveopt xsaves
 
 cpu = tremont
 arch = X86
-features = aes cmpxchg16b fxsr gfni movbe pclmulqdq popcnt rdrand rdseed sha sse sse2 sse3 sse4.1 sse4.2 ssse3 xsave xsavec xsaveopt xsaves
+features = aes cmpxchg16b fxsr gfni lahfsahf movbe pclmulqdq popcnt prfchw rdrand rdseed sha sse sse2 sse3 sse4.1 sse4.2 ssse3 xsave xsavec xsaveopt xsaves
 
 cpu = westmere
 arch = X86
-features = cmpxchg16b fxsr pclmulqdq popcnt sse sse2 sse3 sse4.1 sse4.2 ssse3
+features = cmpxchg16b fxsr lahfsahf pclmulqdq popcnt sse sse2 sse3 sse4.1 sse4.2 ssse3
 
 cpu = winchip-c6
 arch = X86
@@ -1464,15 +1540,15 @@ features = fxsr sse sse2
 
 cpu = x86-64-v2
 arch = X86
-features = cmpxchg16b fxsr popcnt sse sse2 sse3 sse4.1 sse4.2 ssse3
+features = cmpxchg16b fxsr lahfsahf popcnt sse sse2 sse3 sse4.1 sse4.2 ssse3
 
 cpu = x86-64-v3
 arch = X86
-features = avx avx2 bmi1 bmi2 cmpxchg16b f16c fma fxsr lzcnt movbe popcnt sse sse2 sse3 sse4.1 sse4.2 ssse3 xsave
+features = avx avx2 bmi1 bmi2 cmpxchg16b f16c fma fxsr lahfsahf lzcnt movbe popcnt sse sse2 sse3 sse4.1 sse4.2 ssse3 xsave
 
 cpu = x86-64-v4
 arch = X86
-features = avx avx2 avx512bw avx512cd avx512dq avx512f avx512vl bmi1 bmi2 cmpxchg16b f16c fma fxsr lzcnt movbe popcnt sse sse2 sse3 sse4.1 sse4.2 ssse3 xsave
+features = avx avx2 avx512bw avx512cd avx512dq avx512f avx512vl bmi1 bmi2 cmpxchg16b f16c fma fxsr lahfsahf lzcnt movbe popcnt sse sse2 sse3 sse4.1 sse4.2 ssse3 xsave
 
 cpu = yonah
 arch = X86
@@ -1480,17 +1556,17 @@ features = fxsr sse sse2 sse3
 
 cpu = znver1
 arch = X86
-features = adx aes avx avx2 bmi1 bmi2 cmpxchg16b f16c fma fxsr lzcnt movbe pclmulqdq popcnt rdrand rdseed sha sse sse2 sse3 sse4.1 sse4.2 sse4a ssse3 xsave xsavec xsaveopt xsaves
+features = adx aes avx avx2 bmi1 bmi2 cmpxchg16b f16c fma fxsr lahfsahf lzcnt movbe pclmulqdq popcnt prfchw rdrand rdseed sha sse sse2 sse3 sse4.1 sse4.2 sse4a ssse3 xsave xsavec xsaveopt xsaves
 
 cpu = znver2
 arch = X86
-features = adx aes avx avx2 bmi1 bmi2 cmpxchg16b f16c fma fxsr lzcnt movbe pclmulqdq popcnt rdrand rdseed sha sse sse2 sse3 sse4.1 sse4.2 sse4a ssse3 xsave xsavec xsaveopt xsaves
+features = adx aes avx avx2 bmi1 bmi2 cmpxchg16b f16c fma fxsr lahfsahf lzcnt movbe pclmulqdq popcnt prfchw rdrand rdseed sha sse sse2 sse3 sse4.1 sse4.2 sse4a ssse3 xsave xsavec xsaveopt xsaves
 
 cpu = znver3
 arch = X86
-features = adx aes avx avx2 bmi1 bmi2 cmpxchg16b f16c fma fxsr lzcnt movbe pclmulqdq popcnt rdrand rdseed sha sse sse2 sse3 sse4.1 sse4.2 sse4a ssse3 vaes vpclmulqdq xsave xsavec xsaveopt xsaves
+features = adx aes avx avx2 bmi1 bmi2 cmpxchg16b f16c fma fxsr lahfsahf lzcnt movbe pclmulqdq popcnt prfchw rdrand rdseed sha sse sse2 sse3 sse4.1 sse4.2 sse4a ssse3 vaes vpclmulqdq xsave xsavec xsaveopt xsaves
 
 cpu = znver4
 arch = X86
-features = adx aes avx avx2 avx512bf16 avx512bitalg avx512bw avx512cd avx512dq avx512f avx512ifma avx512vbmi avx512vbmi2 avx512vl avx512vnni avx512vpopcntdq bmi1 bmi2 cmpxchg16b f16c fma fxsr gfni lzcnt movbe pclmulqdq popcnt rdrand rdseed sha sse sse2 sse3 sse4.1 sse4.2 sse4a ssse3 vaes vpclmulqdq xsave xsavec xsaveopt xsaves
+features = adx aes avx avx2 avx512bf16 avx512bitalg avx512bw avx512cd avx512dq avx512f avx512ifma avx512vbmi avx512vbmi2 avx512vl avx512vnni avx512vpopcntdq bmi1 bmi2 cmpxchg16b f16c fma fxsr gfni lahfsahf lzcnt movbe pclmulqdq popcnt prfchw rdrand rdseed sha sse sse2 sse3 sse4.1 sse4.2 sse4a ssse3 vaes vpclmulqdq xsave xsavec xsaveopt xsaves
 

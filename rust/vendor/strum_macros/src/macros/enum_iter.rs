@@ -74,7 +74,7 @@ pub fn enum_iter_inner(ast: &DeriveInput) -> syn::Result<TokenStream> {
         #[allow(
             missing_copy_implementations,
         )]
-        #vis struct #iter_name #ty_generics {
+        #vis struct #iter_name #impl_generics {
             idx: usize,
             back_idx: usize,
             marker: ::core::marker::PhantomData #phantom_data,
@@ -158,6 +158,8 @@ pub fn enum_iter_inner(ast: &DeriveInput) -> syn::Result<TokenStream> {
                 }
             }
         }
+
+        impl #impl_generics ::core::iter::FusedIterator for #iter_name #ty_generics #where_clause { }
 
         impl #impl_generics Clone for #iter_name #ty_generics #where_clause {
             fn clone(&self) -> #iter_name #ty_generics {

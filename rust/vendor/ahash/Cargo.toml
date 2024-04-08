@@ -13,7 +13,7 @@
 edition = "2018"
 rust-version = "1.60.0"
 name = "ahash"
-version = "0.8.7"
+version = "0.8.11"
 authors = ["Tom Kaitchuck <Tom.Kaitchuck@gmail.com>"]
 build = "./build.rs"
 exclude = [
@@ -120,13 +120,16 @@ version = "1.0.5"
 version = "0.2.1"
 
 [dev-dependencies.hashbrown]
-version = "0.12.3"
+version = "0.14.3"
 
 [dev-dependencies.hex]
 version = "0.4.2"
 
 [dev-dependencies.no-panic]
 version = "0.1.10"
+
+[dev-dependencies.pcg-mwc]
+version = "0.2.1"
 
 [dev-dependencies.rand]
 version = "0.8.5"
@@ -136,6 +139,9 @@ version = "4.0"
 
 [dev-dependencies.serde_json]
 version = "1.0.59"
+
+[dev-dependencies.smallvec]
+version = "1.13.1"
 
 [build-dependencies.version_check]
 version = "0.9.4"

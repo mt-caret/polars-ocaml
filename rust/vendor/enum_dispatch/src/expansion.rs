@@ -144,9 +144,9 @@ fn generate_try_into_impls(
 
             let impl_block = quote! {
                 #(#attributes)*
-                impl #impl_generics core::convert::TryInto<#variant_type> for #enumname #ty_generics #where_clause {
+                impl #impl_generics ::core::convert::TryInto<#variant_type> for #enumname #ty_generics #where_clause {
                     type Error = &'static str;
-                    fn try_into(self) -> ::core::result::Result<#variant_type, <Self as core::convert::TryInto<#variant_type>>::Error> {
+                    fn try_into(self) -> ::core::result::Result<#variant_type, <Self as ::core::convert::TryInto<#variant_type>>::Error> {
                         match self {
                             #enumname::#variant_name(v) => {Ok(v)},
                             #(  #other_attributes
@@ -302,7 +302,7 @@ fn create_match_expr(
                 } else {
                     false
                 }
-            },
+            }
             _ => false,
         }
     } else {

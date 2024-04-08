@@ -5,17 +5,21 @@
 ; files and so on in vendor.
 ;
 ; However, this causes errors since dune
-; *also* ignores all files that start with an underscore, and so it ignores
-; the vendored vendor/futures-core/src/task/__internalk directory causing Rust
-; builds in dune to fail. Based on suggestions in
+; *also* ignores all files that start with an underscore or a dot, and so it ignores
+; the vendored vendor/futures-core/src/task/__internal and vendor/ocaml/.github/
+; directory causing Rust builds in dune to fail. Based on suggestions in
 ; https://github.com/ocaml/dune/issues/4795, we work around this by first
 ; specifying as data_only_dirs the directories which contain dune files in them
 ; (so they aren't compiled), and then manually specifying the directory which
-; starts with an underscore to un-ignore it.
+; starts with an underscore / dot to un-ignore it.
 
 (subdir
  vendor
- (data_only_dirs ocaml*))
+ (data_only_dirs ocaml-interop))
+
+(subdir
+ vendor/ocaml
+ (dirs :standard .github))
 
 (subdir
  vendor/futures-core/src/task

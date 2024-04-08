@@ -3,31 +3,51 @@
 # When uploading crates to the registry Cargo will automatically
 # "normalize" Cargo.toml files for maximal compatibility
 # with all versions of Cargo and also rewrite `path` dependencies
-# to registry (e.g., crates.io) dependencies
+# to registry (e.g., crates.io) dependencies.
 #
-# If you believe there's an error in this file please file an
-# issue against the rust-lang/cargo repository. If you're
-# editing this file be aware that the upstream Cargo.toml
-# will likely look very different (and much more reasonable)
+# If you are reading this file be aware that the original Cargo.toml
+# will likely look very different (and much more reasonable).
+# See Cargo.toml.orig for the original contents.
 
 [package]
 edition = "2018"
 name = "ocaml-boxroot-sys"
-version = "0.2.0"
-authors = ["Bruno Deferrari <utizoc@gmail.com>"]
-include = ["build.rs", "src/*.rs", "vendor/boxroot/boxroot.c", "vendor/boxroot/boxroot.h", "README.md", "utils/without-ocamlopt/caml/*.h"]
-description = "Bindings for ocaml-boxroot"
+version = "0.3.1"
+authors = [
+    "Guillaume Munch-Maccagnoni <Guillaume.Munch-Maccagnoni@inria.fr>",
+    "Gabriel Scherer <Gabriel.Scherer@inria.fr>",
+    "Bruno Deferrari <utizoc@gmail.com>",
+]
+links = "ocaml-boxroot"
+include = [
+    "build.rs",
+    "src/*.rs",
+    "vendor/boxroot/*.c",
+    "vendor/boxroot/*.h",
+    "vendor/README.md",
+    "vendor/Changes.md",
+    "README.md",
+]
+description = "Boxroot for OCaml: fast movable GC roots (C API)"
 homepage = "https://gitlab.com/ocaml-rust/ocaml-boxroot"
-keywords = ["ocaml", "rust", "ffi"]
+readme = "README.md"
+keywords = [
+    "ocaml",
+    "rust",
+    "ffi",
+]
 license = "MIT"
 repository = "https://gitlab.com/ocaml-rust/ocaml-boxroot"
+
 [package.metadata.docs.rs]
-features = ["without-ocamlopt"]
+features = []
 
 [dependencies]
+
 [build-dependencies.cc]
 version = "^1.0"
 
 [features]
+bundle-boxroot = []
+default = ["bundle-boxroot"]
 link-ocaml-runtime-and-dummy-program = []
-without-ocamlopt = []
