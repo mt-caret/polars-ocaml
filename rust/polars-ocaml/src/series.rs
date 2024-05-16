@@ -18,6 +18,7 @@ use ocaml_interop::{
     OCamlRuntime, ToOCaml,
 };
 
+use polars::export::arrow::array::BooleanArray;
 use polars::export::arrow::array::PrimitiveArray;
 use polars::export::arrow::bitmap::Bitmap;
 use polars::export::arrow::types::NativeType;
@@ -1226,6 +1227,33 @@ fn modify_native_series_at_chunk_index<T: NativeType>(
     }
 }
 
+// CR-someday mtakeda: It's slightly sad we have this duplication here. Maybe
+// this is something that can be resolved with traits associating
+// [PrimitiveArray<T>] with [T]] and [BooleanArray] with [bool]?
+fn modify_boolean_array_at_chunk_index(
+    series: &mut Series,
+    chunk_index: usize,
+    indices_and_values: &Vec<(usize, bool)>,
+) -> Result<(), String> {
+    unsafe {
+        let chunks = series.chunks_mut();
+        let chunk = chunks
+            .get_mut(chunk_index)
+            .ok_or("modify_series_at_chunk_index: index out of range")?;
+
+        let chunk: &mut BooleanArray = chunk
+            .as_any_mut()
+            .downcast_mut()
+            .ok_or("modify_chunk_at_index: unable to downcast to BooleanArray")?;
+        chunk.apply_values_mut(|bitmap| {
+            for (index, value) in indices_and_values {
+                bitmap.set(*index, *value);
+            }
+        });
+        Ok(())
+    }
+}
+
 fn set_chunk_validity_based_on_null_values<T: NativeType>(
     chunk: &mut PrimitiveArray<T>,
     indices_and_values: &Vec<(usize, Option<T>)>,
@@ -1246,10 +1274,7 @@ fn set_chunk_validity_based_on_null_values<T: NativeType>(
             arrow2::Either::Right(validity) => validity,
         };
         for (index, value) in indices_and_values {
-            match *value {
-                Some(_) => validity.set(*index, true),
-                None => validity.set(*index, false),
-            }
+            validity.set(*index, value.is_some())
         }
 
         // Warning: validity.into() calls Bitmap::try_new(), which is an O(chunk_length)
@@ -1382,7 +1407,25 @@ pub fn modify_series_at_chunk_index(
 
     match data_type {
         GADTDataType::Boolean => {
-            Err("Modifying bool series in place is not supported yet!".to_string())
+            if are_values_options {
+                // CR-someday mtakeda: why not add support for bool options
+                // series while we're at it? Is this non-trivial to do?
+                //
+                // mskarupke: This is surprisingly tricky. I tried for a while but I think
+                // BooleanArray just doesn't have a way to modify its internal validity()
+                // without making a copy. Meaning a O(1) update would turn into a O(n)
+                // update. Let me know if I missed anything.
+                //
+                // mtakeda: That's unfortunate; let's cr-someday this and
+                // revisit if we want this at some point.
+                Err("Modifying bool option series in place is not supported yet!".to_string())
+            } else {
+                let indices_and_values: Vec<(usize, bool)> = indices_and_values
+                    .into_iter()
+                    .map(|(index, v)| (index as usize, v.interpret::<bool>(cr).to_rust::<bool>()))
+                    .collect();
+                modify_boolean_array_at_chunk_index(series, chunk_index, &indices_and_values)
+            }
         }
         GADTDataType::UInt8 => {
             modify_series_with_cast!(OCamlInt, i64, u8, |v: i64| v.try_into().unwrap())

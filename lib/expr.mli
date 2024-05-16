@@ -753,6 +753,8 @@ val sample_n
     ]} *)
 val filter : t -> predicate:t -> t
 
+val is_in : t -> other:t -> t
+
 (** [ceil] and [floor] rounds up and down to the nearest integer value,
     respectively. This function only works for floating point values.
 
@@ -996,6 +998,15 @@ val log1p : t -> t
 
 module Dt : sig
   val strftime : t -> format:string -> t
+
+  (* CR-someday mtakeda: it's pretty weird that we take a string here when there's a
+     proper type [Tz.t] that can be passed instead. This is due to the Rust library
+     API also taking a string here, and underlying data types also using a
+     [Option<String>] to represent timezones:
+     https://docs.rs/polars/latest/polars/prelude/dt/struct.DateLikeNameSpace.html#method.convert_time_zone
+
+     Perhaps we could make the OCaml API more typesafe by taking [Tz.t] here and
+     converting it to a string on the Rust side. *)
   val convert_time_zone : t -> to_:string -> t
   val replace_time_zone : ?use_earliest:bool -> t -> to_:string option -> t
   val year : t -> t
@@ -1008,6 +1019,12 @@ module Dt : sig
   val milliseconds : t -> t
   val microseconds : t -> t
   val nanoseconds : t -> t
+
+  (** Get the (local) date of a Date/Datetime *)
+  val date : t -> t
+
+  (** Get the (local) time of a Date/Datetime/Time *)
+  val time : t -> t
 end
 
 module Str : sig
