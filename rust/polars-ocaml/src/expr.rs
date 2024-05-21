@@ -312,6 +312,7 @@ fn rust_expr_sample_n(
 }
 
 expr_op!(rust_expr_filter, |expr, predicate| expr.filter(predicate));
+expr_op!(rust_expr_is_in, |expr, other| expr.is_in(other));
 expr_op!(rust_expr_ceil, |expr| expr.ceil());
 expr_op!(rust_expr_floor, |expr| expr.floor());
 
@@ -777,6 +778,9 @@ fn rust_expr_dt_nanoseconds(
         GetOutput::from_type(DataType::Int64),
     )
 }
+
+expr_op!(rust_expr_dt_date, |expr| expr.dt().date());
+expr_op!(rust_expr_dt_time, |expr| expr.dt().time());
 
 #[ocaml_interop_export]
 fn rust_expr_str_split(

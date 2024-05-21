@@ -156,16 +156,15 @@ let%expect_test "" =
                 (T data_type : Data_type.Typed.packed)]
         | Error _ -> ()
       in
+      let try_modify_non_option () =
+        match value_kind with
+        | Optional -> expect_fail try_modify
+        | Non_null -> try_modify ()
+      in
       match data_type with
-      | Time
-      | Datetime _
-      | Duration _
-      | List _
-      | Utf8
-      | Binary
-      | Date
-      | Custom _
-      | Boolean -> expect_fail try_modify
+      | Time | Datetime _ | Duration _ | List _ | Utf8 | Binary | Date | Custom _ ->
+        expect_fail try_modify
+      | Boolean -> try_modify_non_option ()
       | UInt8
       | UInt16
       | UInt32
@@ -237,4 +236,17 @@ let%expect_test "Error handling" =
     modify_at_chunk_index_exn raised an exception. Usually this happens when accessing an index out of bounds of the chunk or passing in a value outside of the domain of dtype: (Failure
       "Polars panicked: called `Result::unwrap()` on an `Err` value: TryFromIntError(())\
      \nbacktrace not captured") |}]
+;;
+
+let%expect_test "modify bool" =
+  let series = Series.create Boolean "test" [ true; true; true ] in
+  Series.Expert.modify_at_chunk_index
+    series
+    ~dtype:Boolean
+    ~chunk_index:0
+    ~indices_and_values:[ 1, false ]
+  |> Result.ok_or_failwith;
+  let as_list = Series.to_list Boolean series in
+  print_s [%message (as_list : bool list)];
+  [%expect {| (as_list (true false true)) |}]
 ;;

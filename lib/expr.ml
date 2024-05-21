@@ -77,6 +77,7 @@ module T = struct
   ;;
 
   external filter : t -> predicate:t -> t = "rust_expr_filter"
+  external is_in : t -> other:t -> t = "rust_expr_is_in"
   external ceil : t -> t = "rust_expr_ceil"
   external floor : t -> t = "rust_expr_floor"
   external clip_min_float : t -> min:float -> t = "rust_expr_clip_min_float"
@@ -252,6 +253,8 @@ module Dt = struct
   external milliseconds : t -> t = "rust_expr_dt_milliseconds"
   external microseconds : t -> t = "rust_expr_dt_microseconds"
   external nanoseconds : t -> t = "rust_expr_dt_nanoseconds"
+  external date : t -> t = "rust_expr_dt_date"
+  external time : t -> t = "rust_expr_dt_time"
 end
 
 module Str = struct

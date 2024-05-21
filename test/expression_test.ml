@@ -221,3 +221,55 @@ let%expect_test "take" =
     │ 6.0 ┆ 2   │
     └─────┴─────┘ |}]
 ;;
+
+let%expect_test "is_in" =
+  let values = Series.string "val" [ "1"; "2"; "3"; "4"; "5"; "6" ] in
+  let other = Series.string "is_in" [ "2"; "3"; "5" ] in
+  let is_in =
+    Data_frame.create_exn [ values ]
+    |> Data_frame.with_columns_exn
+         ~exprs:Expr.[ is_in (col "val") ~other:(series other) |> alias ~name:"is_in" ]
+  in
+  Data_frame.print is_in;
+  [%expect
+    {|
+    shape: (6, 2)
+    ┌─────┬───────┐
+    │ val ┆ is_in │
+    │ --- ┆ ---   │
+    │ str ┆ bool  │
+    ╞═════╪═══════╡
+    │ 1   ┆ false │
+    │ 2   ┆ true  │
+    │ 3   ┆ true  │
+    │ 4   ┆ false │
+    │ 5   ┆ true  │
+    │ 6   ┆ false │
+    └─────┴───────┘
+    |}]
+;;
+
+let%expect_test "is_in_left" =
+  let values =
+    Series.create (List Utf8) "val" [ [ "a"; "b"; "c" ]; [ "2"; "3"; "4" ]; [ "3"; "a" ] ]
+  in
+  let is_in =
+    Data_frame.create_exn [ values ]
+    |> Data_frame.with_columns_exn
+         ~exprs:Expr.[ is_in (string "a") ~other:(col "val") |> alias ~name:"contains_a" ]
+  in
+  Data_frame.print is_in;
+  [%expect
+    {|
+    shape: (3, 2)
+    ┌─────────────────┬────────────┐
+    │ val             ┆ contains_a │
+    │ ---             ┆ ---        │
+    │ list[str]       ┆ bool       │
+    ╞═════════════════╪════════════╡
+    │ ["a", "b", "c"] ┆ true       │
+    │ ["2", "3", "4"] ┆ false      │
+    │ ["3", "a"]      ┆ true       │
+    └─────────────────┴────────────┘
+    |}]
+;;
