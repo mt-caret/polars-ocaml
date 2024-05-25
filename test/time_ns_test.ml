@@ -188,12 +188,13 @@ let%expect_test "span works" =
     Data_frame.column_exn plus_1h ~name:time_col
     |> Series.to_list Data_type.Typed.Core.time
   in
+  Time_ns_unix.set_sexp_zone Time_ns_unix.Zone.utc;
   print_s [%message (times : Time_ns_unix.t list)];
   [%expect
     {|
     (times
-     ((2024-04-08 10:30:00.000000000-04:00) (2024-04-08 13:00:00.000000000-04:00)
-      (2024-04-08 17:00:00.000000000-04:00)))
+     ((2024-04-08 14:30:00.000000000Z) (2024-04-08 17:00:00.000000000Z)
+      (2024-04-08 21:00:00.000000000Z)))
     |}];
   let now = time "2024-04-08 16:30 nyc" in
   let now_col = "now" in
