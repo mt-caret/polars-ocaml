@@ -3,3 +3,8 @@ replace-with = "vendored-sources"
 
 [source.vendored-sources]
 directory = "vendor"
+
+# macOS's linker by default complains on undeined symbols without this
+# based on https://github.com/zshipko/ocaml-rust-starter/blob/89b862d6950ae0fb12d55e8c113b487aaf7ff2aa/.cargo/config#L2
+[target."aarch64-apple-darwin"]
+rustflags = ["-C", "link-args=-Wl,-undefined,dynamic_lookup"]

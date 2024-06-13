@@ -20,3 +20,84 @@
 (subdir
  vendor/futures-core/src/task
  (dirs :standard __internal))
+
+(rule
+ (deps
+  (source_tree .))
+ (targets libpolars_ocaml.a dllpolars_ocaml.so)
+ (enabled_if
+  (and
+   (= %{system} macosx)
+   (= %{profile} release)))
+ (action
+  (no-infer
+   (progn
+    (run cargo build --release)
+    (copy ./target/release/libpolars_ocaml.dylib dllpolars_ocaml.so)
+    (copy ./target/release/libpolars_ocaml.a libpolars_ocaml.a)))))
+
+(rule
+ (deps
+  (source_tree .))
+ (targets libpolars_ocaml.a dllpolars_ocaml.so)
+ (enabled_if
+  (and
+   (= %{system} macosx)
+   (not
+    (= %{profile} release))))
+ (action
+  (no-infer
+   (progn
+    (run cargo build)
+    (copy ./target/debug/libpolars_ocaml.dylib dllpolars_ocaml.so)
+    (copy ./target/debug/libpolars_ocaml.a libpolars_ocaml.a)))))
+
+(rule
+ (deps
+  (source_tree .))
+ (targets libpolars_ocaml.a dllpolars_ocaml.so)
+ (enabled_if
+  (and
+   (not
+    (= %{system} macosx))
+   (= %{profile} release)))
+ (action
+  (no-infer
+   (progn
+    (run cargo build --release)
+    (copy ./target/release/libpolars_ocaml.so dllpolars_ocaml.so)
+    (copy ./target/release/libpolars_ocaml.a libpolars_ocaml.a)))))
+
+(rule
+ (deps
+  (source_tree .))
+ (targets libpolars_ocaml.a dllpolars_ocaml.so)
+ (enabled_if
+  (and
+   (not
+    (= %{system} macosx))
+   (not
+    (= %{profile} release))))
+ (action
+  (no-infer
+   (progn
+    (run cargo build)
+    (copy ./target/debug/libpolars_ocaml.so dllpolars_ocaml.so)
+    (copy ./target/debug/libpolars_ocaml.a libpolars_ocaml.a)))))
+
+(rule
+ (targets c_library_flags.sexp)
+ (action
+  (run ./config/discover.exe)))
+
+(library
+ (name polars_bindings)
+ (public_name polars.bindings)
+ (foreign_archives polars_ocaml)
+ (c_library_flags
+  (:include c_library_flags.sexp)))
+
+(env
+ (utop
+  (env-vars
+   (OCAML_INTEROP_NO_CAML_STARTUP true))))
