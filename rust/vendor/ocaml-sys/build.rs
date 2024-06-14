@@ -49,15 +49,15 @@ fn link(out_dir: std::path::PathBuf, ocamlopt: String, ocaml_path: &str) -> std:
     let mut f = std::fs::File::create(out_dir.join("runtime.ml")).unwrap();
     write!(f, "")?;
 
-    assert!(std::process::Command::new(&ocamlopt)
-        .args(&["-output-complete-obj", "-o"])
+    assert!(std::process::Command::new(ocamlopt)
+        .args(["-output-complete-obj", "-o"])
         .arg(out_dir.join("rt.o"))
         .arg(out_dir.join("runtime.ml"))
         .status()?
         .success());
 
     let ar = std::env::var("AR").unwrap_or_else(|_| "ar".to_string());
-    assert!(std::process::Command::new(&ar)
+    assert!(std::process::Command::new(ar)
         .arg("rcs")
         .arg(out_dir.join("libruntime.a"))
         .arg(out_dir.join("rt.o"))
@@ -84,6 +84,7 @@ fn run() -> std::io::Result<()> {
     println!("cargo:rerun-if-env-changed=OCAMLOPT");
     println!("cargo:rerun-if-env-changed=OCAML_VERSION");
     println!("cargo:rerun-if-env-changed=OCAML_WHERE_PATH");
+    println!("cargo:rerun-if-env-changed=OPAM_SWITCH_PREFIX");
     let out_dir = std::path::PathBuf::from(std::env::var("OUT_DIR").unwrap());
 
     let ocaml_version = std::env::var("OCAML_VERSION");
@@ -143,10 +144,8 @@ fn run() -> std::io::Result<()> {
     let major = split[0].parse::<usize>().unwrap();
     let minor = split[1].parse::<usize>().unwrap();
 
-    if major >= 4 && minor >= 10 || cfg!(feature = "caml-state") {
-        // This feature determines whether or not caml_local_roots should
-        // use the caml_state struct or the caml_local_roots global
-        println!("cargo:rustc-cfg=caml_state");
+    if major >= 5 || cfg!(feature = "ocaml5") {
+        println!("cargo:rustc-cfg=ocaml5");
     }
 
     #[cfg(feature = "link")]

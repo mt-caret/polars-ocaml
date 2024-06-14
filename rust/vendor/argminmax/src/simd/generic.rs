@@ -111,9 +111,9 @@ where
 /// - `impl_SIMDInit_Int!`
 ///     - called in the `simd_i*.rs` files
 ///     - called in the `simd_u*.rs` files
-/// - `impl_SIMDInit_FloatIgnoreNaN!`
-///     - see the `simd_f*_return_nan.rs` files
 /// - `impl_SIMDInit_FloatReturnNaN!`
+///     - see the `simd_f*_return_nan.rs` files
+/// - `impl_SIMDInit_FloatIgnoreNaN!`
 ///     - see the `simd_f*_ignore_nan.rs` files
 ///
 /// The current (default) implementation is for the Int case - see `impl_SIMDInit_Int!`
@@ -181,7 +181,12 @@ where
 
 // --------------- Int (signed and unsigned)
 
-#[cfg(any(target_arch = "x86", target_arch = "x86_64", feature = "nightly_simd"))]
+#[cfg(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    all(target_arch = "arm", feature = "nightly_simd"),
+    target_arch = "aarch64",
+))]
 macro_rules! impl_SIMDInit_Int {
     ($scalar_dtype:ty, $simd_vec_dtype:ty, $simd_mask_dtype:ty, $lane_size:expr, $simd_struct:ty) => {
         impl SIMDInit<$scalar_dtype, $simd_vec_dtype, $simd_mask_dtype, $lane_size>
@@ -192,13 +197,23 @@ macro_rules! impl_SIMDInit_Int {
     };
 }
 
-#[cfg(any(target_arch = "x86", target_arch = "x86_64", feature = "nightly_simd"))]
+#[cfg(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    all(target_arch = "arm", feature = "nightly_simd"),
+    target_arch = "aarch64",
+))]
 pub(crate) use impl_SIMDInit_Int; // Now classic paths Just Work™
 
 // --------------- Float Return NaNs
 
 #[cfg(any(feature = "float", feature = "half"))]
-#[cfg(any(target_arch = "x86", target_arch = "x86_64", feature = "nightly_simd"))]
+#[cfg(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    all(target_arch = "arm", feature = "nightly_simd"),
+    target_arch = "aarch64",
+))]
 macro_rules! impl_SIMDInit_FloatReturnNaN {
     ($scalar_dtype:ty, $simd_vec_dtype:ty, $simd_mask_dtype:ty, $lane_size:expr, $simd_struct:ty) => {
         impl SIMDInit<$scalar_dtype, $simd_vec_dtype, $simd_mask_dtype, $lane_size>
@@ -221,67 +236,99 @@ macro_rules! impl_SIMDInit_FloatReturnNaN {
 }
 
 #[cfg(any(feature = "float", feature = "half"))]
-#[cfg(any(target_arch = "x86", target_arch = "x86_64", feature = "nightly_simd"))]
+#[cfg(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    all(target_arch = "arm", feature = "nightly_simd"),
+    target_arch = "aarch64",
+))]
 pub(crate) use impl_SIMDInit_FloatReturnNaN; // Now classic paths Just Work™
 
 // --------------- Float Ignore NaNs
 
 #[cfg(any(feature = "float", feature = "half"))]
-#[cfg(any(target_arch = "x86", target_arch = "x86_64", feature = "nightly_simd"))]
+#[cfg(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    all(target_arch = "arm", feature = "nightly_simd"),
+    target_arch = "aarch64",
+))]
 macro_rules! impl_SIMDInit_FloatIgnoreNaN {
-    ($($scalar_dtype:ty, $simd_vec_dtype:ty, $simd_mask_dtype:ty, $lane_size:expr, $simd_struct:ty),*) => {
-        $(
-            impl SIMDInit<$scalar_dtype, $simd_vec_dtype, $simd_mask_dtype, $lane_size> for $simd_struct {
-                // Use the _return_check method from the default implementation
+    ($scalar_dtype:ty, $simd_vec_dtype:ty, $simd_mask_dtype:ty, $lane_size:expr, $simd_struct:ty) => {
+        impl SIMDInit<$scalar_dtype, $simd_vec_dtype, $simd_mask_dtype, $lane_size>
+            for $simd_struct
+        {
+            // Use the _return_check method from the default implementation
 
-                const IGNORE_NAN: bool = true;
+            const IGNORE_NAN: bool = true;
 
-                #[inline(always)]
-                unsafe fn _initialize_index_values_low(
-                    arr_ptr: *const $scalar_dtype,
-                ) -> ($simd_vec_dtype, $simd_vec_dtype) {
-                    // Initialize the index and value SIMD registers
-                    let new_values = Self::_mm_loadu(arr_ptr);
-                    let mask_low = Self::_mm_cmplt(new_values, Self::_mm_set1(<$scalar_dtype>::INFINITY));
-                    let values_low = Self::_mm_blendv(Self::_mm_set1(<$scalar_dtype>::INFINITY), new_values, mask_low);
-                    let index_low = Self::_mm_blendv(Self::_mm_set1(<$scalar_dtype>::zero()), Self::INITIAL_INDEX, mask_low);
-                    (index_low, values_low)
-                }
-
-                #[inline(always)]
-                unsafe fn _initialize_index_values_high(
-                    arr_ptr: *const $scalar_dtype,
-                ) -> ($simd_vec_dtype, $simd_vec_dtype) {
-                    // Initialize the index and value SIMD registers
-                    let new_values = Self::_mm_loadu(arr_ptr);
-                    let mask_high = Self::_mm_cmpgt(new_values, Self::_mm_set1(<$scalar_dtype>::NEG_INFINITY));
-                    let values_high =
-                        Self::_mm_blendv(Self::_mm_set1(<$scalar_dtype>::NEG_INFINITY), new_values, mask_high);
-                    let index_high = Self::_mm_blendv(Self::_mm_set1(<$scalar_dtype>::zero()), Self::INITIAL_INDEX, mask_high);
-                    (index_high, values_high)
-                }
-
-                #[inline(always)]
-                fn _initialize_min_value(_: &[$scalar_dtype]) -> $scalar_dtype {
-                    <$scalar_dtype>::INFINITY
-                }
-
-                #[inline(always)]
-                fn _initialize_max_value(_: &[$scalar_dtype]) -> $scalar_dtype {
-                    <$scalar_dtype>::NEG_INFINITY
-                }
-
-                #[inline(always)]
-                fn _nan_check(v: $scalar_dtype) -> bool {
-                    v.is_nan()
-                }
+            #[inline(always)]
+            unsafe fn _initialize_index_values_low(
+                arr_ptr: *const $scalar_dtype,
+            ) -> ($simd_vec_dtype, $simd_vec_dtype) {
+                // Initialize the index and value SIMD registers
+                let new_values = Self::_mm_loadu(arr_ptr);
+                let mask_low =
+                    Self::_mm_cmplt(new_values, Self::_mm_set1(<$scalar_dtype>::INFINITY));
+                let values_low = Self::_mm_blendv(
+                    Self::_mm_set1(<$scalar_dtype>::INFINITY),
+                    new_values,
+                    mask_low,
+                );
+                let index_low = Self::_mm_blendv(
+                    Self::_mm_set1(<$scalar_dtype>::zero()),
+                    Self::INITIAL_INDEX,
+                    mask_low,
+                );
+                (index_low, values_low)
             }
-        )*
+
+            #[inline(always)]
+            unsafe fn _initialize_index_values_high(
+                arr_ptr: *const $scalar_dtype,
+            ) -> ($simd_vec_dtype, $simd_vec_dtype) {
+                // Initialize the index and value SIMD registers
+                let new_values = Self::_mm_loadu(arr_ptr);
+                let mask_high =
+                    Self::_mm_cmpgt(new_values, Self::_mm_set1(<$scalar_dtype>::NEG_INFINITY));
+                let values_high = Self::_mm_blendv(
+                    Self::_mm_set1(<$scalar_dtype>::NEG_INFINITY),
+                    new_values,
+                    mask_high,
+                );
+                let index_high = Self::_mm_blendv(
+                    Self::_mm_set1(<$scalar_dtype>::zero()),
+                    Self::INITIAL_INDEX,
+                    mask_high,
+                );
+                (index_high, values_high)
+            }
+
+            #[inline(always)]
+            fn _initialize_min_value(_: &[$scalar_dtype]) -> $scalar_dtype {
+                <$scalar_dtype>::INFINITY
+            }
+
+            #[inline(always)]
+            fn _initialize_max_value(_: &[$scalar_dtype]) -> $scalar_dtype {
+                <$scalar_dtype>::NEG_INFINITY
+            }
+
+            #[inline(always)]
+            fn _nan_check(v: $scalar_dtype) -> bool {
+                v.is_nan()
+            }
+        }
     };
 }
 
 #[cfg(any(feature = "float", feature = "half"))]
-#[cfg(any(target_arch = "x86", target_arch = "x86_64", feature = "nightly_simd"))]
+#[cfg(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    all(target_arch = "arm", feature = "nightly_simd"),
+    target_arch = "aarch64",
+))]
 pub(crate) use impl_SIMDInit_FloatIgnoreNaN; // Now classic paths Just Work™
 
 // ---------------------------------- SIMD algorithm -----------------------------------
@@ -738,40 +785,55 @@ where
     }
 }
 
-#[cfg(any(target_arch = "x86", target_arch = "x86_64", feature = "nightly_simd"))]
+#[cfg(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    all(target_arch = "arm", feature = "nightly_simd"),
+    target_arch = "aarch64",
+))]
 macro_rules! impl_SIMDArgMinMax {
-    ($($scalar_dtype:ty, $simd_vec_dtype:ty, $simd_mask_dtype:ty, $lane_size:expr, $scalar_struct:ty, $simd_struct:ty, $target:expr),*) => {
-        $(
-            impl SIMDArgMinMax<$scalar_dtype, $simd_vec_dtype, $simd_mask_dtype, $lane_size, $scalar_struct> for $simd_struct {
-                #[target_feature(enable = $target)]
-                unsafe fn argminmax(data: &[$scalar_dtype]) -> (usize, usize) {
-                    Self::_argminmax(data)
-                }
-
-                #[target_feature(enable = $target)]
-                unsafe fn argmin(data: &[$scalar_dtype]) -> usize {
-                    Self::_argmin(data)
-                    // TODO: test if this is same speed as _argmin
-                    // Self::_argminmax(data).0
-                }
-
-                #[target_feature(enable = $target)]
-                unsafe fn argmax(data: &[$scalar_dtype]) -> usize {
-                    Self::_argmax(data)
-                    // Self::_argminmax(data).1
-                }
+    ($scalar_dtype:ty, $simd_vec_dtype:ty, $simd_mask_dtype:ty, $lane_size:expr, $scalar_struct:ty, $simd_struct:ty, $target:expr) => {
+        impl
+            SIMDArgMinMax<
+                $scalar_dtype,
+                $simd_vec_dtype,
+                $simd_mask_dtype,
+                $lane_size,
+                $scalar_struct,
+            > for $simd_struct
+        {
+            #[target_feature(enable = $target)]
+            unsafe fn argminmax(data: &[$scalar_dtype]) -> (usize, usize) {
+                Self::_argminmax(data)
             }
-        )*
-    }
+
+            #[target_feature(enable = $target)]
+            unsafe fn argmin(data: &[$scalar_dtype]) -> usize {
+                Self::_argmin(data)
+                // TODO: test if this is same speed as _argmin
+                // Self::_argminmax(data).0
+            }
+
+            #[target_feature(enable = $target)]
+            unsafe fn argmax(data: &[$scalar_dtype]) -> usize {
+                Self::_argmax(data)
+                // Self::_argminmax(data).1
+            }
+        }
+    };
 }
 
-#[cfg(any(target_arch = "x86", target_arch = "x86_64", feature = "nightly_simd"))]
+#[cfg(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    all(target_arch = "arm", feature = "nightly_simd"),
+    target_arch = "aarch64",
+))]
 pub(crate) use impl_SIMDArgMinMax; // Now classic paths Just Work™
 
 // --------------------------------- Unimplement Macros --------------------------------
 
-#[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
-#[cfg(feature = "nightly_simd")]
+#[cfg(all(target_arch = "arm", feature = "nightly_simd"))]
 macro_rules! unimpl_SIMDOps {
     ($scalar_type:ty, $reg:ty, $simd_struct:ty) => {
         impl SIMDOps<$scalar_type, $reg, $reg, 0> for $simd_struct {
@@ -806,8 +868,7 @@ macro_rules! unimpl_SIMDOps {
     };
 }
 
-#[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
-#[cfg(feature = "nightly_simd")]
+#[cfg(all(target_arch = "arm", feature = "nightly_simd"))]
 macro_rules! unimpl_SIMDInit {
     ($scalar_type:ty, $reg:ty, $simd_struct:ty) => {
         impl SIMDInit<$scalar_type, $reg, $reg, 0> for $simd_struct {
@@ -816,8 +877,7 @@ macro_rules! unimpl_SIMDInit {
     };
 }
 
-#[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
-#[cfg(feature = "nightly_simd")]
+#[cfg(all(target_arch = "arm", feature = "nightly_simd"))]
 macro_rules! unimpl_SIMDArgMinMax {
     ($scalar_type:ty, $reg:ty, $scalar:ty, $simd_struct:ty) => {
         impl SIMDArgMinMax<$scalar_type, $reg, $reg, 0, $scalar> for $simd_struct {
@@ -836,14 +896,11 @@ macro_rules! unimpl_SIMDArgMinMax {
     };
 }
 
-#[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
-#[cfg(feature = "nightly_simd")]
+#[cfg(all(target_arch = "arm", feature = "nightly_simd"))]
 pub(crate) use unimpl_SIMDArgMinMax; // Now classic paths Just Work™
 
-#[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
-#[cfg(feature = "nightly_simd")]
+#[cfg(all(target_arch = "arm", feature = "nightly_simd"))]
 pub(crate) use unimpl_SIMDInit; // Now classic paths Just Work™
 
-#[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
-#[cfg(feature = "nightly_simd")]
+#[cfg(all(target_arch = "arm", feature = "nightly_simd"))]
 pub(crate) use unimpl_SIMDOps; // Now classic paths Just Work™

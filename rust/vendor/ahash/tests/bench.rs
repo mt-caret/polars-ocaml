@@ -14,7 +14,7 @@ const AHASH_IMPL: &str = if cfg!(any(
         target_feature = "aes",
         not(miri),
     ),
-    all(target_arch = "aarch64", target_feature = "aes", not(miri)),
+    all(feature = "nightly-arm-aes", target_arch = "aarch64", target_feature = "aes", not(miri)),
     all(
         feature = "nightly-arm-aes",
         target_arch = "arm",
@@ -75,7 +75,7 @@ fn gen_strings() -> Vec<String> {
 macro_rules! bench_inputs {
     ($group:ident, $hash:ident) => {
         // Number of iterations per batch should be high enough to hide timing overhead.
-        let size = BatchSize::NumIterations(2_000);
+        let size = BatchSize::NumIterations(50_000);
 
         let mut rng = rand::thread_rng();
         $group.bench_function("u8", |b| b.iter_batched(|| rng.gen::<u8>(), |v| $hash(&v), size));

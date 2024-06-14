@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.13
+
+- Fix namespace collision with imports named `core` (!35)
+
 ## 0.3.12
 
 - Update to syn 2.0 (#69)

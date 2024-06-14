@@ -12,7 +12,8 @@ use crate::{
 };
 use core::{any::Any, cell::UnsafeCell, marker::PhantomData, mem, pin::Pin, ptr};
 pub use ocaml_sys::{
-    caml_alloc, local_roots as ocaml_sys_local_roots, set_local_roots as ocaml_sys_set_local_roots,
+    caml_alloc,
+    // local_roots as ocaml_sys_local_roots, set_local_roots as ocaml_sys_set_local_roots,
     store_field,
 };
 use ocaml_sys::{
