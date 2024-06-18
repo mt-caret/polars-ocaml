@@ -1,8 +1,8 @@
-use arrow::datatypes::DataType;
+use arrow::datatypes::ArrowDataType;
 
 use super::*;
 use crate::fixed::{decode_bool, decode_primitive};
-use crate::variable::decode_binary;
+use crate::variable::{decode_binary, decode_binview};
 
 /// Decode `rows` into a arrow format
 /// # Safety
@@ -10,8 +10,8 @@ use crate::variable::decode_binary;
 /// encodings.
 pub unsafe fn decode_rows_from_binary<'a>(
     arr: &'a BinaryArray<i64>,
-    fields: &[SortField],
-    data_types: &[DataType],
+    fields: &[EncodingField],
+    data_types: &[ArrowDataType],
     rows: &mut Vec<&'a [u8]>,
 ) -> Vec<ArrayRef> {
     assert_eq!(arr.null_count(), 0);
@@ -27,8 +27,8 @@ pub unsafe fn decode_rows_from_binary<'a>(
 pub unsafe fn decode_rows(
     // the rows will be updated while the data is decoded
     rows: &mut [&[u8]],
-    fields: &[SortField],
-    data_types: &[DataType],
+    fields: &[EncodingField],
+    data_types: &[ArrowDataType],
 ) -> Vec<ArrayRef> {
     assert_eq!(fields.len(), data_types.len());
     data_types
@@ -38,25 +38,28 @@ pub unsafe fn decode_rows(
         .collect()
 }
 
-unsafe fn decode(rows: &mut [&[u8]], field: &SortField, data_type: &DataType) -> ArrayRef {
-    // not yet supported for fixed types
-    assert!(!field.nulls_last, "not yet supported");
-    assert!(!field.descending, "not yet supported");
+unsafe fn decode(rows: &mut [&[u8]], field: &EncodingField, data_type: &ArrowDataType) -> ArrayRef {
     match data_type {
-        DataType::Null => NullArray::new(DataType::Null, rows.len()).to_boxed(),
-        DataType::Boolean => decode_bool(rows, field).to_boxed(),
-        DataType::LargeBinary => decode_binary(rows, field).to_boxed(),
-        DataType::LargeUtf8 => {
+        ArrowDataType::Null => NullArray::new(ArrowDataType::Null, rows.len()).to_boxed(),
+        ArrowDataType::Boolean => decode_bool(rows, field).to_boxed(),
+        ArrowDataType::BinaryView | ArrowDataType::LargeBinary => {
+            decode_binview(rows, field).to_boxed()
+        },
+        ArrowDataType::Utf8View => {
+            let arr = decode_binview(rows, field);
+            arr.to_utf8view_unchecked().boxed()
+        },
+        ArrowDataType::LargeUtf8 => {
             let arr = decode_binary(rows, field);
             Utf8Array::<i64>::new_unchecked(
-                DataType::LargeUtf8,
+                ArrowDataType::LargeUtf8,
                 arr.offsets().clone(),
                 arr.values().clone(),
                 arr.validity().cloned(),
             )
             .to_boxed()
         },
-        DataType::Struct(fields) => {
+        ArrowDataType::Struct(fields) => {
             let values = fields
                 .iter()
                 .map(|struct_fld| decode(rows, field, struct_fld.data_type()))

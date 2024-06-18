@@ -1,4 +1,4 @@
-use polars_core::frame::hash_join::JoinArgs;
+use polars_ops::frame::DataFrameJoinOps;
 
 use super::*;
 
@@ -34,10 +34,11 @@ impl JoinExec {
 
 impl Executor for JoinExec {
     fn execute<'a>(&'a mut self, state: &'a mut ExecutionState) -> PolarsResult<DataFrame> {
+        state.should_stop()?;
         #[cfg(debug_assertions)]
         {
             if state.verbose() {
-                println!("run JoinExec")
+                eprintln!("run JoinExec")
             }
         }
         if state.verbose() {

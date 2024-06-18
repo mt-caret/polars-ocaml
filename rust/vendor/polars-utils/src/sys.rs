@@ -1,7 +1,7 @@
 use std::sync::Mutex;
 
 use once_cell::sync::Lazy;
-use sysinfo::{System, SystemExt};
+use sysinfo::System;
 
 /// Startup system is expensive, so we do it once
 pub struct MemInfo {
@@ -13,7 +13,10 @@ impl MemInfo {
     pub fn free(&self) -> u64 {
         let mut sys = self.sys.lock().unwrap();
         sys.refresh_memory();
-        sys.available_memory()
+        match sys.cgroup_limits() {
+            Some(limits) => limits.free_memory,
+            None => sys.available_memory(),
+        }
     }
 }
 

@@ -98,7 +98,7 @@ pub unsafe trait RawRwLock {
     }
 }
 
-/// Additional methods for RwLocks which support fair unlocking.
+/// Additional methods for `RwLock`s which support fair unlocking.
 ///
 /// Fair unlocking means that a lock is handed directly over to the next waiting
 /// thread if there is one, without giving other threads the opportunity to
@@ -148,7 +148,7 @@ pub unsafe trait RawRwLockFair: RawRwLock {
     }
 }
 
-/// Additional methods for RwLocks which support atomically downgrading an
+/// Additional methods for `RwLock`s which support atomically downgrading an
 /// exclusive lock to a shared lock.
 pub unsafe trait RawRwLockDowngrade: RawRwLock {
     /// Atomically downgrades an exclusive lock into a shared lock without
@@ -160,7 +160,7 @@ pub unsafe trait RawRwLockDowngrade: RawRwLock {
     unsafe fn downgrade(&self);
 }
 
-/// Additional methods for RwLocks which support locking with timeouts.
+/// Additional methods for `RwLock`s which support locking with timeouts.
 ///
 /// The `Duration` and `Instant` types are specified as associated types so that
 /// this trait is usable even in `no_std` environments.
@@ -184,7 +184,7 @@ pub unsafe trait RawRwLockTimed: RawRwLock {
     fn try_lock_exclusive_until(&self, timeout: Self::Instant) -> bool;
 }
 
-/// Additional methods for RwLocks which support recursive read locks.
+/// Additional methods for `RwLock`s which support recursive read locks.
 ///
 /// These are guaranteed to succeed without blocking if
 /// another read lock is held at the time of the call. This allows a thread
@@ -199,7 +199,7 @@ pub unsafe trait RawRwLockRecursive: RawRwLock {
     fn try_lock_shared_recursive(&self) -> bool;
 }
 
-/// Additional methods for RwLocks which support recursive read locks and timeouts.
+/// Additional methods for `RwLock`s which support recursive read locks and timeouts.
 pub unsafe trait RawRwLockRecursiveTimed: RawRwLockRecursive + RawRwLockTimed {
     /// Attempts to acquire a shared lock until a timeout is reached, without
     /// deadlocking in case of a recursive lock.
@@ -210,7 +210,7 @@ pub unsafe trait RawRwLockRecursiveTimed: RawRwLockRecursive + RawRwLockTimed {
     fn try_lock_shared_recursive_until(&self, timeout: Self::Instant) -> bool;
 }
 
-/// Additional methods for RwLocks which support atomically upgrading a shared
+/// Additional methods for `RwLock`s which support atomically upgrading a shared
 /// lock to an exclusive lock.
 ///
 /// This requires acquiring a special "upgradable read lock" instead of a
@@ -246,7 +246,7 @@ pub unsafe trait RawRwLockUpgrade: RawRwLock {
     unsafe fn try_upgrade(&self) -> bool;
 }
 
-/// Additional methods for RwLocks which support upgradable locks and fair
+/// Additional methods for `RwLock`s which support upgradable locks and fair
 /// unlocking.
 pub unsafe trait RawRwLockUpgradeFair: RawRwLockUpgrade + RawRwLockFair {
     /// Releases an upgradable lock using a fair unlock protocol.
@@ -271,7 +271,7 @@ pub unsafe trait RawRwLockUpgradeFair: RawRwLockUpgrade + RawRwLockFair {
     }
 }
 
-/// Additional methods for RwLocks which support upgradable locks and lock
+/// Additional methods for `RwLock`s which support upgradable locks and lock
 /// downgrading.
 pub unsafe trait RawRwLockUpgradeDowngrade: RawRwLockUpgrade + RawRwLockDowngrade {
     /// Downgrades an upgradable lock to a shared lock.
@@ -289,7 +289,7 @@ pub unsafe trait RawRwLockUpgradeDowngrade: RawRwLockUpgrade + RawRwLockDowngrad
     unsafe fn downgrade_to_upgradable(&self);
 }
 
-/// Additional methods for RwLocks which support upgradable locks and locking
+/// Additional methods for `RwLock`s which support upgradable locks and locking
 /// with timeouts.
 pub unsafe trait RawRwLockUpgradeTimed: RawRwLockUpgrade + RawRwLockTimed {
     /// Attempts to acquire an upgradable lock until a timeout is reached.
@@ -396,15 +396,24 @@ impl<R: RawRwLock, T> RwLock<R, T> {
 impl<R, T> RwLock<R, T> {
     /// Creates a new new instance of an `RwLock<T>` based on a pre-existing
     /// `RawRwLock<T>`.
-    ///
-    /// This allows creating a `RwLock<T>` in a constant context on stable
-    /// Rust.
     #[inline]
-    pub const fn const_new(raw_rwlock: R, val: T) -> RwLock<R, T> {
+    pub const fn from_raw(raw_rwlock: R, val: T) -> RwLock<R, T> {
         RwLock {
             data: UnsafeCell::new(val),
             raw: raw_rwlock,
         }
+    }
+
+    /// Creates a new new instance of an `RwLock<T>` based on a pre-existing
+    /// `RawRwLock<T>`.
+    ///
+    /// This allows creating a `RwLock<T>` in a constant context on stable
+    /// Rust.
+    ///
+    /// This method is a legacy alias for [`from_raw`](Self::from_raw).
+    #[inline]
+    pub const fn const_new(raw_rwlock: R, val: T) -> RwLock<R, T> {
+        Self::from_raw(raw_rwlock, val)
     }
 }
 
@@ -417,7 +426,7 @@ impl<R: RawRwLock, T: ?Sized> RwLock<R, T> {
     ///
     /// This function does not increment the read count of the lock. Calling this function when a
     /// guard has already been produced is undefined behaviour unless the guard was forgotten
-    /// with `mem::forget`.`
+    /// with `mem::forget`.
     #[inline]
     pub unsafe fn make_read_guard_unchecked(&self) -> RwLockReadGuard<'_, R, T> {
         RwLockReadGuard {
@@ -685,7 +694,7 @@ impl<R: RawRwLock, T: ?Sized> RwLock<R, T> {
 }
 
 impl<R: RawRwLockFair, T: ?Sized> RwLock<R, T> {
-    /// Forcibly unlocks a read lock using a fair unlock procotol.
+    /// Forcibly unlocks a read lock using a fair unlock protocol.
     ///
     /// This is useful when combined with `mem::forget` to hold a lock without
     /// the need to maintain a `RwLockReadGuard` object alive, for example when
@@ -701,7 +710,7 @@ impl<R: RawRwLockFair, T: ?Sized> RwLock<R, T> {
         self.raw.unlock_shared_fair();
     }
 
-    /// Forcibly unlocks a write lock using a fair unlock procotol.
+    /// Forcibly unlocks a write lock using a fair unlock protocol.
     ///
     /// This is useful when combined with `mem::forget` to hold a lock without
     /// the need to maintain a `RwLockWriteGuard` object alive, for example when
@@ -1016,7 +1025,7 @@ impl<R: RawRwLockUpgrade, T: ?Sized> RwLock<R, T> {
     ///
     /// This function does not increment the read count of the lock. Calling this function when a
     /// guard has already been produced is undefined behaviour unless the guard was forgotten
-    /// with `mem::forget`.`
+    /// with `mem::forget`.
     #[inline]
     pub unsafe fn make_upgradable_guard_unchecked(&self) -> RwLockUpgradableReadGuard<'_, R, T> {
         RwLockUpgradableReadGuard {
@@ -1198,21 +1207,15 @@ impl<R: RawRwLock, T> From<T> for RwLock<R, T> {
 
 impl<R: RawRwLock, T: ?Sized + fmt::Debug> fmt::Debug for RwLock<R, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("RwLock");
         match self.try_read() {
-            Some(guard) => f.debug_struct("RwLock").field("data", &&*guard).finish(),
+            Some(guard) => d.field("data", &&*guard),
             None => {
-                struct LockedPlaceholder;
-                impl fmt::Debug for LockedPlaceholder {
-                    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                        f.write_str("<locked>")
-                    }
-                }
-
-                f.debug_struct("RwLock")
-                    .field("data", &LockedPlaceholder)
-                    .finish()
+                // Additional format_args! here is to remove quotes around <locked> in debug output.
+                d.field("data", &format_args!("<locked>"))
             }
-        }
+        };
+        d.finish()
     }
 }
 
@@ -2165,7 +2168,7 @@ impl<'a, R: RawRwLockUpgradeTimed + RawRwLockUpgradeDowngrade + 'a, T: ?Sized + 
         if unsafe { self.rwlock.raw.try_upgrade_for(timeout) } {
             // Safety: We just upgraded the lock, so we have mutable access to the data.
             // This will restore the state the lock was in at the start of the function.
-            defer!(unsafe { self.rwlock.raw.downgrade_upgradable() });
+            defer!(unsafe { self.rwlock.raw.downgrade_to_upgradable() });
 
             // Safety: We upgraded the lock, so we have mutable access to the data.
             // When this function returns, whether by drop or panic,
@@ -2196,7 +2199,7 @@ impl<'a, R: RawRwLockUpgradeTimed + RawRwLockUpgradeDowngrade + 'a, T: ?Sized + 
         if unsafe { self.rwlock.raw.try_upgrade_until(timeout) } {
             // Safety: We just upgraded the lock, so we have mutable access to the data.
             // This will restore the state the lock was in at the start of the function.
-            defer!(unsafe { self.rwlock.raw.downgrade_upgradable() });
+            defer!(unsafe { self.rwlock.raw.downgrade_to_upgradable() });
 
             // Safety: We upgraded the lock, so we have mutable access to the data.
             // When this function returns, whether by drop or panic,
@@ -2409,7 +2412,7 @@ impl<R: RawRwLockUpgradeDowngrade, T: ?Sized> ArcRwLockUpgradableReadGuard<R, T>
 
         // Safety: We just upgraded the lock, so we have mutable access to the data.
         // This will restore the state the lock was in at the start of the function.
-        defer!(unsafe { self.rwlock.raw.downgrade_upgradable() });
+        defer!(unsafe { self.rwlock.raw.downgrade_to_upgradable() });
 
         // Safety: We upgraded the lock, so we have mutable access to the data.
         // When this function returns, whether by drop or panic,
@@ -2431,7 +2434,7 @@ impl<R: RawRwLockUpgradeDowngrade, T: ?Sized> ArcRwLockUpgradableReadGuard<R, T>
         if unsafe { self.rwlock.raw.try_upgrade() } {
             // Safety: We just upgraded the lock, so we have mutable access to the data.
             // This will restore the state the lock was in at the start of the function.
-            defer!(unsafe { self.rwlock.raw.downgrade_upgradable() });
+            defer!(unsafe { self.rwlock.raw.downgrade_to_upgradable() });
 
             // Safety: We upgraded the lock, so we have mutable access to the data.
             // When this function returns, whether by drop or panic,
@@ -2519,7 +2522,7 @@ impl<R: RawRwLockUpgradeTimed + RawRwLockUpgradeDowngrade, T: ?Sized>
         if unsafe { self.rwlock.raw.try_upgrade_for(timeout) } {
             // Safety: We just upgraded the lock, so we have mutable access to the data.
             // This will restore the state the lock was in at the start of the function.
-            defer!(unsafe { self.rwlock.raw.downgrade_upgradable() });
+            defer!(unsafe { self.rwlock.raw.downgrade_to_upgradable() });
 
             // Safety: We upgraded the lock, so we have mutable access to the data.
             // When this function returns, whether by drop or panic,
@@ -2550,7 +2553,7 @@ impl<R: RawRwLockUpgradeTimed + RawRwLockUpgradeDowngrade, T: ?Sized>
         if unsafe { self.rwlock.raw.try_upgrade_until(timeout) } {
             // Safety: We just upgraded the lock, so we have mutable access to the data.
             // This will restore the state the lock was in at the start of the function.
-            defer!(unsafe { self.rwlock.raw.downgrade_upgradable() });
+            defer!(unsafe { self.rwlock.raw.downgrade_to_upgradable() });
 
             // Safety: We upgraded the lock, so we have mutable access to the data.
             // When this function returns, whether by drop or panic,

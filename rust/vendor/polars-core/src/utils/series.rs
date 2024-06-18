@@ -2,24 +2,7 @@ use crate::prelude::*;
 use crate::series::unstable::UnstableSeries;
 use crate::series::IsSorted;
 
-/// Transform to physical type and coerce floating point and similar sized integer to a bit representation
-/// to reduce compiler bloat
-pub fn _to_physical_and_bit_repr(s: &[Series]) -> Vec<Series> {
-    s.iter()
-        .map(|s| {
-            let physical = s.to_physical_repr();
-            match physical.dtype() {
-                DataType::Int64 => physical.bit_repr_large().into_series(),
-                DataType::Int32 => physical.bit_repr_small().into_series(),
-                DataType::Float32 => physical.bit_repr_small().into_series(),
-                DataType::Float64 => physical.bit_repr_large().into_series(),
-                _ => physical.into_owned(),
-            }
-        })
-        .collect()
-}
-
-/// A utility that allocates an `UnstableSeries`. The applied function can then use that
+/// A utility that allocates an [`UnstableSeries`]. The applied function can then use that
 /// series container to save heap allocations and swap arrow arrays.
 pub fn with_unstable_series<F, T>(dtype: &DataType, f: F) -> T
 where
@@ -38,4 +21,34 @@ pub fn ensure_sorted_arg(s: &Series, operation: &str) -> PolarsResult<()> {
 - If your data is NOT sorted, sort the 'expr/series/column' first.
     ", operation);
     Ok(())
+}
+
+pub fn handle_casting_failures(input: &Series, output: &Series) -> PolarsResult<()> {
+    let failure_mask = !input.is_null() & output.is_null();
+    let failures = input.filter_threaded(&failure_mask, false)?;
+
+    let additional_info = match (input.dtype(), output.dtype()) {
+        (DataType::String, DataType::Date | DataType::Datetime(_, _)) => {
+            "\n\nYou might want to try:\n\
+            - setting `strict=False` to set values that cannot be converted to `null`\n\
+            - using `str.strptime`, `str.to_date`, or `str.to_datetime` and providing a format string"
+        },
+        #[cfg(feature = "dtype-categorical")]
+        (DataType::String, DataType::Enum(_,_)) => {
+            "\n\nEnsure that all values in the input column are present in the categories of the enum datatype."
+        }
+        _ => "",
+    };
+
+    polars_bail!(
+        ComputeError:
+        "conversion from `{}` to `{}` failed in column '{}' for {} out of {} values: {}{}",
+        input.dtype(),
+        output.dtype(),
+        output.name(),
+        failures.len(),
+        input.len(),
+        failures.fmt_list(),
+        additional_info,
+    )
 }

@@ -1,6 +1,7 @@
 use super::*;
 
 #[test]
+#[cfg(feature = "cov")]
 fn test_pearson_corr() -> PolarsResult<()> {
     let df = df! {
         "uid" => [0, 0, 0, 1, 1, 1],
@@ -12,7 +13,7 @@ fn test_pearson_corr() -> PolarsResult<()> {
     let out = df
         .clone()
         .lazy()
-        .groupby_stable([col("uid")])
+        .group_by_stable([col("uid")])
         // a double aggregation expression.
         .agg([pearson_corr(col("day"), col("cumcases"), 1).alias("pearson_corr")])
         .collect()?;
@@ -22,7 +23,7 @@ fn test_pearson_corr() -> PolarsResult<()> {
 
     let out = df
         .lazy()
-        .groupby_stable([col("uid")])
+        .group_by_stable([col("uid")])
         // a double aggregation expression.
         .agg([pearson_corr(col("day"), col("cumcases"), 1)
             .pow(2.0)
@@ -38,39 +39,38 @@ fn test_pearson_corr() -> PolarsResult<()> {
 // TODO! fix this we must get a token that prevents resetting the string cache until the plan has
 // finished running. We cannot store a mutexguard in the executionstate because they don't implement
 // send.
-#[test]
-#[cfg(feature = "ignore")]
-fn test_single_thread_when_then_otherwise_categorical() -> PolarsResult<()> {
-    let df = df!["col1"=> ["a", "b", "a", "b"],
-        "col2"=> ["a", "a", "b", "b"],
-        "col3"=> ["same", "same", "same", "same"]
-    ]?;
+// #[test]
+// fn test_single_thread_when_then_otherwise_categorical() -> PolarsResult<()> {
+//     let df = df!["col1"=> ["a", "b", "a", "b"],
+//         "col2"=> ["a", "a", "b", "b"],
+//         "col3"=> ["same", "same", "same", "same"]
+//     ]?;
 
-    let out = df
-        .lazy()
-        .with_column(col("*").cast(DataType::Categorical))
-        .select([when(col("col1").eq(col("col2")))
-            .then(col("col3"))
-            .otherwise(col("col1"))])
-        .collect()?;
-    let col = out.column("col3")?;
-    assert_eq!(col.dtype(), &DataType::Categorical);
-    let s = format!("{}", col);
-    assert!(s.contains("same"));
-    Ok(())
-}
+//     let out = df
+//         .lazy()
+//         .with_column(col("*").cast(DataType::Categorical))
+//         .select([when(col("col1").eq(col("col2")))
+//             .then(col("col3"))
+//             .otherwise(col("col1"))])
+//         .collect()?;
+//     let col = out.column("col3")?;
+//     assert_eq!(col.dtype(), &DataType::Categorical);
+//     let s = format!("{}", col);
+//     assert!(s.contains("same"));
+//     Ok(())
+// }
 
 #[test]
 fn test_lazy_ternary() {
     let df = get_df()
         .lazy()
         .with_column(
-            when(col("sepal.length").lt(lit(5.0)))
+            when(col("sepal_length").lt(lit(5.0)))
                 .then(lit(10))
                 .otherwise(lit(1))
                 .alias("new"),
         )
         .collect()
         .unwrap();
-    assert_eq!(Some(43), df.column("new").unwrap().sum::<i32>());
+    assert_eq!(43, df.column("new").unwrap().sum::<i32>().unwrap());
 }

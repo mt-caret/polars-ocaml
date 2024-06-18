@@ -1,4 +1,9 @@
 
+1.25.0:
+ * Add content_size setting to Lz4FrameInfo
+ * Add LZ4_setStreamDecode
+ * Docs updates
+
 1.24.0:
  * Update to lz4 1.9.4 (lz4-sys 1.9.4) - this fixes CVE-2021-3520, which was a security vulnerability in the core lz4 library
  * export the include directory of lz4 from build.rs

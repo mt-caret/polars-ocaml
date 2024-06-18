@@ -37,15 +37,16 @@
 //! [Myers' diff algorithm]: https://neil.fraser.name/writing/diff/myers.pdf
 //! [semantic cleanups]: https://neil.fraser.name/writing/diff/
 
-#![doc(html_root_url = "https://docs.rs/dissimilar/1.0.7")]
+#![doc(html_root_url = "https://docs.rs/dissimilar/1.0.9")]
 #![allow(
-    clippy::blocks_in_if_conditions,
+    clippy::blocks_in_conditions,
     clippy::bool_to_int_with_if,
     clippy::cast_possible_wrap,
     clippy::cast_sign_loss,
     clippy::cloned_instead_of_copied, // https://github.com/rust-lang/rust-clippy/issues/7127
     clippy::collapsible_else_if,
     clippy::comparison_chain,
+    clippy::implied_bounds_in_impls,
     clippy::items_after_test_module, // https://github.com/rust-lang/rust-clippy/issues/10713
     clippy::let_underscore_untyped,
     clippy::match_same_arms,
@@ -800,7 +801,7 @@ fn cleanup_merge(solution: &mut Solution) {
                     if count_both > 1 {
                         let both_types = count_delete != 0 && count_insert != 0;
                         // Delete the offending records.
-                        diffs.splice(pointer - count_both..pointer, None);
+                        diffs.drain(pointer - count_both..pointer);
                         pointer -= count_both;
                         if both_types {
                             // Factor out any common prefix.

@@ -1,7 +1,7 @@
 #![warn(rust_2018_idioms)]
 #![cfg(all(unix, feature = "full"))]
 
-use std::os::unix::io::{AsRawFd, IntoRawFd, RawFd};
+use std::os::unix::io::{AsRawFd, RawFd};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
@@ -13,11 +13,12 @@ use std::{
     task::{Context, Waker},
 };
 
-use nix::unistd::{close, read, write};
+use nix::unistd::{read, write};
 
 use futures::poll;
 
 use tokio::io::unix::{AsyncFd, AsyncFdReadyGuard};
+use tokio::io::Interest;
 use tokio_test::{assert_err, assert_pending};
 
 struct TestWaker {
@@ -57,18 +58,18 @@ impl TestWaker {
 
 #[derive(Debug)]
 struct FileDescriptor {
-    fd: RawFd,
+    fd: std::os::fd::OwnedFd,
 }
 
 impl AsRawFd for FileDescriptor {
     fn as_raw_fd(&self) -> RawFd {
-        self.fd
+        self.fd.as_raw_fd()
     }
 }
 
 impl Read for &FileDescriptor {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        read(self.fd, buf).map_err(io::Error::from)
+        read(self.fd.as_raw_fd(), buf).map_err(io::Error::from)
     }
 }
 
@@ -80,7 +81,7 @@ impl Read for FileDescriptor {
 
 impl Write for &FileDescriptor {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        write(self.fd, buf).map_err(io::Error::from)
+        write(&self.fd, buf).map_err(io::Error::from)
     }
 
     fn flush(&mut self) -> io::Result<()> {
@@ -95,12 +96,6 @@ impl Write for FileDescriptor {
 
     fn flush(&mut self) -> io::Result<()> {
         (self as &Self).flush()
-    }
-}
-
-impl Drop for FileDescriptor {
-    fn drop(&mut self) {
-        let _ = close(self.fd);
     }
 }
 
@@ -132,24 +127,17 @@ fn socketpair() -> (FileDescriptor, FileDescriptor) {
         SockFlag::empty(),
     )
     .expect("socketpair");
-    let fds = (
-        FileDescriptor {
-            fd: fd_a.into_raw_fd(),
-        },
-        FileDescriptor {
-            fd: fd_b.into_raw_fd(),
-        },
-    );
+    let fds = (FileDescriptor { fd: fd_a }, FileDescriptor { fd: fd_b });
 
-    set_nonblocking(fds.0.fd);
-    set_nonblocking(fds.1.fd);
+    set_nonblocking(fds.0.fd.as_raw_fd());
+    set_nonblocking(fds.1.fd.as_raw_fd());
 
     fds
 }
 
 fn drain(mut fd: &FileDescriptor) {
     let mut buf = [0u8; 512];
-
+    #[allow(clippy::unused_io_amount)]
     loop {
         match fd.read(&mut buf[..]) {
             Err(e) if e.kind() == ErrorKind::WouldBlock => break,
@@ -825,7 +813,7 @@ async fn await_error_readiness_invalid_address() {
         msg.msg_iovlen = 1;
 
         if unsafe { libc::sendmsg(socket_fd, &msg, 0) } == -1 {
-            Err(std::io::Error::last_os_error()).unwrap()
+            panic!("{:?}", std::io::Error::last_os_error())
         }
     });
 
@@ -833,4 +821,33 @@ async fn await_error_readiness_invalid_address() {
 
     let guard = fd.ready(Interest::ERROR).await.unwrap();
     assert_eq!(guard.ready(), Ready::ERROR);
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct InvalidSource;
+
+impl AsRawFd for InvalidSource {
+    fn as_raw_fd(&self) -> RawFd {
+        -1
+    }
+}
+
+#[tokio::test]
+async fn try_new() {
+    let original = Arc::new(InvalidSource);
+
+    let error = AsyncFd::try_new(original.clone()).unwrap_err();
+    let (returned, _cause) = error.into_parts();
+
+    assert!(Arc::ptr_eq(&original, &returned));
+}
+
+#[tokio::test]
+async fn try_with_interest() {
+    let original = Arc::new(InvalidSource);
+
+    let error = AsyncFd::try_with_interest(original.clone(), Interest::READABLE).unwrap_err();
+    let (returned, _cause) = error.into_parts();
+
+    assert!(Arc::ptr_eq(&original, &returned));
 }

@@ -118,7 +118,7 @@
 //! ```
 //!
 //! See
-//! https://blog.janestreet.com/using-ascii-waveforms-to-test-hardware-designs/
+//! <https://blog.janestreet.com/using-ascii-waveforms-to-test-hardware-designs/>
 //! for a cool example of snapshot testing in the wild!
 //!
 //! # Alternatives
@@ -135,7 +135,7 @@
 //!
 //! ## Minimal Supported Rust Version
 //!
-//! This crate's minimum supported `rustc` version is `1.45.0`. MSRV is updated
+//! This crate's minimum supported `rustc` version is `1.60.0`. MSRV is updated
 //! conservatively, supporting roughly 10 minor versions of `rustc`. MSRV bump
 //! is not considered semver breaking, but will require at least minor version
 //! bump.
@@ -434,7 +434,7 @@ fn find_str_lit_len(str_lit_to_eof: &str) -> Option<usize> {
 impl ExpectFile {
     /// Checks if file contents is equal to `actual`.
     pub fn assert_eq(&self, actual: &str) {
-        let expected = self.read();
+        let expected = self.data();
         if actual == expected {
             return;
         }
@@ -445,7 +445,8 @@ impl ExpectFile {
         let actual = format!("{:#?}\n", actual);
         self.assert_eq(&actual)
     }
-    fn read(&self) -> String {
+    /// Returns the content of this expect.
+    pub fn data(&self) -> String {
         fs::read_to_string(self.abs_path()).unwrap_or_default().replace("\r\n", "\n")
     }
     fn write(&self, contents: &str) {

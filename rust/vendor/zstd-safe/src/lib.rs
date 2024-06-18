@@ -19,6 +19,8 @@
 //! `experimental` feature.
 #![cfg_attr(feature = "doc-cfg", feature(doc_cfg))]
 
+// TODO: Use alloc feature instead to implement stuff for Vec
+// TODO: What about Cursor?
 #[cfg(feature = "std")]
 extern crate std;
 
@@ -33,12 +35,7 @@ pub use zstd_sys::ZSTD_strategy as Strategy;
 
 /// Reset directive.
 // pub use zstd_sys::ZSTD_ResetDirective as ResetDirective;
-
-#[cfg(feature = "std")]
-use std::os::raw::{c_char, c_int, c_ulonglong, c_void};
-
-#[cfg(not(feature = "std"))]
-use libc::{c_char, c_int, c_ulonglong, c_void};
+use core::ffi::{c_char, c_int, c_ulonglong, c_void};
 
 use core::marker::PhantomData;
 use core::num::{NonZeroU32, NonZeroU64};
@@ -147,7 +144,7 @@ pub fn max_c_level() -> CompressionLevel {
 /// Wraps the `ZSTD_compress` function.
 ///
 /// This will try to compress `src` entirely and write the result to `dst`, returning the number of
-/// bytes written.
+/// bytes written. If `dst` is too small to hold the compressed content, an error will be returned.
 ///
 /// For streaming operations that don't require to store the entire input/ouput in memory, see
 /// `compress_stream`.
@@ -171,6 +168,13 @@ pub fn compress<C: WriteBuf + ?Sized>(
 }
 
 /// Wraps the `ZSTD_decompress` function.
+///
+/// This is a one-step decompression (not streaming).
+///
+/// You will need to make sure `dst` is large enough to store all the decompressed content, or an
+/// error will be returned.
+///
+/// If decompression was a success, the number of bytes written will be returned.
 pub fn decompress<C: WriteBuf + ?Sized>(
     dst: &mut C,
     src: &[u8],
@@ -606,7 +610,6 @@ impl<'a> CCtx<'a> {
             ZSTD_c_experimentalParam3 as ZSTD_c_forceMaxWindow,
             ZSTD_c_experimentalParam4 as ZSTD_c_forceAttachDict,
             ZSTD_c_experimentalParam5 as ZSTD_c_literalCompressionMode,
-            ZSTD_c_experimentalParam6 as ZSTD_c_targetCBlockSize,
             ZSTD_c_experimentalParam7 as ZSTD_c_srcSizeHint,
             ZSTD_c_experimentalParam8 as ZSTD_c_enableDedicatedDictSearch,
             ZSTD_c_experimentalParam9 as ZSTD_c_stableInBuffer,
@@ -627,10 +630,6 @@ impl<'a> CCtx<'a> {
             #[cfg(feature = "experimental")]
             LiteralCompressionMode(mode) => {
                 (ZSTD_c_literalCompressionMode, mode as c_int)
-            }
-            #[cfg(feature = "experimental")]
-            TargetCBlockSize(value) => {
-                (ZSTD_c_targetCBlockSize, value as c_int)
             }
             #[cfg(feature = "experimental")]
             SrcSizeHint(value) => (ZSTD_c_srcSizeHint, value as c_int),
@@ -675,6 +674,9 @@ impl<'a> CCtx<'a> {
             #[cfg(feature = "experimental")]
             SearchForExternalRepcodes(value) => {
                 (ZSTD_c_searchForExternalRepcodes, value as c_int)
+            }
+            TargetCBlockSize(value) => {
+                (ZSTD_c_targetCBlockSize, value as c_int)
             }
             CompressionLevel(level) => (ZSTD_c_compressionLevel, level),
             WindowLog(value) => (ZSTD_c_windowLog, value as c_int),
@@ -813,26 +815,14 @@ impl<'a> Drop for CCtx<'a> {
     }
 }
 
-unsafe impl<'a> Send for CCtx<'a> {}
-// CCtx can't be shared across threads, so it does not implement Sync.
+unsafe impl Send for CCtx<'_> {}
+// Non thread-safe methods already take `&mut self`, so it's fine to implement Sync here.
+unsafe impl Sync for CCtx<'_> {}
 
 unsafe fn c_char_to_str(text: *const c_char) -> &'static str {
-    #[cfg(not(feature = "std"))]
-    {
-        // To be safe, we need to compute right now its length
-        let len = libc::strlen(text);
-        // Cast it to a slice
-        let slice = core::slice::from_raw_parts(text as *mut u8, len);
-        // And hope it's still text.
-        str::from_utf8(slice).expect("bad error message from zstd")
-    }
-
-    #[cfg(feature = "std")]
-    {
-        std::ffi::CStr::from_ptr(text)
-            .to_str()
-            .expect("bad error message from zstd")
-    }
+    core::ffi::CStr::from_ptr(text)
+        .to_str()
+        .expect("bad error message from zstd")
 }
 
 /// Returns the error string associated with an error code.
@@ -1226,7 +1216,8 @@ impl Drop for DCtx<'_> {
 }
 
 unsafe impl Send for DCtx<'_> {}
-// DCtx can't be shared across threads, so it does not implement Sync.
+// Non thread-safe methods already take `&mut self`, so it's fine to implement Sync here.
+unsafe impl Sync for DCtx<'_> {}
 
 /// Compression dictionary.
 pub struct CDict<'a>(NonNull<zstd_sys::ZSTD_CDict>, PhantomData<&'a ()>);
@@ -1451,18 +1442,23 @@ pub struct InBuffer<'a> {
     pub pos: usize,
 }
 
-/// Describe a resizeable bytes container like `Vec<u8>`.
+/// Describe a bytes container, like `Vec<u8>`.
 ///
-/// Represents a contiguous segment of memory, a prefix of which is initialized.
+/// Represents a contiguous segment of allocated memory, a prefix of which is initialized.
 ///
-/// It allows starting from an uninitializes chunk of memory and writing to it.
+/// It allows starting from an uninitializes chunk of memory and writing to it, progressively
+/// initializing it. No re-allocation typically occur after the initial creation.
 ///
 /// The main implementors are:
-/// * `Vec<u8>` and similar structures. These can start empty with a non-zero capacity, and they
-///   will be resized to cover the data written.
-///   Any existing data will be overwritten.
+/// * `Vec<u8>` and similar structures. These hold both a length (initialized data) and a capacity
+///   (allocated memory).
+///
+///   Use `Vec::with_capacity` to create an empty `Vec` with non-zero capacity, and the length
+///   field will be updated to cover the data written to it (as long as it fits in the given
+///   capacity).
 /// * `[u8]` and `[u8; N]`. These must start already-initialized, and will not be resized. It will
-///   be up to the caller to only use the part that was written.
+///   be up to the caller to only use the part that was written (as returned by the various writing
+///   operations).
 /// * `std::io::Cursor<T: WriteBuf>`. This will ignore data before the cursor's position, and
 ///   append data after that.
 pub unsafe trait WriteBuf {
@@ -1534,11 +1530,13 @@ where
 
         // Here we assume data _before_ self.position() was already initialized.
         // Egh it's not actually guaranteed by Cursor? So let's guarantee it ourselves.
+        // Since the cursor wraps another `WriteBuf`, we know how much data is initialized there.
         let position = self.position() as usize;
         let initialized = self.get_ref().as_slice().len();
         if let Some(uninitialized) = position.checked_sub(initialized) {
-            // Cursor's solution is to pad with zeroes
-            // From the end of valid data (as_slice().len()) to the position.
+            // Here, the cursor is further than the known-initialized part.
+            // Cursor's solution is to pad with zeroes, so let's do the same.
+            // We'll zero bytes from the end of valid data (as_slice().len()) to the cursor position.
 
             // Safety:
             // * We know `n > 0`
@@ -1665,7 +1663,7 @@ unsafe impl<'a> WriteBuf for OutBuffer<'a, [u8]> {
 ///
 /// `pos <= dst.capacity()`
 pub struct OutBuffer<'a, C: WriteBuf + ?Sized> {
-    pub dst: &'a mut C,
+    dst: &'a mut C,
     pos: usize,
 }
 
@@ -1720,8 +1718,16 @@ impl<'a, C: WriteBuf + ?Sized> OutBuffer<'a, C> {
     }
 
     /// Returns the current cursor position.
+    ///
+    /// Guaranteed to be <= self.capacity()
     pub fn pos(&self) -> usize {
+        assert!(self.pos <= self.dst.capacity());
         self.pos
+    }
+
+    /// Returns the capacity of the underlying buffer.
+    pub fn capacity(&self) -> usize {
+        self.dst.capacity()
     }
 
     /// Sets the new cursor position.
@@ -1761,6 +1767,11 @@ impl<'a, C: WriteBuf + ?Sized> OutBuffer<'a, C> {
     {
         let pos = self.pos;
         &self.dst.as_slice()[..pos]
+    }
+
+    /// Returns a pointer to the start of this buffer.
+    pub fn as_mut_ptr(&mut self) -> *mut u8 {
+        self.dst.as_mut_ptr()
     }
 }
 
@@ -1984,6 +1995,7 @@ pub enum ParamSwitch {
 
 /// A compression parameter.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum CParameter {
     #[cfg(feature = "experimental")]
     #[cfg_attr(feature = "doc-cfg", doc(cfg(feature = "experimental")))]
@@ -2004,10 +2016,6 @@ pub enum CParameter {
     #[cfg(feature = "experimental")]
     #[cfg_attr(feature = "doc-cfg", doc(cfg(feature = "experimental")))]
     LiteralCompressionMode(ParamSwitch),
-
-    #[cfg(feature = "experimental")]
-    #[cfg_attr(feature = "doc-cfg", doc(cfg(feature = "experimental")))]
-    TargetCBlockSize(u32),
 
     #[cfg(feature = "experimental")]
     #[cfg_attr(feature = "doc-cfg", doc(cfg(feature = "experimental")))]
@@ -2060,6 +2068,14 @@ pub enum CParameter {
     #[cfg(feature = "experimental")]
     #[cfg_attr(feature = "doc-cfg", doc(cfg(feature = "experimental")))]
     SearchForExternalRepcodes(ParamSwitch),
+
+    /// Target CBlock size.
+    ///
+    /// Tries to make compressed blocks fit in this size (not a guarantee, just a target).
+    /// Useful to reduce end-to-end latency in low-bandwidth environments.
+    ///
+    /// No target when the value is 0.
+    TargetCBlockSize(u32),
 
     /// Compression level to use.
     ///
@@ -2133,6 +2149,8 @@ pub enum CParameter {
 }
 
 /// A decompression parameter.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum DParameter {
     WindowLogMax(u32),
 

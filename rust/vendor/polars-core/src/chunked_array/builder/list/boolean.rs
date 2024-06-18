@@ -26,7 +26,7 @@ impl ListBooleanChunkedBuilder {
         if iter.size_hint().0 == 0 {
             self.fast_explode = false;
         }
-        // Safety
+        // SAFETY:
         // trusted len, trust the type system
         unsafe { values.extend_trusted_len_unchecked(iter) };
         self.builder.try_push_valid().unwrap();
@@ -67,28 +67,5 @@ impl ListBuilderTrait for ListBooleanChunkedBuilder {
 
     fn fast_explode(&self) -> bool {
         self.fast_explode
-    }
-}
-
-impl ListBuilderTrait for LargeListNullBuilder {
-    #[inline]
-    fn append_series(&mut self, _s: &Series) -> PolarsResult<()> {
-        self.push_null();
-        Ok(())
-    }
-
-    #[inline]
-    fn append_null(&mut self) {
-        self.push_null()
-    }
-
-    fn finish(&mut self) -> ListChunked {
-        unsafe {
-            ListChunked::from_chunks_and_dtype_unchecked(
-                "",
-                vec![self.as_box()],
-                DataType::List(Box::new(DataType::Null)),
-            )
-        }
     }
 }

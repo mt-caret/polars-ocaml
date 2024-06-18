@@ -31,7 +31,7 @@
 //!
 //! // read the buffer into a DataFrame
 //! let df_read = IpcStreamReader::new(buf).finish().unwrap();
-//! assert!(df.frame_equal(&df_read));
+//! assert!(df.equals(&df_read));
 //! ```
 use std::io::{Read, Write};
 use std::path::PathBuf;
@@ -42,7 +42,7 @@ use arrow::io::ipc::{read, write};
 use polars_core::prelude::*;
 
 use crate::prelude::*;
-use crate::{finish_reader, ArrowReader, ArrowResult, WriterFactory};
+use crate::shared::{finish_reader, ArrowReader, WriterFactory};
 
 /// Read Arrows Stream IPC format into a DataFrame
 ///
@@ -69,7 +69,7 @@ pub struct IpcStreamReader<R> {
     n_rows: Option<usize>,
     projection: Option<Vec<usize>>,
     columns: Option<Vec<String>>,
-    row_count: Option<RowCount>,
+    row_index: Option<RowIndex>,
     metadata: Option<StreamMetadata>,
 }
 
@@ -95,9 +95,9 @@ impl<R: Read> IpcStreamReader<R> {
         self
     }
 
-    /// Add a `row_count` column.
-    pub fn with_row_count(mut self, row_count: Option<RowCount>) -> Self {
-        self.row_count = row_count;
+    /// Add a row index column.
+    pub fn with_row_index(mut self, row_index: Option<RowIndex>) -> Self {
+        self.row_index = row_index;
         self
     }
 
@@ -124,7 +124,7 @@ impl<R> ArrowReader for read::StreamReader<R>
 where
     R: Read,
 {
-    fn next_record_batch(&mut self) -> ArrowResult<Option<ArrowChunk>> {
+    fn next_record_batch(&mut self) -> PolarsResult<Option<RecordBatch>> {
         self.next().map_or(Ok(None), |v| match v {
             Ok(stream_state) => match stream_state {
                 StreamState::Waiting => Ok(None),
@@ -146,7 +146,7 @@ where
             n_rows: None,
             columns: None,
             projection: None,
-            row_count: None,
+            row_index: None,
             metadata: None,
         }
     }
@@ -166,53 +166,22 @@ where
             self.projection = Some(prj);
         }
 
-        let sorted_projection = self.projection.clone().map(|mut proj| {
-            proj.sort_unstable();
-            proj
-        });
-
-        let schema = if let Some(projection) = &sorted_projection {
+        let schema = if let Some(projection) = &self.projection {
             apply_projection(&metadata.schema, projection)
         } else {
             metadata.schema.clone()
         };
 
-        let include_row_count = self.row_count.is_some();
         let ipc_reader =
-            read::StreamReader::new(&mut self.reader, metadata.clone(), sorted_projection);
+            read::StreamReader::new(&mut self.reader, metadata.clone(), self.projection);
         finish_reader(
             ipc_reader,
             rechunk,
             self.n_rows,
             None,
             &schema,
-            self.row_count,
+            self.row_index,
         )
-        .map(|df| fix_column_order(df, self.projection, include_row_count))
-    }
-}
-
-fn fix_column_order(df: DataFrame, projection: Option<Vec<usize>>, row_count: bool) -> DataFrame {
-    if let Some(proj) = projection {
-        let offset = usize::from(row_count);
-        let mut args = (0..proj.len()).zip(proj).collect::<Vec<_>>();
-        // first el of tuple is argument index
-        // second el is the projection index
-        args.sort_unstable_by_key(|tpl| tpl.1);
-        let cols = df.get_columns();
-
-        let iter = args.iter().map(|tpl| cols[tpl.0 + offset].clone());
-        let cols = if row_count {
-            let mut new_cols = vec![df.get_columns()[0].clone()];
-            new_cols.extend(iter);
-            new_cols
-        } else {
-            iter.collect()
-        };
-
-        DataFrame::new_no_checks(cols)
-    } else {
-        df
     }
 }
 
@@ -237,18 +206,23 @@ fn fix_column_order(df: DataFrame, projection: Option<Vec<usize>>, row_count: bo
 #[must_use]
 pub struct IpcStreamWriter<W> {
     writer: W,
-    compression: Option<write::Compression>,
+    compression: Option<IpcCompression>,
+    pl_flavor: bool,
 }
 
-use polars_core::frame::ArrowChunk;
-pub use write::Compression as IpcCompression;
+use arrow::record_batch::RecordBatch;
 
-use crate::RowCount;
+use crate::RowIndex;
 
 impl<W> IpcStreamWriter<W> {
     /// Set the compression used. Defaults to None.
-    pub fn with_compression(mut self, compression: Option<write::Compression>) -> Self {
+    pub fn with_compression(mut self, compression: Option<IpcCompression>) -> Self {
         self.compression = compression;
+        self
+    }
+
+    pub fn with_pl_flavor(mut self, pl_flavor: bool) -> Self {
+        self.pl_flavor = pl_flavor;
         self
     }
 }
@@ -261,6 +235,7 @@ where
         IpcStreamWriter {
             writer,
             compression: None,
+            pl_flavor: false,
         }
     }
 
@@ -268,14 +243,13 @@ where
         let mut ipc_stream_writer = write::StreamWriter::new(
             &mut self.writer,
             WriteOptions {
-                compression: self.compression,
+                compression: self.compression.map(|c| c.into()),
             },
         );
 
-        ipc_stream_writer.start(&df.schema().to_arrow(), None)?;
-
-        df.align_chunks();
-        let iter = df.iter_chunks();
+        ipc_stream_writer.start(&df.schema().to_arrow(self.pl_flavor), None)?;
+        let df = chunk_df_for_writing(df, 512 * 512)?;
+        let iter = df.iter_chunks(self.pl_flavor);
 
         for batch in iter {
             ipc_stream_writer.write(&batch, None)?
@@ -286,7 +260,7 @@ where
 }
 
 pub struct IpcStreamWriterOption {
-    compression: Option<write::Compression>,
+    compression: Option<IpcCompression>,
     extension: PathBuf,
 }
 
@@ -299,7 +273,7 @@ impl IpcStreamWriterOption {
     }
 
     /// Set the compression used. Defaults to None.
-    pub fn with_compression(mut self, compression: Option<write::Compression>) -> Self {
+    pub fn with_compression(mut self, compression: Option<IpcCompression>) -> Self {
         self.compression = compression;
         self
     }

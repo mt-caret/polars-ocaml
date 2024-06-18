@@ -1,4 +1,4 @@
-use super::{private, IntoSeries, SeriesTrait, SeriesWrap, *};
+use super::*;
 use crate::prelude::*;
 
 unsafe impl IntoSeries for DecimalChunked {
@@ -10,19 +10,53 @@ unsafe impl IntoSeries for DecimalChunked {
 impl private::PrivateSeriesNumeric for SeriesWrap<DecimalChunked> {}
 
 impl SeriesWrap<DecimalChunked> {
-    fn apply_physical<F: Fn(&Int128Chunked) -> Int128Chunked>(&self, f: F) -> Series {
+    fn apply_physical_to_s<F: Fn(&Int128Chunked) -> Int128Chunked>(&self, f: F) -> Series {
         f(&self.0)
             .into_decimal_unchecked(self.0.precision(), self.0.scale())
             .into_series()
     }
 
+    fn apply_physical<T, F: Fn(&Int128Chunked) -> T>(&self, f: F) -> T {
+        f(&self.0)
+    }
+
     fn agg_helper<F: Fn(&Int128Chunked) -> Series>(&self, f: F) -> Series {
         let agg_s = f(&self.0);
-        let ca = agg_s.decimal().unwrap();
-        let ca = ca.as_ref().clone();
-        let precision = self.0.precision();
-        let scale = self.0.scale();
-        ca.into_decimal_unchecked(precision, scale).into_series()
+        match agg_s.dtype() {
+            DataType::Decimal(_, _) => {
+                let ca = agg_s.decimal().unwrap();
+                let ca = ca.as_ref().clone();
+                let precision = self.0.precision();
+                let scale = self.0.scale();
+                ca.into_decimal_unchecked(precision, scale).into_series()
+            },
+            DataType::List(dtype) if dtype.is_decimal() => {
+                let dtype = self.0.dtype();
+                let ca = agg_s.list().unwrap();
+                let arr = ca.downcast_iter().next().unwrap();
+                // SAFETY: dtype is passed correctly
+                let s = unsafe {
+                    Series::from_chunks_and_dtype_unchecked("", vec![arr.values().clone()], dtype)
+                };
+                let new_values = s.array_ref(0).clone();
+                let data_type = ListArray::<i64>::default_datatype(dtype.to_arrow(true));
+                let new_arr = ListArray::<i64>::new(
+                    data_type,
+                    arr.offsets().clone(),
+                    new_values,
+                    arr.validity().cloned(),
+                );
+                unsafe {
+                    ListChunked::from_chunks_and_dtype_unchecked(
+                        agg_s.name(),
+                        vec![Box::new(new_arr)],
+                        DataType::List(Box::new(self.dtype().clone())),
+                    )
+                    .into_series()
+                }
+            },
+            _ => unreachable!(),
+        }
     }
 }
 
@@ -66,21 +100,41 @@ impl private::PrivateSeries for SeriesWrap<DecimalChunked> {
             .into_decimal_unchecked(self.0.precision(), self.0.scale())
             .into_series())
     }
+    fn into_total_eq_inner<'a>(&'a self) -> Box<dyn TotalEqInner + 'a> {
+        (&self.0).into_total_eq_inner()
+    }
+    fn into_total_ord_inner<'a>(&'a self) -> Box<dyn TotalOrdInner + 'a> {
+        (&self.0).into_total_ord_inner()
+    }
 
+    fn vec_hash(&self, random_state: RandomState, buf: &mut Vec<u64>) -> PolarsResult<()> {
+        self.0.vec_hash(random_state, buf)?;
+        Ok(())
+    }
+
+    fn vec_hash_combine(&self, build_hasher: RandomState, hashes: &mut [u64]) -> PolarsResult<()> {
+        self.0.vec_hash_combine(build_hasher, hashes)?;
+        Ok(())
+    }
+
+    #[cfg(feature = "algorithm_group_by")]
     unsafe fn agg_sum(&self, groups: &GroupsProxy) -> Series {
         self.agg_helper(|ca| ca.agg_sum(groups))
     }
 
+    #[cfg(feature = "algorithm_group_by")]
     unsafe fn agg_min(&self, groups: &GroupsProxy) -> Series {
         self.agg_helper(|ca| ca.agg_min(groups))
     }
 
+    #[cfg(feature = "algorithm_group_by")]
     unsafe fn agg_max(&self, groups: &GroupsProxy) -> Series {
         self.agg_helper(|ca| ca.agg_max(groups))
     }
 
+    #[cfg(feature = "algorithm_group_by")]
     unsafe fn agg_list(&self, groups: &GroupsProxy) -> Series {
-        self.0.agg_list(groups)
+        self.agg_helper(|ca| ca.agg_list(groups))
     }
 
     fn subtract(&self, rhs: &Series) -> PolarsResult<Series> {
@@ -99,6 +153,21 @@ impl private::PrivateSeries for SeriesWrap<DecimalChunked> {
         let rhs = rhs.decimal()?;
         ((&self.0) / rhs).map(|ca| ca.into_series())
     }
+    #[cfg(feature = "algorithm_group_by")]
+    fn group_tuples(&self, multithreaded: bool, sorted: bool) -> PolarsResult<GroupsProxy> {
+        self.0.group_tuples(multithreaded, sorted)
+    }
+
+    fn explode_by_offsets(&self, offsets: &[i64]) -> Series {
+        self.0
+            .explode_by_offsets(offsets)
+            .decimal()
+            .unwrap()
+            .as_ref()
+            .clone()
+            .into_decimal_unchecked(self.0.precision(), self.0.scale())
+            .into_series()
+    }
 }
 
 impl SeriesTrait for SeriesWrap<DecimalChunked> {
@@ -106,8 +175,8 @@ impl SeriesTrait for SeriesWrap<DecimalChunked> {
         self.0.rename(name)
     }
 
-    fn chunk_lengths(&self) -> ChunkIdIter {
-        self.0.chunk_id()
+    fn chunk_lengths(&self) -> ChunkLenIter {
+        self.0.chunk_lengths()
     }
 
     fn name(&self) -> &str {
@@ -117,9 +186,12 @@ impl SeriesTrait for SeriesWrap<DecimalChunked> {
     fn chunks(&self) -> &Vec<ArrayRef> {
         self.0.chunks()
     }
+    unsafe fn chunks_mut(&mut self) -> &mut Vec<ArrayRef> {
+        self.0.chunks_mut()
+    }
 
     fn slice(&self, offset: i64, length: usize) -> Series {
-        self.apply_physical(|ca| ca.slice(offset, length))
+        self.apply_physical_to_s(|ca| ca.slice(offset, length))
     }
 
     fn append(&mut self, other: &Series) -> PolarsResult<()> {
@@ -131,7 +203,8 @@ impl SeriesTrait for SeriesWrap<DecimalChunked> {
 
     fn extend(&mut self, other: &Series) -> PolarsResult<()> {
         polars_ensure!(self.0.dtype() == other.dtype(), extend);
-        self.0.extend(other.as_ref().as_ref());
+        let other = other.decimal()?;
+        self.0.extend(&other.0);
         Ok(())
     }
 
@@ -143,56 +216,34 @@ impl SeriesTrait for SeriesWrap<DecimalChunked> {
             .into_series())
     }
 
-    #[cfg(feature = "chunked_ids")]
-    unsafe fn _take_chunked_unchecked(&self, by: &[ChunkId], sorted: IsSorted) -> Series {
-        let ca = self.0.deref().take_chunked_unchecked(by, sorted);
-        ca.into_decimal_unchecked(self.0.precision(), self.0.scale())
-            .into_series()
-    }
-
-    #[cfg(feature = "chunked_ids")]
-    unsafe fn _take_opt_chunked_unchecked(&self, by: &[Option<ChunkId>]) -> Series {
-        self.apply_physical(|ca| ca.take_opt_chunked_unchecked(by))
-    }
-
-    fn take_iter(&self, iter: &mut dyn TakeIterator) -> PolarsResult<Series> {
-        ChunkTake::take(self.0.deref(), iter.into()).map(|ca| {
-            ca.into_decimal_unchecked(self.0.precision(), self.0.scale())
-                .into_series()
-        })
-    }
-
-    unsafe fn take_iter_unchecked(&self, iter: &mut dyn TakeIterator) -> Series {
-        ChunkTake::take_unchecked(self.0.deref(), iter.into())
-            .into_decimal_unchecked(self.0.precision(), self.0.scale())
-            .into_series()
-    }
-
-    unsafe fn take_unchecked(&self, idx: &IdxCa) -> PolarsResult<Series> {
-        let mut out = ChunkTake::take_unchecked(self.0.deref(), idx.into());
-
-        if self.0.is_sorted_ascending_flag()
-            && (idx.is_sorted_ascending_flag() || idx.is_sorted_descending_flag())
-        {
-            out.set_sorted_flag(idx.is_sorted_flag())
-        }
-
-        Ok(out
+    fn take(&self, indices: &IdxCa) -> PolarsResult<Series> {
+        Ok(self
+            .0
+            .take(indices)?
             .into_decimal_unchecked(self.0.precision(), self.0.scale())
             .into_series())
     }
 
-    unsafe fn take_opt_iter_unchecked(&self, iter: &mut dyn TakeIteratorNulls) -> Series {
-        ChunkTake::take_unchecked(self.0.deref(), iter.into())
+    unsafe fn take_unchecked(&self, indices: &IdxCa) -> Series {
+        self.0
+            .take_unchecked(indices)
             .into_decimal_unchecked(self.0.precision(), self.0.scale())
             .into_series()
     }
 
-    fn take(&self, indices: &IdxCa) -> PolarsResult<Series> {
-        ChunkTake::take(self.0.deref(), indices.into()).map(|ca| {
-            ca.into_decimal_unchecked(self.0.precision(), self.0.scale())
-                .into_series()
-        })
+    fn take_slice(&self, indices: &[IdxSize]) -> PolarsResult<Series> {
+        Ok(self
+            .0
+            .take(indices)?
+            .into_decimal_unchecked(self.0.precision(), self.0.scale())
+            .into_series())
+    }
+
+    unsafe fn take_slice_unchecked(&self, indices: &[IdxSize]) -> Series {
+        self.0
+            .take_unchecked(indices)
+            .into_decimal_unchecked(self.0.precision(), self.0.scale())
+            .into_series()
     }
 
     fn len(&self) -> usize {
@@ -225,6 +276,18 @@ impl SeriesTrait for SeriesWrap<DecimalChunked> {
         self.0.get_any_value_unchecked(index)
     }
 
+    fn sort_with(&self, options: SortOptions) -> PolarsResult<Series> {
+        Ok(self
+            .0
+            .sort_with(options)
+            .into_decimal_unchecked(self.0.precision(), self.0.scale())
+            .into_series())
+    }
+
+    fn arg_sort(&self, options: SortOptions) -> IdxCa {
+        self.0.arg_sort(options)
+    }
+
     fn null_count(&self) -> usize {
         self.0.null_count()
     }
@@ -242,33 +305,56 @@ impl SeriesTrait for SeriesWrap<DecimalChunked> {
     }
 
     fn reverse(&self) -> Series {
-        self.apply_physical(|ca| ca.reverse())
+        self.apply_physical_to_s(|ca| ca.reverse())
     }
 
     fn shift(&self, periods: i64) -> Series {
-        self.apply_physical(|ca| ca.shift(periods))
+        self.apply_physical_to_s(|ca| ca.shift(periods))
     }
 
     fn clone_inner(&self) -> Arc<dyn SeriesTrait> {
         Arc::new(SeriesWrap(Clone::clone(&self.0)))
     }
 
-    fn _sum_as_series(&self) -> Series {
-        self.apply_physical(|ca| {
+    fn sum_reduce(&self) -> PolarsResult<Scalar> {
+        Ok(self.apply_physical(|ca| {
             let sum = ca.sum();
-            Int128Chunked::from_slice_options(self.name(), &[sum])
-        })
+            let DataType::Decimal(_, Some(scale)) = self.dtype() else {
+                unreachable!()
+            };
+            let av = AnyValue::Decimal(sum.unwrap(), *scale);
+            Scalar::new(self.dtype().clone(), av)
+        }))
     }
-    fn min_as_series(&self) -> Series {
-        self.apply_physical(|ca| {
+    fn min_reduce(&self) -> PolarsResult<Scalar> {
+        Ok(self.apply_physical(|ca| {
             let min = ca.min();
-            Int128Chunked::from_slice_options(self.name(), &[min])
-        })
+            let DataType::Decimal(_, Some(scale)) = self.dtype() else {
+                unreachable!()
+            };
+            let av = if let Some(min) = min {
+                AnyValue::Decimal(min, *scale)
+            } else {
+                AnyValue::Null
+            };
+            Scalar::new(self.dtype().clone(), av)
+        }))
     }
-    fn max_as_series(&self) -> Series {
-        self.apply_physical(|ca| {
+    fn max_reduce(&self) -> PolarsResult<Scalar> {
+        Ok(self.apply_physical(|ca| {
             let max = ca.max();
-            Int128Chunked::from_slice_options(self.name(), &[max])
-        })
+            let DataType::Decimal(_, Some(scale)) = self.dtype() else {
+                unreachable!()
+            };
+            let av = if let Some(m) = max {
+                AnyValue::Decimal(m, *scale)
+            } else {
+                AnyValue::Null
+            };
+            Scalar::new(self.dtype().clone(), av)
+        }))
+    }
+    fn as_any(&self) -> &dyn Any {
+        &self.0
     }
 }

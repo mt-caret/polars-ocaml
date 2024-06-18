@@ -16,11 +16,15 @@ It currently supports the following OSes (alphabetically sorted):
 
 You can still use `sysinfo` on non-supported OSes, it'll simply do nothing and always return
 empty values. You can check in your program directly if an OS is supported by checking the
-[`SystemExt::IS_SUPPORTED`] constant.
+[`IS_SUPPORTED_SYSTEM`] constant.
 
-The minimum-supported version of `rustc` is **1.63**.
+The minimum-supported version of `rustc` is **1.69**.
 
 ## Usage
+
+If you want to migrate from an older version, don't hesitate to take a look at the
+[CHANGELOG](https://github.com/GuillaumeGomez/sysinfo/blob/master/CHANGELOG.md) and at the
+[migration guide](https://github.com/GuillaumeGomez/sysinfo/blob/master/migration_guide.md).
 
 ⚠️ Before any attempt to read the different structs' information, you need to update them to
 get up-to-date information because for most of them, it works on diff between the current value
@@ -34,7 +38,9 @@ You have an example into the `examples` folder. You can run it with `cargo run -
 Otherwise, here is a little code sample:
 
 ```rust
-use sysinfo::{NetworkExt, NetworksExt, ProcessExt, System, SystemExt};
+use sysinfo::{
+    Components, Disks, Networks, System,
+};
 
 // Please note that we use "new_all" to ensure that all list of
 // components, network interfaces, disks and users are already
@@ -44,24 +50,6 @@ let mut sys = System::new_all();
 // First we update all information of our `System` struct.
 sys.refresh_all();
 
-// We display all disks' information:
-println!("=> disks:");
-for disk in sys.disks() {
-    println!("{:?}", disk);
-}
-
-// Network interfaces name, data received and data transmitted:
-println!("=> networks:");
-for (interface_name, data) in sys.networks() {
-    println!("{}: {}/{} B", interface_name, data.received(), data.transmitted());
-}
-
-// Components temperature:
-println!("=> components:");
-for component in sys.components() {
-    println!("{:?}", component);
-}
-
 println!("=> system:");
 // RAM and swap information:
 println!("total memory: {} bytes", sys.total_memory());
@@ -70,17 +58,44 @@ println!("total swap  : {} bytes", sys.total_swap());
 println!("used swap   : {} bytes", sys.used_swap());
 
 // Display system information:
-println!("System name:             {:?}", sys.name());
-println!("System kernel version:   {:?}", sys.kernel_version());
-println!("System OS version:       {:?}", sys.os_version());
-println!("System host name:        {:?}", sys.host_name());
+println!("System name:             {:?}", System::name());
+println!("System kernel version:   {:?}", System::kernel_version());
+println!("System OS version:       {:?}", System::os_version());
+println!("System host name:        {:?}", System::host_name());
 
 // Number of CPUs:
 println!("NB CPUs: {}", sys.cpus().len());
 
 // Display processes ID, name na disk usage:
 for (pid, process) in sys.processes() {
-    println!("[{}] {} {:?}", pid, process.name(), process.disk_usage());
+    println!("[{pid}] {} {:?}", process.name(), process.disk_usage());
+}
+
+// We display all disks' information:
+println!("=> disks:");
+let disks = Disks::new_with_refreshed_list();
+for disk in &disks {
+    println!("{disk:?}");
+}
+
+// Network interfaces name, total data received and total data transmitted:
+let networks = Networks::new_with_refreshed_list();
+println!("=> networks:");
+for (interface_name, data) in &networks {
+    println!(
+        "{interface_name}: {} B (down) / {} B (up)",
+        data.total_received(),
+        data.total_transmitted(),
+    );
+    // If you want the amount of data received/transmitted since last call
+    // to `Networks::refresh`, use `received`/`transmitted`.
+}
+
+// Components temperature:
+let components = Components::new_with_refreshed_list();
+println!("=> components:");
+for component in &components {
+    println!("{component:?}");
 }
 ```
 
@@ -88,7 +103,7 @@ Please remember that to have some up-to-date information, you need to call the e
 `refresh` method. For example, for the CPU usage:
 
 ```rust,no_run
-use sysinfo::{CpuExt, System, SystemExt};
+use sysinfo::System;
 
 let mut sys = System::new();
 
@@ -99,7 +114,7 @@ loop {
     }
     // Sleeping to let time for the system to run for long
     // enough to have useful information.
-    std::thread::sleep(System::MINIMUM_CPU_UPDATE_INTERVAL);
+    std::thread::sleep(sysinfo::MINIMUM_CPU_UPDATE_INTERVAL);
 }
 ```
 
@@ -189,7 +204,7 @@ To build the C example, just run:
 > make
 > ./simple
 # If needed:
-> LD_LIBRARY_PATH=target/release/ ./simple
+> LD_LIBRARY_PATH=target/debug/ ./simple
 ```
 
 ### Benchmarks

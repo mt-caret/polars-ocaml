@@ -4,17 +4,14 @@
 //! The time zone which has a fixed offset from UTC.
 
 use core::fmt;
-use core::ops::{Add, Sub};
 use core::str::FromStr;
 
-#[cfg(feature = "rkyv")]
+#[cfg(any(feature = "rkyv", feature = "rkyv-16", feature = "rkyv-32", feature = "rkyv-64"))]
 use rkyv::{Archive, Deserialize, Serialize};
 
-use super::{LocalResult, Offset, TimeZone};
-use crate::duration::Duration as OldDuration;
-use crate::format::{scan, OUT_OF_RANGE};
-use crate::naive::{NaiveDate, NaiveDateTime, NaiveTime};
-use crate::{DateTime, ParseError, Timelike};
+use super::{MappedLocalTime, Offset, TimeZone};
+use crate::format::{scan, ParseError, OUT_OF_RANGE};
+use crate::naive::{NaiveDate, NaiveDateTime};
 
 /// The time zone with fixed offset, from UTC-23:59:59 to UTC+23:59:59.
 ///
@@ -23,7 +20,13 @@ use crate::{DateTime, ParseError, Timelike};
 /// `DateTime<FixedOffset>` instances. See the [`east_opt`](#method.east_opt) and
 /// [`west_opt`](#method.west_opt) methods for examples.
 #[derive(PartialEq, Eq, Hash, Copy, Clone)]
-#[cfg_attr(feature = "rkyv", derive(Archive, Deserialize, Serialize))]
+#[cfg_attr(
+    any(feature = "rkyv", feature = "rkyv-16", feature = "rkyv-32", feature = "rkyv-64"),
+    derive(Archive, Deserialize, Serialize),
+    archive(compare(PartialEq)),
+    archive_attr(derive(Clone, Copy, PartialEq, Eq, Hash, Debug))
+)]
+#[cfg_attr(feature = "rkyv-validation", archive(check_bytes))]
 pub struct FixedOffset {
     local_minus_utc: i32,
 }
@@ -46,15 +49,14 @@ impl FixedOffset {
     ///
     /// # Example
     ///
-    #[cfg_attr(not(feature = "std"), doc = "```ignore")]
-    #[cfg_attr(feature = "std", doc = "```")]
+    /// ```
+    /// # #[cfg(feature = "alloc")] {
     /// use chrono::{FixedOffset, TimeZone};
     /// let hour = 3600;
-    /// let datetime = FixedOffset::east_opt(5 * hour)
-    ///     .unwrap()
-    ///     .with_ymd_and_hms(2016, 11, 08, 0, 0, 0)
-    ///     .unwrap();
+    /// let datetime =
+    ///     FixedOffset::east_opt(5 * hour).unwrap().with_ymd_and_hms(2016, 11, 08, 0, 0, 0).unwrap();
     /// assert_eq!(&datetime.to_rfc3339(), "2016-11-08T00:00:00+05:00")
+    /// # }
     /// ```
     #[must_use]
     pub const fn east_opt(secs: i32) -> Option<FixedOffset> {
@@ -82,15 +84,14 @@ impl FixedOffset {
     ///
     /// # Example
     ///
-    #[cfg_attr(not(feature = "std"), doc = "```ignore")]
-    #[cfg_attr(feature = "std", doc = "```")]
+    /// ```
+    /// # #[cfg(feature = "alloc")] {
     /// use chrono::{FixedOffset, TimeZone};
     /// let hour = 3600;
-    /// let datetime = FixedOffset::west_opt(5 * hour)
-    ///     .unwrap()
-    ///     .with_ymd_and_hms(2016, 11, 08, 0, 0, 0)
-    ///     .unwrap();
+    /// let datetime =
+    ///     FixedOffset::west_opt(5 * hour).unwrap().with_ymd_and_hms(2016, 11, 08, 0, 0, 0).unwrap();
     /// assert_eq!(&datetime.to_rfc3339(), "2016-11-08T00:00:00-05:00")
+    /// # }
     /// ```
     #[must_use]
     pub const fn west_opt(secs: i32) -> Option<FixedOffset> {
@@ -130,11 +131,11 @@ impl TimeZone for FixedOffset {
         *offset
     }
 
-    fn offset_from_local_date(&self, _local: &NaiveDate) -> LocalResult<FixedOffset> {
-        LocalResult::Single(*self)
+    fn offset_from_local_date(&self, _local: &NaiveDate) -> MappedLocalTime<FixedOffset> {
+        MappedLocalTime::Single(*self)
     }
-    fn offset_from_local_datetime(&self, _local: &NaiveDateTime) -> LocalResult<FixedOffset> {
-        LocalResult::Single(*self)
+    fn offset_from_local_datetime(&self, _local: &NaiveDateTime) -> MappedLocalTime<FixedOffset> {
+        MappedLocalTime::Single(*self)
     }
 
     fn offset_from_utc_date(&self, _utc: &NaiveDate) -> FixedOffset {
@@ -173,82 +174,13 @@ impl fmt::Display for FixedOffset {
     }
 }
 
-#[cfg(feature = "arbitrary")]
+#[cfg(all(feature = "arbitrary", feature = "std"))]
 impl arbitrary::Arbitrary<'_> for FixedOffset {
     fn arbitrary(u: &mut arbitrary::Unstructured) -> arbitrary::Result<FixedOffset> {
         let secs = u.int_in_range(-86_399..=86_399)?;
         let fixed_offset = FixedOffset::east_opt(secs)
             .expect("Could not generate a valid chrono::FixedOffset. It looks like implementation of Arbitrary for FixedOffset is erroneous.");
         Ok(fixed_offset)
-    }
-}
-
-// addition or subtraction of FixedOffset to/from Timelike values is the same as
-// adding or subtracting the offset's local_minus_utc value
-// but keep keeps the leap second information.
-// this should be implemented more efficiently, but for the time being, this is generic right now.
-
-fn add_with_leapsecond<T>(lhs: &T, rhs: i32) -> T
-where
-    T: Timelike + Add<OldDuration, Output = T>,
-{
-    // extract and temporarily remove the fractional part and later recover it
-    let nanos = lhs.nanosecond();
-    let lhs = lhs.with_nanosecond(0).unwrap();
-    (lhs + OldDuration::seconds(i64::from(rhs))).with_nanosecond(nanos).unwrap()
-}
-
-impl Add<FixedOffset> for NaiveTime {
-    type Output = NaiveTime;
-
-    #[inline]
-    fn add(self, rhs: FixedOffset) -> NaiveTime {
-        add_with_leapsecond(&self, rhs.local_minus_utc)
-    }
-}
-
-impl Sub<FixedOffset> for NaiveTime {
-    type Output = NaiveTime;
-
-    #[inline]
-    fn sub(self, rhs: FixedOffset) -> NaiveTime {
-        add_with_leapsecond(&self, -rhs.local_minus_utc)
-    }
-}
-
-impl Add<FixedOffset> for NaiveDateTime {
-    type Output = NaiveDateTime;
-
-    #[inline]
-    fn add(self, rhs: FixedOffset) -> NaiveDateTime {
-        add_with_leapsecond(&self, rhs.local_minus_utc)
-    }
-}
-
-impl Sub<FixedOffset> for NaiveDateTime {
-    type Output = NaiveDateTime;
-
-    #[inline]
-    fn sub(self, rhs: FixedOffset) -> NaiveDateTime {
-        add_with_leapsecond(&self, -rhs.local_minus_utc)
-    }
-}
-
-impl<Tz: TimeZone> Add<FixedOffset> for DateTime<Tz> {
-    type Output = DateTime<Tz>;
-
-    #[inline]
-    fn add(self, rhs: FixedOffset) -> DateTime<Tz> {
-        add_with_leapsecond(&self, rhs.local_minus_utc)
-    }
-}
-
-impl<Tz: TimeZone> Sub<FixedOffset> for DateTime<Tz> {
-    type Output = DateTime<Tz>;
-
-    #[inline]
-    fn sub(self, rhs: FixedOffset) -> DateTime<Tz> {
-        add_with_leapsecond(&self, -rhs.local_minus_utc)
     }
 }
 
@@ -292,5 +224,13 @@ mod tests {
         assert_eq!(offset.local_minus_utc, -8 * 3600);
         let offset = FixedOffset::from_str("+06:30").unwrap();
         assert_eq!(offset.local_minus_utc, (6 * 3600) + 1800);
+    }
+
+    #[test]
+    #[cfg(feature = "rkyv-validation")]
+    fn test_rkyv_validation() {
+        let offset = FixedOffset::from_str("-0500").unwrap();
+        let bytes = rkyv::to_bytes::<_, 4>(&offset).unwrap();
+        assert_eq!(rkyv::from_bytes::<FixedOffset>(&bytes).unwrap(), offset);
     }
 }

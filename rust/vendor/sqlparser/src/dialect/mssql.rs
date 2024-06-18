@@ -12,7 +12,7 @@
 
 use crate::dialect::Dialect;
 
-// [Microsoft SQL Server](https://www.microsoft.com/en-us/sql-server/) dialect
+/// A [`Dialect`] for [Microsoft SQL Server](https://www.microsoft.com/en-us/sql-server/)
 #[derive(Debug)]
 pub struct MsSqlDialect {}
 
@@ -33,5 +33,9 @@ impl Dialect for MsSqlDialect {
             || ch == '$'
             || ch == '#'
             || ch == '_'
+    }
+
+    fn supports_substring_from_for_expr(&self) -> bool {
+        false
     }
 }

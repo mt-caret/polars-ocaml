@@ -123,7 +123,7 @@
 //! all tasks on it.
 //!
 //! When tasks are shut down, it will stop running at whichever `.await` it has
-//! yielded at. All local variables are destroyed by running their detructor.
+//! yielded at. All local variables are destroyed by running their destructor.
 //! Once shutdown has completed, awaiting the [`JoinHandle`] will fail with a
 //! [cancelled error](crate::task::JoinError::is_cancelled).
 //!
@@ -132,6 +132,12 @@
 //! not yield to the runtime at any point between the call to `abort` and the
 //! end of the task, then the [`JoinHandle`] will instead report that the task
 //! exited normally.
+//!
+//! Be aware that tasks spawned using [`spawn_blocking`] cannot be aborted
+//! because they are not async. If you call `abort` on a `spawn_blocking`
+//! task, then this *will not have any effect*, and the task will continue
+//! running normally. The exception is if the task has not started running
+//! yet; in that case, calling `abort` may prevent the task from starting.
 //!
 //! Be aware that calls to [`JoinHandle::abort`] just schedule the task for
 //! cancellation, and will return before the cancellation has completed. To wait
@@ -167,7 +173,7 @@
 //! blocking operations there. This includes destructors of objects destroyed in
 //! async code.
 //!
-//! #### spawn_blocking
+//! #### `spawn_blocking`
 //!
 //! The `task::spawn_blocking` function is similar to the `task::spawn` function
 //! discussed in the previous section, but rather than spawning an
@@ -202,7 +208,7 @@
 //! # }
 //! ```
 //!
-//! #### block_in_place
+//! #### `block_in_place`
 //!
 //! When using the [multi-threaded runtime][rt-multi-thread], the [`task::block_in_place`]
 //! function is also available. Like `task::spawn_blocking`, this function
@@ -227,7 +233,7 @@
 //! # }
 //! ```
 //!
-//! #### yield_now
+//! #### `yield_now`
 //!
 //! In addition, this module provides a [`task::yield_now`] async function
 //! that is analogous to the standard library's [`thread::yield_now`]. Calling
@@ -283,7 +289,7 @@
 //!
 //! #### unconstrained
 //!
-//! If necessary, [`task::unconstrained`] lets you opt a future out of of Tokio's cooperative
+//! If necessary, [`task::unconstrained`] lets you opt a future out of Tokio's cooperative
 //! scheduling. When a future is wrapped with `unconstrained`, it will never be forced to yield to
 //! Tokio. For example:
 //!
@@ -318,10 +324,8 @@
 cfg_rt! {
     pub use crate::runtime::task::{JoinError, JoinHandle};
 
-    cfg_not_wasi! {
-        mod blocking;
-        pub use blocking::spawn_blocking;
-    }
+    mod blocking;
+    pub use blocking::spawn_blocking;
 
     mod spawn;
     pub use spawn::spawn;

@@ -1,6 +1,7 @@
 use std::fmt::Write;
 
 use polars_core::datatypes::AnyValue;
+use polars_core::prelude::{TimeUnit, TimeZone};
 
 use crate::prelude::*;
 
@@ -9,6 +10,15 @@ pub(super) struct Args {
     // pyarrow doesn't allow `filter([True, False])`
     // but does allow `filter(field("a").isin([True, False]))`
     allow_literal_series: bool,
+}
+
+fn to_py_datetime(v: i64, tu: &TimeUnit, tz: Option<&TimeZone>) -> String {
+    // note: `to_py_datetime` and the `Datetime`
+    // dtype have to be in-scope on the python side
+    match tz {
+        None => format!("to_py_datetime({},'{}')", v, tu.to_ascii()),
+        Some(tz) => format!("to_py_datetime({},'{}',{})", v, tu.to_ascii(), tz),
+    }
 }
 
 // convert to a pyarrow expression that can be evaluated with pythons eval
@@ -39,23 +49,26 @@ pub(super) fn predicate_to_pa(
                     if let AnyValue::Boolean(v) = av {
                         let s = if v { "True" } else { "False" };
                         write!(list_repr, "{},", s).unwrap();
+                    } else if let AnyValue::Datetime(v, tu, tz) = av {
+                        let dtm = to_py_datetime(v, &tu, tz.as_ref());
+                        write!(list_repr, "{dtm},").unwrap();
+                    } else if let AnyValue::Date(v) = av {
+                        write!(list_repr, "to_py_date({v}),").unwrap();
                     } else {
                         write!(list_repr, "{av},").unwrap();
                     }
                 }
-
                 // pop last comma
                 list_repr.pop();
                 list_repr.push(']');
-
                 Some(list_repr)
             }
         },
         AExpr::Literal(lv) => {
-            let av = lv.to_anyvalue()?;
+            let av = lv.to_any_value()?;
             let dtype = av.dtype();
             match av.as_borrowed() {
-                AnyValue::Utf8(s) => Some(format!("'{s}'")),
+                AnyValue::String(s) => Some(format!("'{s}'")),
                 AnyValue::Boolean(val) => {
                     // python bools are capitalized
                     if val {
@@ -66,41 +79,25 @@ pub(super) fn predicate_to_pa(
                 },
                 #[cfg(feature = "dtype-date")]
                 AnyValue::Date(v) => {
-                    // the function `_to_python_date` and the `Date`
+                    // the function `to_py_date` and the `Date`
                     // dtype have to be in scope on the python side
-                    Some(format!("_to_python_date(value={v})"))
+                    Some(format!("to_py_date({v})"))
                 },
                 #[cfg(feature = "dtype-datetime")]
-                AnyValue::Datetime(v, tu, tz) => {
-                    // the function `_to_python_datetime` and the `Datetime`
-                    // dtype have to be in scope on the python side
-                    match tz {
-                        None => Some(format!(
-                            "_to_python_datetime(value={}, tu='{}')",
-                            v,
-                            tu.to_ascii()
-                        )),
-                        Some(tz) => Some(format!(
-                            "_to_python_datetime(value={}, tu='{}', tz={})",
-                            v,
-                            tu.to_ascii(),
-                            tz
-                        )),
-                    }
-                },
+                AnyValue::Datetime(v, tu, tz) => Some(to_py_datetime(v, &tu, tz.as_ref())),
                 // Activate once pyarrow supports them
                 // #[cfg(feature = "dtype-time")]
                 // AnyValue::Time(v) => {
-                //     // the function `_to_python_time` has to be in scope
+                //     // the function `to_py_time` has to be in scope
                 //     // on the python side
-                //     Some(format!("_to_python_time(value={v})"))
+                //     Some(format!("to_py_time(value={v})"))
                 // }
                 // #[cfg(feature = "dtype-duration")]
                 // AnyValue::Duration(v, tu) => {
-                //     // the function `_to_python_timedelta` has to be in scope
+                //     // the function `to_py_timedelta` has to be in scope
                 //     // on the python side
                 //     Some(format!(
-                //         "_to_python_timedelta(value={}, tu='{}')",
+                //         "to_py_timedelta(value={}, tu='{}')",
                 //         v,
                 //         tu.to_ascii()
                 //     ))
@@ -119,12 +116,12 @@ pub(super) fn predicate_to_pa(
             }
         },
         AExpr::Function {
-            function: FunctionExpr::Boolean(BooleanFunction::IsNot),
+            function: FunctionExpr::Boolean(BooleanFunction::Not),
             input,
             ..
         } => {
-            let input = input.first().unwrap();
-            let input = predicate_to_pa(*input, expr_arena, args)?;
+            let input = input.first().unwrap().node();
+            let input = predicate_to_pa(input, expr_arena, args)?;
             Some(format!("~({input})"))
         },
         AExpr::Function {
@@ -132,8 +129,8 @@ pub(super) fn predicate_to_pa(
             input,
             ..
         } => {
-            let input = input.first().unwrap();
-            let input = predicate_to_pa(*input, expr_arena, args)?;
+            let input = input.first().unwrap().node();
+            let input = predicate_to_pa(input, expr_arena, args)?;
             Some(format!("({input}).is_null()"))
         },
         AExpr::Function {
@@ -141,8 +138,8 @@ pub(super) fn predicate_to_pa(
             input,
             ..
         } => {
-            let input = input.first().unwrap();
-            let input = predicate_to_pa(*input, expr_arena, args)?;
+            let input = input.first().unwrap().node();
+            let input = predicate_to_pa(input, expr_arena, args)?;
             Some(format!("~({input}).is_null()"))
         },
         #[cfg(feature = "is_in")]
@@ -151,12 +148,39 @@ pub(super) fn predicate_to_pa(
             input,
             ..
         } => {
-            let col = predicate_to_pa(*input.get(0)?, expr_arena, args)?;
+            let col = predicate_to_pa(input.first()?.node(), expr_arena, args)?;
             let mut args = args;
             args.allow_literal_series = true;
-            let values = predicate_to_pa(*input.get(1)?, expr_arena, args)?;
+            let values = predicate_to_pa(input.get(1)?.node(), expr_arena, args)?;
 
             Some(format!("({col}).isin({values})"))
+        },
+        #[cfg(feature = "is_between")]
+        AExpr::Function {
+            function: FunctionExpr::Boolean(BooleanFunction::IsBetween { closed }),
+            input,
+            ..
+        } => {
+            if !matches!(expr_arena.get(input.first()?.node()), AExpr::Column(_)) {
+                None
+            } else {
+                let col = predicate_to_pa(input.first()?.node(), expr_arena, args)?;
+                let left_cmp_op = match closed {
+                    ClosedInterval::None | ClosedInterval::Right => Operator::Gt,
+                    ClosedInterval::Both | ClosedInterval::Left => Operator::GtEq,
+                };
+                let right_cmp_op = match closed {
+                    ClosedInterval::None | ClosedInterval::Left => Operator::Lt,
+                    ClosedInterval::Both | ClosedInterval::Right => Operator::LtEq,
+                };
+
+                let lower = predicate_to_pa(input.get(1)?.node(), expr_arena, args)?;
+                let upper = predicate_to_pa(input.get(2)?.node(), expr_arena, args)?;
+
+                Some(format!(
+                    "(({col} {left_cmp_op} {lower}) & ({col} {right_cmp_op} {upper}))"
+                ))
+            }
         },
         _ => None,
     }

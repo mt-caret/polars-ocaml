@@ -11,9 +11,9 @@
 
 [package]
 edition = "2018"
-rust-version = "1.63"
+rust-version = "1.69"
 name = "sysinfo"
-version = "0.29.11"
+version = "0.30.12"
 authors = ["Guillaume Gomez <guillaume1.gomez@gmail.com>"]
 exclude = ["/test-unknown"]
 description = "Library to get system information such as processes, CPUs, disks, components and networks"
@@ -46,11 +46,11 @@ name = "sysinfo"
 version = "1.0"
 
 [dependencies.rayon]
-version = "^1.5.1"
+version = "^1.8"
 optional = true
 
 [dependencies.serde]
-version = "^1.0.152"
+version = "^1.0.190"
 optional = true
 
 [dev-dependencies.serde_json]
@@ -62,58 +62,60 @@ apple-sandbox = []
 c-interface = []
 debug = ["libc/extra_traits"]
 default = ["multithread"]
+linux-netdevs = []
+linux-tmpfs = []
 multithread = ["rayon"]
 unknown-ci = []
 
 [target."cfg(all(target_os = \"linux\", not(target_os = \"android\")))".dev-dependencies.tempfile]
-version = "3.2"
+version = "3.9"
 
 [target."cfg(any(target_os = \"macos\", target_os = \"ios\"))".dependencies.core-foundation-sys]
 version = "0.8"
 
 [target."cfg(any(windows, target_os = \"linux\", target_os = \"android\"))".dependencies.once_cell]
-version = "1.0"
+version = "1.18"
 
 [target."cfg(not(any(target_os = \"unknown\", target_arch = \"wasm32\")))".dependencies.libc]
-version = "^0.2.144"
+version = "^0.2.153"
 
 [target."cfg(windows)".dependencies.ntapi]
 version = "0.4"
 
-[target."cfg(windows)".dependencies.winapi]
-version = "0.3.9"
+[target."cfg(windows)".dependencies.windows]
+version = "0.52"
 features = [
-    "errhandlingapi",
-    "fileapi",
-    "handleapi",
-    "heapapi",
-    "ifdef",
-    "ioapiset",
-    "minwindef",
-    "pdh",
-    "psapi",
-    "synchapi",
-    "sysinfoapi",
-    "winbase",
-    "winerror",
-    "winioctl",
-    "winnt",
-    "oleauto",
-    "wbemcli",
-    "rpcdce",
-    "combaseapi",
-    "objidl",
-    "powerbase",
-    "netioapi",
-    "lmcons",
-    "lmaccess",
-    "lmapibuf",
-    "memoryapi",
-    "ntlsa",
-    "securitybaseapi",
-    "shellapi",
-    "std",
-    "iphlpapi",
-    "winsock2",
-    "sddl",
+    "Wdk_System_SystemInformation",
+    "Wdk_System_SystemServices",
+    "Wdk_System_Threading",
+    "Win32_Foundation",
+    "Win32_NetworkManagement_IpHelper",
+    "Win32_NetworkManagement_NetManagement",
+    "Win32_NetworkManagement_Ndis",
+    "Win32_Networking_WinSock",
+    "Win32_Security",
+    "Win32_Security_Authentication_Identity",
+    "Win32_Security_Authorization",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Com",
+    "Win32_System_Diagnostics_Debug",
+    "Win32_System_IO",
+    "Win32_System_Ioctl",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Kernel",
+    "Win32_System_Memory",
+    "Win32_System_Ole",
+    "Win32_System_Performance",
+    "Win32_System_Power",
+    "Win32_System_ProcessStatus",
+    "Win32_System_Registry",
+    "Win32_System_RemoteDesktop",
+    "Win32_System_Rpc",
+    "Win32_System_SystemInformation",
+    "Win32_System_SystemServices",
+    "Win32_System_Threading",
+    "Win32_System_Variant",
+    "Win32_System_WindowsProgramming",
+    "Win32_System_Wmi",
+    "Win32_UI_Shell",
 ]

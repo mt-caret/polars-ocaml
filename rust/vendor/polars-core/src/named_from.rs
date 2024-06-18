@@ -62,7 +62,7 @@ macro_rules! impl_named_from {
     };
 }
 
-impl_named_from!([String], Utf8Type, from_slice);
+impl_named_from!([String], StringType, from_slice);
 impl_named_from!([Vec<u8>], BinaryType, from_slice);
 impl_named_from!([bool], BooleanType, from_slice);
 #[cfg(feature = "dtype-u8")]
@@ -79,7 +79,7 @@ impl_named_from!([i32], Int32Type, from_slice);
 impl_named_from!([i64], Int64Type, from_slice);
 impl_named_from!([f32], Float32Type, from_slice);
 impl_named_from!([f64], Float64Type, from_slice);
-impl_named_from!([Option<String>], Utf8Type, from_slice_options);
+impl_named_from!([Option<String>], StringType, from_slice_options);
 impl_named_from!([Option<Vec<u8>>], BinaryType, from_slice_options);
 impl_named_from!([Option<bool>], BooleanType, from_slice_options);
 #[cfg(feature = "dtype-u8")]
@@ -123,6 +123,10 @@ impl<T: AsRef<[Series]>> NamedFrom<T, ListType> for Series {
         let series_slice = s.as_ref();
         let list_cap = series_slice.len();
 
+        if series_slice.is_empty() {
+            return Series::new_empty(name, &DataType::Null);
+        }
+
         let dt = series_slice[0].dtype();
 
         // inner type is also list so we need the anonymous builder
@@ -164,7 +168,7 @@ impl<T: AsRef<[Option<Series>]>> NamedFrom<T, [Option<Series>]> for Series {
 }
 impl<'a, T: AsRef<[&'a str]>> NamedFrom<T, [&'a str]> for Series {
     fn new(name: &str, v: T) -> Self {
-        Utf8Chunked::from_slice(name, v.as_ref()).into_series()
+        StringChunked::from_slice(name, v.as_ref()).into_series()
     }
 }
 
@@ -176,46 +180,46 @@ impl NamedFrom<&Series, str> for Series {
     }
 }
 
-impl<'a, T: AsRef<[&'a str]>> NamedFrom<T, [&'a str]> for Utf8Chunked {
+impl<'a, T: AsRef<[&'a str]>> NamedFrom<T, [&'a str]> for StringChunked {
     fn new(name: &str, v: T) -> Self {
-        Utf8Chunked::from_slice(name, v.as_ref())
+        StringChunked::from_slice(name, v.as_ref())
     }
 }
 
 impl<'a, T: AsRef<[Option<&'a str>]>> NamedFrom<T, [Option<&'a str>]> for Series {
     fn new(name: &str, v: T) -> Self {
-        Utf8Chunked::from_slice_options(name, v.as_ref()).into_series()
+        StringChunked::from_slice_options(name, v.as_ref()).into_series()
     }
 }
 
-impl<'a, T: AsRef<[Option<&'a str>]>> NamedFrom<T, [Option<&'a str>]> for Utf8Chunked {
+impl<'a, T: AsRef<[Option<&'a str>]>> NamedFrom<T, [Option<&'a str>]> for StringChunked {
     fn new(name: &str, v: T) -> Self {
-        Utf8Chunked::from_slice_options(name, v.as_ref())
+        StringChunked::from_slice_options(name, v.as_ref())
     }
 }
 
 impl<'a, T: AsRef<[Cow<'a, str>]>> NamedFrom<T, [Cow<'a, str>]> for Series {
     fn new(name: &str, v: T) -> Self {
-        Utf8Chunked::from_iter_values(name, v.as_ref().iter().map(|value| value.as_ref()))
+        StringChunked::from_iter_values(name, v.as_ref().iter().map(|value| value.as_ref()))
             .into_series()
     }
 }
 
-impl<'a, T: AsRef<[Cow<'a, str>]>> NamedFrom<T, [Cow<'a, str>]> for Utf8Chunked {
+impl<'a, T: AsRef<[Cow<'a, str>]>> NamedFrom<T, [Cow<'a, str>]> for StringChunked {
     fn new(name: &str, v: T) -> Self {
-        Utf8Chunked::from_iter_values(name, v.as_ref().iter().map(|value| value.as_ref()))
+        StringChunked::from_iter_values(name, v.as_ref().iter().map(|value| value.as_ref()))
     }
 }
 
 impl<'a, T: AsRef<[Option<Cow<'a, str>>]>> NamedFrom<T, [Option<Cow<'a, str>>]> for Series {
     fn new(name: &str, v: T) -> Self {
-        Utf8Chunked::new(name, v).into_series()
+        StringChunked::new(name, v).into_series()
     }
 }
 
-impl<'a, T: AsRef<[Option<Cow<'a, str>>]>> NamedFrom<T, [Option<Cow<'a, str>>]> for Utf8Chunked {
+impl<'a, T: AsRef<[Option<Cow<'a, str>>]>> NamedFrom<T, [Option<Cow<'a, str>>]> for StringChunked {
     fn new(name: &str, v: T) -> Self {
-        Utf8Chunked::from_iter_options(
+        StringChunked::from_iter_options(
             name,
             v.as_ref()
                 .iter()
@@ -460,5 +464,13 @@ mod test {
             "duration" => [ChronoDuration::from_std(std::time::Duration::from_secs(10)).unwrap()],
             "optional_duration" => [Some(ChronoDuration::from_std(std::time::Duration::from_secs(10)).unwrap())],
         ].unwrap();
+    }
+
+    #[test]
+    fn build_series_from_empty_series_vec() {
+        let empty_series = Series::new("test", Vec::<Series>::new());
+        assert_eq!(empty_series.len(), 0);
+        assert_eq!(*empty_series.dtype(), DataType::Null);
+        assert_eq!(empty_series.name(), "test");
     }
 }

@@ -5,13 +5,15 @@ use std::io::Write;
 use std::ops::BitOr;
 
 use arrow::bitmap::MutableBitmap;
+use arrow::legacy::trusted_len::TrustedLenPush;
 use arrow::offset::OffsetsBuffer;
-use polars_arrow::trusted_len::TrustedLenPush;
 use smartstring::alias::String as SmartString;
 
 use super::*;
+use crate::chunked_array::iterator::StructIter;
 use crate::datatypes::*;
-use crate::utils::index_to_chunked_index2;
+use crate::prelude::sort::arg_sort_multiple::_get_rows_encoded_ca_unordered;
+use crate::utils::index_to_chunked_index;
 
 /// This is logical type [`StructChunked`] that
 /// dispatches most logic to the `fields` implementations
@@ -46,12 +48,12 @@ fn fields_to_struct_array(fields: &[Series], physical: bool) -> (ArrayRef, Vec<S
             let s = s.rechunk();
             match s.dtype() {
                 #[cfg(feature = "object")]
-                DataType::Object(_) => s.to_arrow(0),
+                DataType::Object(_, _) => s.to_arrow(0, true),
                 _ => {
                     if physical {
                         s.chunks()[0].clone()
                     } else {
-                        s.to_arrow(0)
+                        s.to_arrow(0, true)
                     }
                 },
             }
@@ -73,7 +75,7 @@ impl StructChunked {
     }
     pub fn new(name: &str, fields: &[Series]) -> PolarsResult<Self> {
         let mut names = PlHashSet::with_capacity(fields.len());
-        let first_len = fields.get(0).map(|s| s.len()).unwrap_or(0);
+        let first_len = fields.first().map(|s| s.len()).unwrap_or(0);
         let mut max_len = first_len;
 
         let mut all_equal_len = true;
@@ -112,15 +114,21 @@ impl StructChunked {
             }
             Ok(Self::new_unchecked(name, &new_fields))
         } else if fields.is_empty() {
-            let fields = &[Series::full_null("", 1, &DataType::Null)];
+            let fields = &[Series::new_null("", 0)];
             Ok(Self::new_unchecked(name, fields))
         } else {
             Ok(Self::new_unchecked(name, fields))
         }
     }
 
-    pub(crate) fn chunks(&self) -> &Vec<ArrayRef> {
+    #[inline]
+    pub fn chunks(&self) -> &Vec<ArrayRef> {
         &self.chunks
+    }
+
+    #[inline]
+    pub(crate) unsafe fn chunks_mut(&mut self) -> &mut Vec<ArrayRef> {
+        &mut self.chunks
     }
 
     pub fn rechunk(&mut self) {
@@ -137,7 +145,7 @@ impl StructChunked {
                 .iter()
                 .map(|s| match s.dtype() {
                     #[cfg(feature = "object")]
-                    DataType::Object(_) => s.to_arrow(i),
+                    DataType::Object(_, _) => s.to_arrow(i, true),
                     _ => s.chunks()[i].clone(),
                 })
                 .collect::<Vec<_>>();
@@ -233,11 +241,11 @@ impl StructChunked {
             .iter()
             .find(|s| s.name() == name)
             .ok_or_else(|| polars_err!(StructFieldNotFound: "{}", name))
-            .map(|s| s.clone())
+            .cloned()
     }
 
     pub fn len(&self) -> usize {
-        self.fields.get(0).map(|s| s.len()).unwrap_or(0)
+        self.fields.first().map(|s| s.len()).unwrap_or(0)
     }
     pub fn is_empty(&self) -> bool {
         self.len() == 0
@@ -276,7 +284,7 @@ impl StructChunked {
         Ok(Self::new_unchecked(self.field.name(), &fields))
     }
 
-    pub(crate) fn apply_fields<F>(&self, func: F) -> Self
+    pub fn _apply_fields<F>(&self, func: F) -> Self
     where
         F: FnMut(&Series) -> Series,
     {
@@ -287,11 +295,11 @@ impl StructChunked {
         self.into()
     }
 
-    pub(crate) fn to_arrow(&self, i: usize) -> ArrayRef {
+    pub(crate) fn to_arrow(&self, i: usize, pl_flavor: bool) -> ArrayRef {
         let values = self
             .fields
             .iter()
-            .map(|s| s.to_arrow(i))
+            .map(|s| s.to_arrow(i, pl_flavor))
             .collect::<Vec<_>>();
 
         // we determine fields from arrays as there might be object arrays
@@ -328,7 +336,7 @@ impl StructChunked {
                     .collect::<PolarsResult<Vec<_>>>()?;
                 StructChunked::new(self.name(), &new_fields).map(|ca| ca.into_series())
             },
-            DataType::Utf8 => {
+            DataType::String => {
                 let mut ca = self.clone();
                 ca.rechunk();
                 let mut iters = ca.fields.iter().map(|s| s.iter()).collect::<Vec<_>>();
@@ -341,7 +349,7 @@ impl StructChunked {
 
                 let mut length_so_far = 0_i64;
                 unsafe {
-                    // safety: we have pre-allocated
+                    // SAFETY: we have pre-allocated
                     offsets.push_unchecked(length_so_far);
                 }
                 for row in 0..ca.len() {
@@ -358,7 +366,7 @@ impl StructChunked {
                     unsafe {
                         *values.last_mut().unwrap_unchecked() = b'}';
 
-                        // safety: we have pre-allocated
+                        // SAFETY: we have pre-allocated
                         length_so_far = values.len() as i64;
                         offsets.push_unchecked(length_so_far);
                     }
@@ -405,6 +413,14 @@ impl StructChunked {
         }
         self.cast_impl(dtype, true)
     }
+
+    pub fn rows_encode(&self) -> PolarsResult<BinaryOffsetChunked> {
+        _get_rows_encoded_ca_unordered(self.name(), &self.fields)
+    }
+
+    pub fn iter(&self) -> StructIter {
+        self.into_iter()
+    }
 }
 
 impl LogicalType for StructChunked {
@@ -419,9 +435,9 @@ impl LogicalType for StructChunked {
     }
 
     unsafe fn get_any_value_unchecked(&self, i: usize) -> AnyValue<'_> {
-        let (chunk_idx, idx) = index_to_chunked_index2(&self.chunks, i);
+        let (chunk_idx, idx) = index_to_chunked_index(self.chunks.iter().map(|c| c.len()), i);
         if let DataType::Struct(flds) = self.dtype() {
-            // safety: we already have a single chunk and we are
+            // SAFETY: we already have a single chunk and we are
             // guarded by the type system.
             unsafe {
                 let arr = &**self.chunks.get_unchecked(chunk_idx);
@@ -447,7 +463,7 @@ impl Drop for StructChunked {
         if self
             .fields
             .iter()
-            .any(|s| matches!(s.dtype(), DataType::Object(_)))
+            .any(|s| matches!(s.dtype(), DataType::Object(_, _)))
         {
             for arr in std::mem::take(&mut self.chunks) {
                 let arr = arr.as_any().downcast_ref::<StructArray>().unwrap();

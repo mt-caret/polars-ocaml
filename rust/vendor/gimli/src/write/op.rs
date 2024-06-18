@@ -834,7 +834,7 @@ pub(crate) mod convert {
     use super::*;
     use crate::common::UnitSectionOffset;
     use crate::read::{self, Reader};
-    use crate::write::{ConvertError, ConvertResult, UnitEntryId, UnitId};
+    use crate::write::{ConvertError, ConvertResult, UnitId};
     use std::collections::HashMap;
 
     impl Expression {
@@ -1070,10 +1070,11 @@ mod tests {
     use std::sync::Arc;
 
     #[test]
+    #[allow(clippy::type_complexity)]
     fn test_operation() {
-        for &version in &[3, 4, 5] {
-            for &address_size in &[4, 8] {
-                for &format in &[Format::Dwarf32, Format::Dwarf64] {
+        for version in [3, 4, 5] {
+            for address_size in [4, 8] {
+                for format in [Format::Dwarf32, Format::Dwarf64] {
                     let encoding = Encoding {
                         format,
                         version,
@@ -1529,7 +1530,7 @@ mod tests {
                     let mut w = EndianVec::new(LittleEndian);
                     let mut refs = Vec::new();
                     expression
-                        .write(&mut w, Some(&mut refs), encoding, Some(&unit_offsets))
+                        .write(&mut w, Some(&mut refs), encoding, Some(unit_offsets))
                         .unwrap();
                     for r in &refs {
                         assert_eq!(r.unit, unit_id);

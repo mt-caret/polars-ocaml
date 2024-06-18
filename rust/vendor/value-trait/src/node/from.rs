@@ -87,7 +87,6 @@ impl From<u32> for StaticNode {
 impl From<u64> for StaticNode {
     #[inline]
     #[must_use]
-    #[allow(clippy::cast_possible_wrap)]
     fn from(i: u64) -> Self {
         Self::U64(i)
     }

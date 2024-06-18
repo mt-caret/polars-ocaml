@@ -1841,6 +1841,7 @@ pub const AT_EXECFN: ::c_ulong = 31;
 // defined in arch/<arch>/include/uapi/asm/auxvec.h but has the same value
 // wherever it is defined.
 pub const AT_SYSINFO_EHDR: ::c_ulong = 33;
+pub const AT_MINSIGSTKSZ: ::c_ulong = 51;
 
 pub const GLOB_ERR: ::c_int = 1 << 0;
 pub const GLOB_MARK: ::c_int = 1 << 1;
@@ -2433,6 +2434,8 @@ pub const CMSPAR: ::tcflag_t = 0o10000000000;
 pub const MFD_CLOEXEC: ::c_uint = 0x0001;
 pub const MFD_ALLOW_SEALING: ::c_uint = 0x0002;
 pub const MFD_HUGETLB: ::c_uint = 0x0004;
+pub const MFD_NOEXEC_SEAL: ::c_uint = 0x0008;
+pub const MFD_EXEC: ::c_uint = 0x0010;
 pub const MFD_HUGE_64KB: ::c_uint = 0x40000000;
 pub const MFD_HUGE_512KB: ::c_uint = 0x4c000000;
 pub const MFD_HUGE_1MB: ::c_uint = 0x50000000;
@@ -4100,7 +4103,7 @@ pub const FAN_MARK_IGNORED_MASK: ::c_uint = 0x0000_0020;
 pub const FAN_MARK_IGNORED_SURV_MODIFY: ::c_uint = 0x0000_0040;
 pub const FAN_MARK_FLUSH: ::c_uint = 0x0000_0080;
 pub const FAN_MARK_EVICTABLE: ::c_uint = 0x0000_0200;
-pub const FAN_MARK_IGNORE: ::c_uint = 0x0000_0100;
+pub const FAN_MARK_IGNORE: ::c_uint = 0x0000_0400;
 
 pub const FAN_MARK_INODE: ::c_uint = 0x0000_0000;
 pub const FAN_MARK_MOUNT: ::c_uint = 0x0000_0010;
@@ -4676,7 +4679,7 @@ f! {
             as *mut cmsghdr;
         let max = (*mhdr).msg_control as usize
             + (*mhdr).msg_controllen as usize;
-        if (next.offset(1)) as usize > max ||
+        if (next.wrapping_offset(1)) as usize > max ||
             next as usize + super::CMSG_ALIGN((*next).cmsg_len as usize) > max
         {
             0 as *mut cmsghdr

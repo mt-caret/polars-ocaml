@@ -498,6 +498,11 @@ arch = RiscV
 implies = 
 description = 'F' (Single-Precision Floating-Point).
 
+feature = fast-unaligned-access
+arch = RiscV
+implies = 
+description = Has reasonably performant unaligned loads and stores (both scalar and vector).
+
 feature = m
 arch = RiscV
 implies = 
@@ -507,11 +512,6 @@ feature = relax
 arch = RiscV
 implies = 
 description = Enable Linker relaxation..
-
-feature = unaligned-scalar-mem
-arch = RiscV
-implies = 
-description = Has reasonably performant unaligned scalar loads and stores.
 
 feature = v
 arch = RiscV
@@ -560,7 +560,7 @@ description = 'Zdinx' (Double in Integer).
 
 feature = zfh
 arch = RiscV
-implies = f
+implies = f zfhmin
 description = 'Zfh' (Half-Precision Floating-Point).
 
 feature = zfhmin
@@ -575,7 +575,7 @@ description = 'Zfinx' (Float in Integer).
 
 feature = zhinx
 arch = RiscV
-implies = zfinx
+implies = zfinx zhinxmin
 description = 'Zhinx' (Half Float in Integer).
 
 feature = zhinxmin
@@ -748,6 +748,11 @@ arch = X86
 implies = avx avx2 f16c fma sse sse2 sse3 sse4.1 ssse3
 description = Enable AVX-512 instructions.
 
+feature = avx512fp16
+arch = X86
+implies = avx avx2 avx512bw avx512dq avx512f avx512vl f16c fma sse sse2 sse3 sse4.1 ssse3
+description = Support 16-bit floating point.
+
 feature = avx512ifma
 arch = X86
 implies = avx avx2 avx512f f16c fma sse sse2 sse3 sse4.1 ssse3
@@ -828,6 +833,11 @@ arch = X86
 implies = sse sse2
 description = Enable Galois Field Arithmetic Instructions.
 
+feature = lahfsahf
+arch = X86
+implies = 
+description = Support LAHF and SAHF instructions in 64-bit mode.
+
 feature = lzcnt
 arch = X86
 implies = 
@@ -847,6 +857,11 @@ feature = popcnt
 arch = X86
 implies = 
 description = Support POPCNT instruction.
+
+feature = prfchw
+arch = X86
+implies = 
+description = Support PRFCHW instructions.
 
 feature = rdrand
 arch = X86
@@ -910,7 +925,7 @@ description = Enable TBM instructions.
 
 feature = vaes
 arch = X86
-implies = aes avx sse sse2 sse3 sse4.1 ssse3
+implies = aes avx avx2 sse sse2 sse3 sse4.1 ssse3
 description = Promote selected AES instructions to AVX512/AVX registers.
 
 feature = vpclmulqdq

@@ -9,7 +9,7 @@ This module also contains a [`dense::Builder`](Builder) and a
 
 #[cfg(feature = "dfa-build")]
 use core::cmp;
-use core::{convert::TryFrom, fmt, iter, mem::size_of, slice};
+use core::{fmt, iter, mem::size_of, slice};
 
 #[cfg(feature = "dfa-build")]
 use alloc::{
@@ -2498,7 +2498,7 @@ impl OwnedDFA {
         self.tt.set(from, byte, to);
     }
 
-    /// An an empty state (a state where all transitions lead to a dead state)
+    /// An empty state (a state where all transitions lead to a dead state)
     /// and return its identifier. The identifier returned is guaranteed to
     /// not point to any other existing state.
     ///

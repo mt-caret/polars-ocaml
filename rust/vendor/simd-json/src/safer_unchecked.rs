@@ -14,27 +14,27 @@ pub trait GetSaferUnchecked<T> {
 }
 
 impl<T> GetSaferUnchecked<T> for [T] {
-    #[inline(always)]
+    #[cfg_attr(not(feature = "no-inline"), inline)]
     unsafe fn get_kinda_unchecked<I>(&self, index: I) -> &<I as SliceIndex<[T]>>::Output
     where
         I: SliceIndex<[T]>,
     {
-        if cfg!(debug_assertions) {
-            &self[index]
-        } else {
-            self.get_unchecked(index)
-        }
+        #[cfg(debug_assertions)]
+        let r = &self[index];
+        #[cfg(not(debug_assertions))]
+        let r = self.get_unchecked(index);
+        r
     }
 
-    #[inline(always)]
+    #[cfg_attr(not(feature = "no-inline"), inline)]
     unsafe fn get_kinda_unchecked_mut<I>(&mut self, index: I) -> &mut <I as SliceIndex<[T]>>::Output
     where
         I: SliceIndex<[T]>,
     {
-        if cfg!(debug_assertions) {
-            &mut self[index]
-        } else {
-            self.get_unchecked_mut(index)
-        }
+        #[cfg(debug_assertions)]
+        let r = &mut self[index];
+        #[cfg(not(debug_assertions))]
+        let r = self.get_unchecked_mut(index);
+        r
     }
 }

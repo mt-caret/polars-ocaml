@@ -65,6 +65,8 @@ pub struct CreateTableBuilder {
     pub like: Option<ObjectName>,
     pub clone: Option<ObjectName>,
     pub engine: Option<String>,
+    pub comment: Option<String>,
+    pub auto_increment_offset: Option<u32>,
     pub default_charset: Option<String>,
     pub collation: Option<String>,
     pub on_commit: Option<OnCommit>,
@@ -96,6 +98,8 @@ impl CreateTableBuilder {
             like: None,
             clone: None,
             engine: None,
+            comment: None,
+            auto_increment_offset: None,
             default_charset: None,
             collation: None,
             on_commit: None,
@@ -197,6 +201,16 @@ impl CreateTableBuilder {
         self
     }
 
+    pub fn comment(mut self, comment: Option<String>) -> Self {
+        self.comment = comment;
+        self
+    }
+
+    pub fn auto_increment_offset(mut self, offset: Option<u32>) -> Self {
+        self.auto_increment_offset = offset;
+        self
+    }
+
     pub fn default_charset(mut self, default_charset: Option<String>) -> Self {
         self.default_charset = default_charset;
         self
@@ -249,6 +263,8 @@ impl CreateTableBuilder {
             like: self.like,
             clone: self.clone,
             engine: self.engine,
+            comment: self.comment,
+            auto_increment_offset: self.auto_increment_offset,
             default_charset: self.default_charset,
             collation: self.collation,
             on_commit: self.on_commit,
@@ -287,6 +303,8 @@ impl TryFrom<Statement> for CreateTableBuilder {
                 like,
                 clone,
                 engine,
+                comment,
+                auto_increment_offset,
                 default_charset,
                 collation,
                 on_commit,
@@ -314,6 +332,8 @@ impl TryFrom<Statement> for CreateTableBuilder {
                 like,
                 clone,
                 engine,
+                comment,
+                auto_increment_offset,
                 default_charset,
                 collation,
                 on_commit,

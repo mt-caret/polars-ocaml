@@ -1,7 +1,3 @@
-use arrow::array::{
-    Array, MutableArray, MutableFixedSizeListArray, MutablePrimitiveArray, PrimitiveArray,
-    PushUnchecked,
-};
 use arrow::types::NativeType;
 use polars_utils::unwrap::UnwrapUncheckedRelease;
 use smartstring::alias::String as SmartString;
@@ -12,16 +8,26 @@ pub(crate) struct FixedSizeListNumericBuilder<T: NativeType> {
     inner: Option<MutableFixedSizeListArray<MutablePrimitiveArray<T>>>,
     width: usize,
     name: SmartString,
+    logical_dtype: DataType,
 }
 
 impl<T: NativeType> FixedSizeListNumericBuilder<T> {
-    pub(crate) fn new(name: &str, width: usize, capacity: usize) -> Self {
+    /// # Safety
+    ///
+    /// The caller must ensure that the physical numerical type match logical type.
+    pub(crate) unsafe fn new(
+        name: &str,
+        width: usize,
+        capacity: usize,
+        logical_dtype: DataType,
+    ) -> Self {
         let mp = MutablePrimitiveArray::<T>::with_capacity(capacity * width);
         let inner = Some(MutableFixedSizeListArray::new(mp, width));
         Self {
             inner,
             width,
             name: name.into(),
+            logical_dtype,
         }
     }
 }
@@ -68,7 +74,14 @@ impl<T: NativeType> FixedSizeListBuilder for FixedSizeListNumericBuilder<T> {
 
     fn finish(&mut self) -> ArrayChunked {
         let arr: FixedSizeListArray = self.inner.take().unwrap().into();
-        unsafe { ChunkedArray::from_chunks(self.name.as_str(), vec![Box::new(arr) as ArrayRef]) }
+        // SAFETY: physical type matches the logical
+        unsafe {
+            ChunkedArray::from_chunks_and_dtype(
+                self.name.as_str(),
+                vec![Box::new(arr)],
+                DataType::Array(Box::new(self.logical_dtype.clone()), self.width),
+            )
+        }
     }
 }
 
@@ -108,9 +121,14 @@ impl FixedSizeListBuilder for AnonymousOwnedFixedSizeListBuilder {
 
     fn finish(&mut self) -> ArrayChunked {
         let arr = std::mem::take(&mut self.inner)
-            .finish(self.inner_dtype.as_ref().map(|dt| dt.to_arrow()).as_ref())
+            .finish(
+                self.inner_dtype
+                    .as_ref()
+                    .map(|dt| dt.to_arrow(true))
+                    .as_ref(),
+            )
             .unwrap();
-        unsafe { ChunkedArray::from_chunks(self.name.as_str(), vec![Box::new(arr) as ArrayRef]) }
+        ChunkedArray::with_chunk(self.name.as_str(), arr)
     }
 }
 
@@ -124,7 +142,10 @@ pub(crate) fn get_fixed_size_list_builder(
 
     let builder = if phys_dtype.is_numeric() {
         with_match_physical_numeric_type!(phys_dtype, |$T| {
-            Box::new(FixedSizeListNumericBuilder::<$T>::new(name, width, capacity)) as Box<dyn FixedSizeListBuilder>
+        // SAFETY: physical type match logical type
+        unsafe {
+            Box::new(FixedSizeListNumericBuilder::<$T>::new(name, width, capacity,inner_type_logical.clone())) as Box<dyn FixedSizeListBuilder>
+        }
         })
     } else {
         Box::new(AnonymousOwnedFixedSizeListBuilder::new(

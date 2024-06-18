@@ -12,32 +12,48 @@
 [package]
 edition = "2021"
 name = "polars-row"
-version = "0.32.1"
+version = "0.40.0"
 authors = ["Ritchie Vink <ritchie46@gmail.com>"]
+build = false
+autobins = false
+autoexamples = false
+autotests = false
+autobenches = false
 description = "Row encodings for the Polars DataFrame library"
 homepage = "https://www.pola.rs/"
 readme = "README.md"
 license = "MIT"
 repository = "https://github.com/pola-rs/polars"
 
+[lib]
+name = "polars_row"
+path = "src/lib.rs"
+
 [dependencies.arrow]
-version = "0.17.4"
+version = "0.40.0"
 features = [
     "compute_aggregate",
     "compute_arithmetics",
+    "compute_bitwise",
     "compute_boolean",
     "compute_boolean_kleene",
     "compute_cast",
     "compute_comparison",
-    "compute_concatenate",
-    "compute_filter",
-    "compute_if_then_else",
 ]
 default-features = false
-package = "arrow2"
+package = "polars-arrow"
+
+[dependencies.bytemuck]
+version = "1.11"
+features = [
+    "derive",
+    "extern_crate_alloc",
+]
 
 [dependencies.polars-error]
-version = "0.32.1"
+version = "0.40.0"
+default-features = false
 
 [dependencies.polars-utils]
-version = "0.32.1"
+version = "0.40.0"
+default-features = false

@@ -1,8 +1,7 @@
-use crate::ValueAccess;
+use crate::base::{TypedValue, ValueAsScalar};
 
-use super::{fmt, Value, ValueType};
+use super::{fmt, ValueType};
 use float_cmp::approx_eq;
-use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::ops::{Index, IndexMut};
 
@@ -66,20 +65,7 @@ impl IndexMut<usize> for StaticNode {
     }
 }
 
-impl Value for StaticNode {
-    #[inline]
-    #[must_use]
-    fn is_null(&self) -> bool {
-        self == &Self::Null
-    }
-}
-
-impl ValueAccess for StaticNode {
-    type Target = StaticNode;
-    type Key = String;
-    type Array = Vec<StaticNode>;
-    type Object = HashMap<String, StaticNode>;
-
+impl TypedValue for StaticNode {
     #[cfg(not(feature = "128bit"))]
     #[inline]
     #[must_use]
@@ -108,17 +94,17 @@ impl ValueAccess for StaticNode {
             Self::U64(_) => ValueType::U64,
         }
     }
-    #[inline]
-    #[must_use]
-    fn as_array(&self) -> Option<&Self::Array> {
-        None
-    }
-    #[inline]
-    #[must_use]
-    fn as_object(&self) -> Option<&HashMap<Self::Key, Self>> {
-        None
-    }
+}
 
+impl ValueAsScalar for StaticNode {
+    #[inline]
+    #[must_use]
+    fn as_null(&self) -> Option<()> {
+        match self {
+            Self::Null => Some(()),
+            _ => None,
+        }
+    }
     #[inline]
     #[must_use]
     fn as_bool(&self) -> Option<bool> {
@@ -168,7 +154,6 @@ impl ValueAccess for StaticNode {
     #[cfg(not(feature = "128bit"))]
     #[inline]
     #[must_use]
-    #[allow(clippy::cast_sign_loss)]
     fn as_u64(&self) -> Option<u64> {
         match self {
             Self::I64(i) => u64::try_from(*i).ok(),
@@ -180,7 +165,6 @@ impl ValueAccess for StaticNode {
     #[cfg(feature = "128bit")]
     #[inline]
     #[must_use]
-    #[allow(clippy::cast_sign_loss)]
     fn as_u64(&self) -> Option<u64> {
         match self {
             Self::I64(i) => u64::try_from(*i).ok(),
@@ -193,7 +177,6 @@ impl ValueAccess for StaticNode {
     #[cfg(feature = "128bit")]
     #[inline]
     #[must_use]
-    #[allow(clippy::cast_sign_loss)]
     fn as_u128(&self) -> Option<u128> {
         match self {
             Self::U128(i) => Some(*i),
@@ -309,7 +292,7 @@ impl PartialEq for StaticNode {
             (Self::U64(v1), Self::U128(v2)) => v2.eq(&u128::from(*v1)),
 
             (Self::I64(v1), Self::U64(v2)) if *v1 >= 0 => (*v1 as u64).eq(v2),
-            (Self::I64(v1), Self::I128(v2)) => (*v2 as i128).eq(&i128::from(*v1)),
+            (Self::I64(v1), Self::I128(v2)) => (*v2).eq(&i128::from(*v1)),
             (Self::I64(v1), Self::U128(v2)) if *v1 >= 0 => v2.eq(&(*v1 as u128)),
 
             (Self::U128(v1), Self::I128(v2)) if *v2 >= 0 => (*v2 as u128).eq(v1),

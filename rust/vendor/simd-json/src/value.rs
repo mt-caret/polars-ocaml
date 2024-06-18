@@ -64,8 +64,7 @@ pub use self::owned::{
     to_value as to_owned_value, to_value_with_buffers as to_owned_value_with_buffers,
     Value as OwnedValue,
 };
-use crate::safer_unchecked::GetSaferUnchecked;
-use crate::{Deserializer, Result};
+use crate::{Buffers, Deserializer, Result};
 use halfbrown::HashMap;
 use std::hash::Hash;
 use std::marker::PhantomData;
@@ -89,7 +88,7 @@ pub type ObjectHasher = halfbrown::DefaultHashBuilder;
 /// Will return `Err` if `s` is invalid JSON.
 pub fn deserialize<'de, Value, Key>(s: &'de mut [u8]) -> Result<Value>
 where
-    Value: Builder<'de> + From<Vec<Value>> + From<HashMap<Key, Value, ObjectHasher>> + 'de,
+    Value: ValueBuilder<'de> + From<Vec<Value>> + From<HashMap<Key, Value, ObjectHasher>> + 'de,
     Key: Hash + Eq + From<&'de str>,
 {
     match Deserializer::from_slice(s) {
@@ -98,9 +97,33 @@ where
     }
 }
 
+/// Parses a slice of bytes into a Value dom. This function will
+/// rewrite the slice to de-escape strings.
+/// As we reference parts of the input slice the resulting dom
+/// has the same lifetime as the slice it was created from.
+///
+/// Passes in reusable buffers to reduce allocations.
+///
+/// # Errors
+///
+/// Will return `Err` if `s` is invalid JSON.
+pub fn deserialize_with_buffers<'de, Value, Key>(
+    s: &'de mut [u8],
+    buffers: &mut Buffers,
+) -> Result<Value>
+where
+    Value: ValueBuilder<'de> + From<Vec<Value>> + From<HashMap<Key, Value, ObjectHasher>> + 'de,
+    Key: Hash + Eq + From<&'de str>,
+{
+    match Deserializer::from_slice_with_buffers(s, buffers) {
+        Ok(de) => Ok(ValueDeserializer::from_deserializer(de).parse()),
+        Err(e) => Err(e),
+    }
+}
+
 struct ValueDeserializer<'de, Value, Key>
 where
-    Value: Builder<'de> + From<Vec<Value>> + From<HashMap<Key, Value, ObjectHasher>> + 'de,
+    Value: ValueBuilder<'de> + From<Vec<Value>> + From<HashMap<Key, Value, ObjectHasher>> + 'de,
     Key: Hash + Eq + From<&'de str>,
 {
     de: Deserializer<'de>,
@@ -109,7 +132,7 @@ where
 
 impl<'de, Value, Key> ValueDeserializer<'de, Value, Key>
 where
-    Value: Builder<'de>
+    Value: ValueBuilder<'de>
         + From<&'de str>
         + From<Vec<Value>>
         + From<HashMap<Key, Value, ObjectHasher>>
@@ -123,33 +146,33 @@ where
         }
     }
 
-    #[cfg_attr(not(feature = "no-inline"), inline(always))]
+    #[cfg_attr(not(feature = "no-inline"), inline)]
     pub fn parse(&mut self) -> Value {
         match unsafe { self.de.next_() } {
             Node::Static(s) => Value::from(s),
             Node::String(s) => Value::from(s),
-            Node::Array(len, _) => self.parse_array(len),
-            Node::Object(len, _) => self.parse_map(len),
+            Node::Array { len, count: _ } => self.parse_array(len),
+            Node::Object { len, count: _ } => self.parse_map(len),
         }
     }
 
-    #[cfg_attr(not(feature = "no-inline"), inline(always))]
-    #[allow(clippy::uninit_vec)]
+    #[cfg_attr(not(feature = "no-inline"), inline)]
     fn parse_array(&mut self, len: usize) -> Value {
         // Rust doesn't optimize the normal loop away here
         // so we write our own avoiding the length
         // checks during push
-        let mut res = Vec::with_capacity(len);
+        let mut res: Vec<Value> = Vec::with_capacity(len);
+        let res_ptr = res.as_mut_ptr();
         unsafe {
-            res.set_len(len);
             for i in 0..len {
-                std::ptr::write(res.get_kinda_unchecked_mut(i), self.parse());
+                res_ptr.add(i).write(self.parse());
             }
+            res.set_len(len);
         }
         Value::from(res)
     }
 
-    #[cfg_attr(not(feature = "no-inline"), inline(always))]
+    #[cfg_attr(not(feature = "no-inline"), inline)]
     fn parse_map(&mut self, len: usize) -> Value {
         let mut res: HashMap<Key, Value, ObjectHasher> =
             HashMap::with_capacity_and_hasher(len, ObjectHasher::default());

@@ -59,17 +59,7 @@ impl<T> DebugAranges<T> {
     ///
     /// This is useful when `R` implements `Reader` but `T` does not.
     ///
-    /// ## Example Usage
-    ///
-    /// ```rust,no_run
-    /// # let load_section = || unimplemented!();
-    /// // Read the DWARF section into a `Vec` with whatever object loader you're using.
-    /// let owned_section: gimli::DebugAranges<Vec<u8>> = load_section();
-    /// // Create a reference to the DWARF section.
-    /// let section = owned_section.borrow(|section| {
-    ///     gimli::EndianSlice::new(&section, gimli::LittleEndian)
-    /// });
-    /// ```
+    /// Used by `DwarfSections::borrow`.
     pub fn borrow<'a, F, R>(&'a self, mut borrow: F) -> DebugAranges<R>
     where
         F: FnMut(&'a T) -> R,
@@ -182,7 +172,7 @@ where
             .and_then(|x| x.checked_add(segment_size))
             .ok_or(Error::InvalidAddressRange)?;
         if tuple_length == 0 {
-            return Err(Error::InvalidAddressRange)?;
+            return Err(Error::InvalidAddressRange);
         }
         let padding = if header_length % tuple_length == 0 {
             0

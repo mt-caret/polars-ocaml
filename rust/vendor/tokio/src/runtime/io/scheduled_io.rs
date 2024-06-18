@@ -114,10 +114,10 @@ struct Waiters {
     /// List of all current waiters.
     list: WaitList,
 
-    /// Waker used for AsyncRead.
+    /// Waker used for `AsyncRead`.
     reader: Option<Waker>,
 
-    /// Waker used for AsyncWrite.
+    /// Waker used for `AsyncWrite`.
     writer: Option<Waker>,
 }
 
@@ -191,7 +191,7 @@ impl ScheduledIo {
         mio::Token(self as *const _ as usize)
     }
 
-    /// Invoked when the IO driver is shut down; forces this ScheduledIo into a
+    /// Invoked when the IO driver is shut down; forces this `ScheduledIo` into a
     /// permanently shutdown state.
     pub(super) fn shutdown(&self) {
         let mask = SHUTDOWN.pack(1, 0);
@@ -346,7 +346,7 @@ impl ScheduledIo {
             match slot {
                 Some(existing) => {
                     if !existing.will_wake(cx.waker()) {
-                        *existing = cx.waker().clone();
+                        existing.clone_from(cx.waker());
                     }
                 }
                 None => {

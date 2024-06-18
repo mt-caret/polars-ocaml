@@ -12,7 +12,7 @@
 [package]
 edition = "2018"
 name = "xxhash-rust"
-version = "0.8.8"
+version = "0.8.10"
 authors = ["Douman <douman@gmx.se>"]
 include = [
     "**/*.rs",
@@ -50,7 +50,7 @@ features = [
 version = "0.2"
 
 [dev-dependencies.xxhash-c-sys]
-version = "0.8.4"
+version = "0.8.6"
 
 [features]
 const_xxh3 = []

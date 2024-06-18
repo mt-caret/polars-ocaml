@@ -12,77 +12,118 @@
 [package]
 edition = "2021"
 name = "polars-pipe"
-version = "0.32.1"
+version = "0.40.0"
 authors = ["Ritchie Vink <ritchie46@gmail.com>"]
+build = "build.rs"
+autobins = false
+autoexamples = false
+autotests = false
+autobenches = false
 description = "Lazy query engine for the Polars DataFrame library"
 homepage = "https://www.pola.rs/"
 readme = "README.md"
 license = "MIT"
 repository = "https://github.com/pola-rs/polars"
 
+[lib]
+name = "polars_pipe"
+path = "src/lib.rs"
+
+[dependencies.arrow]
+version = "0.40.0"
+features = [
+    "compute_aggregate",
+    "compute_arithmetics",
+    "compute_bitwise",
+    "compute_boolean",
+    "compute_boolean_kleene",
+    "compute_cast",
+    "compute_comparison",
+]
+default-features = false
+package = "polars-arrow"
+
 [dependencies.crossbeam-channel]
-version = "0.5"
-optional = true
+version = "0.5.8"
 
 [dependencies.crossbeam-queue]
 version = "0.3"
-optional = true
 
 [dependencies.enum_dispatch]
 version = "0.3"
+
+[dependencies.futures]
+version = "0.3.25"
+optional = true
 
 [dependencies.hashbrown]
 version = "0.14"
 features = [
     "rayon",
     "ahash",
+    "serde",
 ]
 
 [dependencies.num-traits]
 version = "0.2"
 
-[dependencies.polars-arrow]
-version = "0.32.1"
+[dependencies.polars-compute]
+version = "0.40.0"
 default-features = false
 
 [dependencies.polars-core]
-version = "0.32.1"
+version = "0.40.0"
 features = [
     "lazy",
     "zip_with",
     "random",
+    "rows",
 ]
+default-features = false
+
+[dependencies.polars-expr]
+version = "0.40.0"
 default-features = false
 
 [dependencies.polars-io]
-version = "0.32.1"
-features = [
-    "ipc",
-    "async",
-]
+version = "0.40.0"
+features = ["ipc"]
 default-features = false
 
 [dependencies.polars-ops]
-version = "0.32.1"
-features = ["search_sorted"]
+version = "0.40.0"
+features = [
+    "search_sorted",
+    "chunked_ids",
+]
+default-features = false
 
 [dependencies.polars-plan]
-version = "0.32.1"
-features = ["compile"]
+version = "0.40.0"
 default-features = false
 
 [dependencies.polars-row]
-version = "0.32.1"
+version = "0.40.0"
+default-features = false
 
 [dependencies.polars-utils]
-version = "0.32.1"
+version = "0.40.0"
 features = ["sysinfo"]
+default-features = false
 
 [dependencies.rayon]
-version = "1.6"
+version = "1.9"
 
 [dependencies.smartstring]
 version = "1"
+
+[dependencies.tokio]
+version = "1.26"
+optional = true
+
+[dependencies.uuid]
+version = "1.7.0"
+features = ["v4"]
 
 [build-dependencies.version_check]
 version = "0.9.4"
@@ -91,12 +132,16 @@ version = "0.9.4"
 async = [
     "polars-plan/async",
     "polars-io/async",
+    "futures",
 ]
-compile = [
-    "crossbeam-channel",
-    "crossbeam-queue",
+cloud = [
+    "async",
+    "polars-io/cloud",
+    "polars-plan/cloud",
+    "tokio",
+    "futures",
 ]
-cross_join = ["polars-core/cross_join"]
+cross_join = ["polars-ops/cross_join"]
 csv = [
     "polars-plan/csv",
     "polars-io/csv",
@@ -112,6 +157,10 @@ ipc = [
     "polars-plan/ipc",
     "polars-io/ipc",
 ]
+json = [
+    "polars-plan/json",
+    "polars-io/json",
+]
 nightly = [
     "polars-core/nightly",
     "polars-utils/nightly",
@@ -120,9 +169,6 @@ nightly = [
 parquet = [
     "polars-plan/parquet",
     "polars-io/parquet",
-]
-test = [
-    "compile",
-    "polars-core/chunked_ids",
+    "polars-io/async",
 ]
 trigger_ooc = []

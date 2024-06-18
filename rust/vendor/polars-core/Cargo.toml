@@ -12,8 +12,13 @@
 [package]
 edition = "2021"
 name = "polars-core"
-version = "0.32.1"
+version = "0.40.0"
 authors = ["Ritchie Vink <ritchie46@gmail.com>"]
+build = "build.rs"
+autobins = false
+autoexamples = false
+autotests = false
+autobenches = false
 description = "Core of the Polars DataFrame library"
 homepage = "https://www.pola.rs/"
 readme = "README.md"
@@ -27,30 +32,44 @@ rustdoc-args = [
     "docsrs",
 ]
 
+[lib]
+name = "polars_core"
+path = "src/lib.rs"
+
 [dependencies.ahash]
-version = "0.8"
+version = ">=0.8.5"
 
 [dependencies.arrow]
-version = "0.17.4"
+version = "0.40.0"
 features = [
     "compute_aggregate",
     "compute_arithmetics",
+    "compute_bitwise",
     "compute_boolean",
     "compute_boolean_kleene",
     "compute_cast",
     "compute_comparison",
-    "compute_concatenate",
-    "compute_filter",
-    "compute_if_then_else",
 ]
 default-features = false
-package = "arrow2"
+package = "polars-arrow"
+
+[dependencies.arrow-array]
+version = ">=41"
+optional = true
+default-features = false
 
 [dependencies.bitflags]
 version = "2"
 
+[dependencies.bytemuck]
+version = "1.11"
+features = [
+    "derive",
+    "extern_crate_alloc",
+]
+
 [dependencies.chrono]
-version = "0.4"
+version = "0.4.31"
 features = ["std"]
 optional = true
 default-features = false
@@ -62,55 +81,49 @@ optional = true
 [dependencies.comfy-table]
 version = "7.0.1"
 optional = true
-default_features = false
+default-features = false
 
 [dependencies.either]
-version = "1.8"
+version = "1.11"
 
 [dependencies.hashbrown]
 version = "0.14"
 features = [
     "rayon",
     "ahash",
+    "serde",
 ]
 
 [dependencies.indexmap]
 version = "2"
 features = ["std"]
 
-[dependencies.itoap]
-version = "1"
-features = ["simd"]
-optional = true
-
 [dependencies.ndarray]
 version = "0.15"
 optional = true
-default_features = false
+default-features = false
 
 [dependencies.num-traits]
 version = "0.2"
 
-[dependencies.object_store]
-version = "0.6"
-optional = true
-default-features = false
-
 [dependencies.once_cell]
 version = "1"
 
-[dependencies.polars-arrow]
-version = "0.32.1"
-features = ["compute"]
+[dependencies.polars-compute]
+version = "0.40.0"
+default-features = false
 
 [dependencies.polars-error]
-version = "0.32.1"
+version = "0.40.0"
+default-features = false
 
 [dependencies.polars-row]
-version = "0.32.1"
+version = "0.40.0"
+default-features = false
 
 [dependencies.polars-utils]
-version = "0.32.1"
+version = "0.40.0"
+default-features = false
 
 [dependencies.rand]
 version = "0.8"
@@ -125,14 +138,14 @@ version = "0.4"
 optional = true
 
 [dependencies.rayon]
-version = "1.6"
+version = "1.9"
 
 [dependencies.regex]
-version = "1.7.1"
+version = "1.9"
 optional = true
 
 [dependencies.serde]
-version = "1.0.160"
+version = "1.0.188"
 features = ["derive"]
 optional = true
 
@@ -145,10 +158,6 @@ version = "1"
 
 [dependencies.thiserror]
 version = "1"
-
-[dependencies.url]
-version = "2.3.1"
-optional = true
 
 [dependencies.xxhash-rust]
 version = "0.8.6"
@@ -164,36 +173,24 @@ version = "1"
 version = "0.9.4"
 
 [features]
-abs = []
-asof_join = []
-async = ["url"]
+algorithm_group_by = []
+arrow_rs = [
+    "arrow-array",
+    "arrow/arrow_rs",
+]
 avx512 = []
-aws = [
-    "async",
-    "object_store/aws",
+bigidx = [
+    "arrow/bigidx",
+    "polars-utils/bigidx",
 ]
-azure = [
-    "async",
-    "object_store/azure",
-]
-bigidx = ["polars-arrow/bigidx"]
 checked_arithmetic = []
-chunked_ids = []
-concat_str = []
-cross_join = []
-cum_agg = []
 dataframe_arithmetic = []
-default = [
-    "docs",
-    "temporal",
-]
+default = ["algorithm_group_by"]
 describe = []
 diagonal_concat = []
-diff = []
 docs = []
 docs-selection = [
     "ndarray",
-    "is_in",
     "rows",
     "docs",
     "strings",
@@ -202,44 +199,31 @@ docs-selection = [
     "temporal",
     "random",
     "zip_with",
-    "round_series",
     "checked_arithmetic",
-    "repeat_by",
-    "is_first",
-    "is_last",
-    "asof_join",
-    "cross_join",
+    "is_first_distinct",
+    "is_last_distinct",
     "dot_product",
-    "concat_str",
     "row_hash",
-    "mode",
-    "cum_agg",
     "rolling_window",
-    "diff",
-    "moment",
+    "rolling_window_by",
     "dtype-categorical",
     "dtype-decimal",
-    "rank",
     "diagonal_concat",
-    "horizontal_concat",
-    "abs",
     "dataframe_arithmetic",
     "product",
-    "unique_counts",
     "describe",
-    "chunked_ids",
-    "semi_anti_join",
     "partition_by",
+    "algorithm_group_by",
 ]
 dot_product = []
-dtype-array = ["polars-arrow/dtype-array"]
+dtype-array = [
+    "arrow/dtype-array",
+    "polars-compute/dtype-array",
+]
 dtype-categorical = []
 dtype-date = ["temporal"]
 dtype-datetime = ["temporal"]
-dtype-decimal = [
-    "dep:itoap",
-    "polars-arrow/dtype-decimal",
-]
+dtype-decimal = ["arrow/dtype-decimal"]
 dtype-duration = ["temporal"]
 dtype-i16 = []
 dtype-i8 = []
@@ -247,50 +231,40 @@ dtype-struct = []
 dtype-time = ["temporal"]
 dtype-u16 = []
 dtype-u8 = []
-dynamic_groupby = [
+dynamic_group_by = [
     "dtype-datetime",
     "dtype-date",
 ]
-ewma = []
 fmt = ["comfy-table/tty"]
 fmt_no_tty = ["comfy-table"]
-gcp = [
-    "async",
-    "object_store/gcp",
-]
-groupby_list = []
-horizontal_concat = []
-is_first = []
-is_in = []
-is_last = []
+group_by_list = []
+is_first_distinct = []
+is_last_distinct = []
 lazy = []
-mode = []
-moment = []
 nightly = [
     "simd",
     "hashbrown/nightly",
     "polars-utils/nightly",
-    "polars-arrow/nightly",
+    "arrow/nightly",
 ]
 object = ["serde_json"]
-parquet = ["arrow/io_parquet"]
 partition_by = []
-pct_change = ["diff"]
-performant = ["polars-arrow/performant"]
+performant = [
+    "arrow/performant",
+    "reinterpret",
+]
 product = []
 python = []
 random = [
     "rand",
     "rand_distr",
 ]
-rank = []
 reinterpret = []
-repeat_by = []
 rolling_window = []
+rolling_window_by = []
 round_series = []
 row_hash = []
 rows = []
-semi_anti_join = []
 serde = [
     "dep:serde",
     "smartstring/serde",
@@ -298,20 +272,18 @@ serde = [
 ]
 serde-lazy = [
     "serde",
-    "polars-arrow/serde",
+    "arrow/serde",
     "indexmap/serde",
     "smartstring/serde",
     "chrono/serde",
 ]
 simd = [
     "arrow/simd",
-    "polars-arrow/simd",
+    "polars-compute/simd",
 ]
-sort_multiple = []
 strings = [
     "regex",
-    "polars-arrow/strings",
-    "arrow/compute_substring",
+    "arrow/strings",
     "polars-error/regex",
 ]
 take_opt_iter = []
@@ -323,7 +295,7 @@ temporal = [
 timezones = [
     "chrono-tz",
     "arrow/chrono-tz",
-    "polars-arrow/timezones",
+    "arrow/timezones",
 ]
 unique_counts = []
 zip_with = []

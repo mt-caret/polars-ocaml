@@ -6,26 +6,27 @@ use base64::engine::general_purpose;
 #[cfg(feature = "binary_encoding")]
 use base64::Engine as _;
 use memchr::memmem::find;
+use polars_core::prelude::arity::broadcast_binary_elementwise_values;
 
 use super::*;
 
 pub trait BinaryNameSpaceImpl: AsBinary {
     /// Check if binary contains given literal
-    fn contains(&self, lit: &[u8]) -> PolarsResult<BooleanChunked> {
+    fn contains(&self, lit: &[u8]) -> BooleanChunked {
         let ca = self.as_binary();
         let f = |s: &[u8]| find(s, lit).is_some();
-        let mut out: BooleanChunked = if !ca.has_validity() {
-            ca.into_no_null_iter().map(f).collect()
-        } else {
-            ca.into_iter().map(|opt_s| opt_s.map(f)).collect()
-        };
-        out.rename(ca.name());
-        Ok(out)
+        ca.apply_values_generic(f)
     }
 
-    /// Check if strings contain a given literal
-    fn contains_literal(&self, lit: &[u8]) -> PolarsResult<BooleanChunked> {
-        self.contains(lit)
+    fn contains_chunked(&self, lit: &BinaryChunked) -> BooleanChunked {
+        let ca = self.as_binary();
+        match lit.len() {
+            1 => match lit.get(0) {
+                Some(lit) => ca.contains(lit),
+                None => BooleanChunked::full_null(ca.name(), ca.len()),
+            },
+            _ => broadcast_binary_elementwise_values(ca, lit, |src, lit| find(src, lit).is_some()),
+        }
     }
 
     /// Check if strings ends with a substring
@@ -46,21 +47,42 @@ pub trait BinaryNameSpaceImpl: AsBinary {
         out
     }
 
+    fn starts_with_chunked(&self, prefix: &BinaryChunked) -> BooleanChunked {
+        let ca = self.as_binary();
+        match prefix.len() {
+            1 => match prefix.get(0) {
+                Some(s) => self.starts_with(s),
+                None => BooleanChunked::full_null(ca.name(), ca.len()),
+            },
+            _ => broadcast_binary_elementwise_values(ca, prefix, |s, sub| s.starts_with(sub)),
+        }
+    }
+
+    fn ends_with_chunked(&self, suffix: &BinaryChunked) -> BooleanChunked {
+        let ca = self.as_binary();
+        match suffix.len() {
+            1 => match suffix.get(0) {
+                Some(s) => self.ends_with(s),
+                None => BooleanChunked::full_null(ca.name(), ca.len()),
+            },
+            _ => broadcast_binary_elementwise_values(ca, suffix, |s, sub| s.ends_with(sub)),
+        }
+    }
+
     #[cfg(feature = "binary_encoding")]
     fn hex_decode(&self, strict: bool) -> PolarsResult<BinaryChunked> {
         let ca = self.as_binary();
         if strict {
-            ca.try_apply(|s| {
-                let bytes = hex::decode(s).map_err(|_| {
+            ca.try_apply_nonnull_values_generic(|s| {
+                hex::decode(s).map_err(|_| {
                     polars_err!(
                         ComputeError:
                         "invalid `hex` encoding found; try setting `strict=false` to ignore"
                     )
-                })?;
-                Ok(bytes.into())
+                })
             })
         } else {
-            Ok(ca.apply_on_opt(|opt_s| opt_s.and_then(|s| hex::decode(s).ok().map(Cow::Owned))))
+            Ok(ca.apply(|opt_s| opt_s.and_then(|s| hex::decode(s).ok().map(Cow::Owned))))
         }
     }
 
@@ -68,8 +90,8 @@ pub trait BinaryNameSpaceImpl: AsBinary {
     fn hex_encode(&self) -> Series {
         let ca = self.as_binary();
         unsafe {
-            ca.apply(|s| hex::encode(s).into_bytes().into())
-                .cast_unchecked(&DataType::Utf8)
+            ca.apply_values(|s| hex::encode(s).into_bytes().into())
+                .cast_unchecked(&DataType::String)
                 .unwrap()
         }
     }
@@ -78,17 +100,16 @@ pub trait BinaryNameSpaceImpl: AsBinary {
     fn base64_decode(&self, strict: bool) -> PolarsResult<BinaryChunked> {
         let ca = self.as_binary();
         if strict {
-            ca.try_apply(|s| {
-                let bytes = general_purpose::STANDARD.decode(s).map_err(|_e| {
+            ca.try_apply_nonnull_values_generic(|s| {
+                general_purpose::STANDARD.decode(s).map_err(|_e| {
                     polars_err!(
                         ComputeError:
                         "invalid `base64` encoding found; try setting `strict=false` to ignore"
                     )
-                })?;
-                Ok(bytes.into())
+                })
             })
         } else {
-            Ok(ca.apply_on_opt(|opt_s| {
+            Ok(ca.apply(|opt_s| {
                 opt_s.and_then(|s| general_purpose::STANDARD.decode(s).ok().map(Cow::Owned))
             }))
         }
@@ -98,8 +119,8 @@ pub trait BinaryNameSpaceImpl: AsBinary {
     fn base64_encode(&self) -> Series {
         let ca = self.as_binary();
         unsafe {
-            ca.apply(|s| general_purpose::STANDARD.encode(s).into_bytes().into())
-                .cast_unchecked(&DataType::Utf8)
+            ca.apply_values(|s| general_purpose::STANDARD.encode(s).into_bytes().into())
+                .cast_unchecked(&DataType::String)
                 .unwrap()
         }
     }

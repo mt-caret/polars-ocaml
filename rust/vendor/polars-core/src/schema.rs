@@ -1,5 +1,7 @@
 use std::fmt::{Debug, Formatter};
+use std::hash::{Hash, Hasher};
 
+use arrow::datatypes::ArrowSchemaRef;
 use indexmap::map::MutableKeys;
 use indexmap::IndexMap;
 #[cfg(feature = "serde-lazy")]
@@ -9,15 +11,21 @@ use smartstring::alias::String as SmartString;
 use crate::prelude::*;
 use crate::utils::try_get_supertype;
 
-/// A map from field/column name (`String`) to the type of that field/column (`DataType`)
+/// A map from field/column name ([`String`](smartstring::alias::String)) to the type of that field/column ([`DataType`])
 #[derive(Eq, Clone, Default)]
 #[cfg_attr(feature = "serde-lazy", derive(Serialize, Deserialize))]
 pub struct Schema {
     inner: PlIndexMap<SmartString, DataType>,
 }
 
+impl Hash for Schema {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.inner.iter().for_each(|v| v.hash(state))
+    }
+}
+
 // Schemas will only compare equal if they have the same fields in the same order. We can't use `self.inner ==
-// other.inner` because IndexMap ignores order when checking equality, but we don't want to ignore it.
+// other.inner` because [`IndexMap`] ignores order when checking equality, but we don't want to ignore it.
 impl PartialEq for Schema {
     fn eq(&self, other: &Self) -> bool {
         self.len() == other.len() && self.iter().zip(other.iter()).all(|(a, b)| a == b)
@@ -34,6 +42,12 @@ impl Debug for Schema {
     }
 }
 
+impl From<&[Series]> for Schema {
+    fn from(value: &[Series]) -> Self {
+        value.iter().map(|s| s.field().into_owned()).collect()
+    }
+}
+
 impl<F> FromIterator<F> for Schema
 where
     F: Into<Field>,
@@ -44,22 +58,7 @@ where
             IndexMap::with_capacity_and_hasher(iter.size_hint().0, ahash::RandomState::default());
         for fld in iter {
             let fld = fld.into();
-
-            #[cfg(feature = "dtype-decimal")]
-            let fld = match fld.dtype {
-                DataType::Decimal(_, _) => {
-                    if crate::config::decimal_is_active() {
-                        fld
-                    } else {
-                        let mut fld = fld.clone();
-                        fld.coerce(DataType::Float64);
-                        fld
-                    }
-                },
-                _ => fld,
-            };
-
-            map.insert(fld.name().clone(), fld.data_type().clone());
+            map.insert(fld.name, fld.dtype);
         }
         Self { inner: map }
     }
@@ -129,7 +128,7 @@ impl Schema {
     ) -> PolarsResult<Self> {
         polars_ensure!(
             index <= self.len(),
-            ComputeError:
+            OutOfBounds:
                 "index {} is out of bounds for schema with length {} (the max index allowed is self.len())",
                     index,
                     self.len()
@@ -167,7 +166,7 @@ impl Schema {
     ) -> PolarsResult<Option<DataType>> {
         polars_ensure!(
             index <= self.len(),
-            ComputeError:
+            OutOfBounds:
                 "index {} is out of bounds for schema with length {} (the max index allowed is self.len())",
                     index,
                     self.len()
@@ -351,32 +350,37 @@ impl Schema {
     }
 
     /// Convert self to `ArrowSchema` by cloning the fields
-    pub fn to_arrow(&self) -> ArrowSchema {
+    pub fn to_arrow(&self, pl_flavor: bool) -> ArrowSchema {
         let fields: Vec<_> = self
             .inner
             .iter()
-            .map(|(name, dtype)| ArrowField::new(name.as_str(), dtype.to_arrow(), true))
+            .map(|(name, dtype)| dtype.to_arrow_field(name.as_str(), pl_flavor))
             .collect();
         ArrowSchema::from(fields)
     }
 
-    /// Iterates the `Field`s in this schema, constructing them anew by cloning each `(&name, &dtype)` pair
+    /// Iterates the [`Field`]s in this schema, constructing them anew by cloning each `(&name, &dtype)` pair
     ///
-    /// Note that this clones each name and dtype in order to form an owned `Field`. For a clone-free version, use
+    /// Note that this clones each name and dtype in order to form an owned [`Field`]. For a clone-free version, use
     /// [`iter`][Self::iter], which returns `(&name, &dtype)`.
-    pub fn iter_fields(&self) -> impl Iterator<Item = Field> + ExactSizeIterator + '_ {
+    pub fn iter_fields(&self) -> impl ExactSizeIterator<Item = Field> + '_ {
         self.inner
             .iter()
             .map(|(name, dtype)| Field::new(name, dtype.clone()))
     }
 
     /// Iterates over references to the dtypes in this schema
-    pub fn iter_dtypes(&self) -> impl Iterator<Item = &DataType> + '_ + ExactSizeIterator {
+    pub fn iter_dtypes(&self) -> impl '_ + ExactSizeIterator<Item = &DataType> {
         self.inner.iter().map(|(_name, dtype)| dtype)
     }
 
+    /// Iterates over mut references to the dtypes in this schema
+    pub fn iter_dtypes_mut(&mut self) -> impl '_ + ExactSizeIterator<Item = &mut DataType> {
+        self.inner.iter_mut().map(|(_name, dtype)| dtype)
+    }
+
     /// Iterates over references to the names in this schema
-    pub fn iter_names(&self) -> impl Iterator<Item = &SmartString> + '_ + ExactSizeIterator {
+    pub fn iter_names(&self) -> impl '_ + ExactSizeIterator<Item = &SmartString> {
         self.inner.iter().map(|(name, _dtype)| name)
     }
 
@@ -449,5 +453,28 @@ impl IndexOfSchema for ArrowSchema {
 
     fn get_names(&self) -> Vec<&str> {
         self.fields.iter().map(|f| f.name.as_str()).collect()
+    }
+}
+
+impl From<&ArrowSchema> for Schema {
+    fn from(value: &ArrowSchema) -> Self {
+        Self::from_iter(value.fields.iter())
+    }
+}
+impl From<ArrowSchema> for Schema {
+    fn from(value: ArrowSchema) -> Self {
+        Self::from(&value)
+    }
+}
+
+impl From<ArrowSchemaRef> for Schema {
+    fn from(value: ArrowSchemaRef) -> Self {
+        Self::from(value.as_ref())
+    }
+}
+
+impl From<&ArrowSchemaRef> for Schema {
+    fn from(value: &ArrowSchemaRef) -> Self {
+        Self::from(value.as_ref())
     }
 }

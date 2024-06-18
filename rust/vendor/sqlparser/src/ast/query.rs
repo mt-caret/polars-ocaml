@@ -35,6 +35,10 @@ pub struct Query {
     pub order_by: Vec<OrderByExpr>,
     /// `LIMIT { <N> | ALL }`
     pub limit: Option<Expr>,
+
+    /// `LIMIT { <N> } BY { <expr>,<expr>,... } }`
+    pub limit_by: Vec<Expr>,
+
     /// `OFFSET <N> [ { ROW | ROWS } ]`
     pub offset: Option<Offset>,
     /// `FETCH { FIRST | NEXT } <N> [ PERCENT ] { ROW | ROWS } | { ONLY | WITH TIES }`
@@ -57,6 +61,9 @@ impl fmt::Display for Query {
         }
         if let Some(ref offset) = self.offset {
             write!(f, " {offset}")?;
+        }
+        if !self.limit_by.is_empty() {
+            write!(f, " BY {}", display_separated(&self.limit_by, ", "))?;
         }
         if let Some(ref fetch) = self.fetch {
             write!(f, " {fetch}")?;
@@ -113,7 +120,8 @@ impl fmt::Display for SetExpr {
                     SetQuantifier::All
                     | SetQuantifier::Distinct
                     | SetQuantifier::ByName
-                    | SetQuantifier::AllByName => write!(f, " {set_quantifier}")?,
+                    | SetQuantifier::AllByName
+                    | SetQuantifier::DistinctByName => write!(f, " {set_quantifier}")?,
                     SetQuantifier::None => write!(f, "{set_quantifier}")?,
                 }
                 write!(f, " {right}")?;
@@ -153,6 +161,7 @@ pub enum SetQuantifier {
     Distinct,
     ByName,
     AllByName,
+    DistinctByName,
     None,
 }
 
@@ -163,6 +172,7 @@ impl fmt::Display for SetQuantifier {
             SetQuantifier::Distinct => write!(f, "DISTINCT"),
             SetQuantifier::ByName => write!(f, "BY NAME"),
             SetQuantifier::AllByName => write!(f, "ALL BY NAME"),
+            SetQuantifier::DistinctByName => write!(f, "DISTINCT BY NAME"),
             SetQuantifier::None => write!(f, ""),
         }
     }
@@ -214,7 +224,7 @@ pub struct Select {
     /// WHERE
     pub selection: Option<Expr>,
     /// GROUP BY
-    pub group_by: Vec<Expr>,
+    pub group_by: GroupByExpr,
     /// CLUSTER BY (Hive)
     pub cluster_by: Vec<Expr>,
     /// DISTRIBUTE BY (Hive)
@@ -255,8 +265,13 @@ impl fmt::Display for Select {
         if let Some(ref selection) = self.selection {
             write!(f, " WHERE {selection}")?;
         }
-        if !self.group_by.is_empty() {
-            write!(f, " GROUP BY {}", display_comma_separated(&self.group_by))?;
+        match &self.group_by {
+            GroupByExpr::All => write!(f, " GROUP BY ALL")?,
+            GroupByExpr::Expressions(exprs) => {
+                if !exprs.is_empty() {
+                    write!(f, " GROUP BY {}", display_comma_separated(exprs))?;
+                }
+            }
         }
         if !self.cluster_by.is_empty() {
             write!(
@@ -419,11 +434,13 @@ pub struct WildcardAdditionalOptions {
     /// `[EXCLUDE...]`.
     pub opt_exclude: Option<ExcludeSelectItem>,
     /// `[EXCEPT...]`.
+    ///  Clickhouse syntax: <https://clickhouse.com/docs/en/sql-reference/statements/select#except>
     pub opt_except: Option<ExceptSelectItem>,
     /// `[RENAME ...]`.
     pub opt_rename: Option<RenameSelectItem>,
     /// `[REPLACE]`
     ///  BigQuery syntax: <https://cloud.google.com/bigquery/docs/reference/standard-sql/query-syntax#select_replace>
+    ///  Clickhouse syntax: <https://clickhouse.com/docs/en/sql-reference/statements/select#replace>
     pub opt_replace: Option<ReplaceSelectItem>,
 }
 
@@ -646,6 +663,7 @@ impl fmt::Display for TableWithJoins {
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+#[cfg_attr(feature = "visitor", visit(with = "visit_table_factor"))]
 pub enum TableFactor {
     Table {
         #[cfg_attr(feature = "visitor", visit(with = "visit_relation"))]
@@ -661,6 +679,11 @@ pub enum TableFactor {
         args: Option<Vec<FunctionArg>>,
         /// MSSQL-specific `WITH (...)` hints such as NOLOCK.
         with_hints: Vec<Expr>,
+        /// Optional version qualifier to facilitate table time-travel, as
+        /// supported by BigQuery and MSSQL.
+        version: Option<TableVersion>,
+        /// [Partition selection](https://dev.mysql.com/doc/refman/8.0/en/partitioning-selection.html), supported by MySQL.
+        partitions: Vec<Ident>,
     },
     Derived {
         lateral: bool,
@@ -670,6 +693,13 @@ pub enum TableFactor {
     /// `TABLE(<expr>)[ AS <alias> ]`
     TableFunction {
         expr: Expr,
+        alias: Option<TableAlias>,
+    },
+    /// `e.g. LATERAL FLATTEN(<args>)[ AS <alias> ]`
+    Function {
+        lateral: bool,
+        name: ObjectName,
+        args: Vec<FunctionArg>,
         alias: Option<TableAlias>,
     },
     /// ```sql
@@ -702,13 +732,28 @@ pub enum TableFactor {
     /// For example `FROM monthly_sales PIVOT(sum(amount) FOR MONTH IN ('JAN', 'FEB'))`
     /// See <https://docs.snowflake.com/en/sql-reference/constructs/pivot>
     Pivot {
-        #[cfg_attr(feature = "visitor", visit(with = "visit_relation"))]
-        name: ObjectName,
-        table_alias: Option<TableAlias>,
+        #[cfg_attr(feature = "visitor", visit(with = "visit_table_factor"))]
+        table: Box<TableFactor>,
         aggregate_function: Expr, // Function expression
         value_column: Vec<Ident>,
         pivot_values: Vec<Value>,
-        pivot_alias: Option<TableAlias>,
+        alias: Option<TableAlias>,
+    },
+    /// An UNPIVOT operation on a table.
+    ///
+    /// Syntax:
+    /// ```sql
+    /// table UNPIVOT(value FOR name IN (column1, [ column2, ... ])) [ alias ]
+    /// ```
+    ///
+    /// See <https://docs.snowflake.com/en/sql-reference/constructs/unpivot>.
+    Unpivot {
+        #[cfg_attr(feature = "visitor", visit(with = "visit_table_factor"))]
+        table: Box<TableFactor>,
+        value: Ident,
+        name: Ident,
+        columns: Vec<Ident>,
+        alias: Option<TableAlias>,
     },
 }
 
@@ -720,8 +765,13 @@ impl fmt::Display for TableFactor {
                 alias,
                 args,
                 with_hints,
+                version,
+                partitions,
             } => {
                 write!(f, "{name}")?;
+                if !partitions.is_empty() {
+                    write!(f, "PARTITION ({})", display_comma_separated(partitions))?;
+                }
                 if let Some(args) = args {
                     write!(f, "({})", display_comma_separated(args))?;
                 }
@@ -730,6 +780,9 @@ impl fmt::Display for TableFactor {
                 }
                 if !with_hints.is_empty() {
                     write!(f, " WITH ({})", display_comma_separated(with_hints))?;
+                }
+                if let Some(version) = version {
+                    write!(f, "{version}")?;
                 }
                 Ok(())
             }
@@ -742,6 +795,22 @@ impl fmt::Display for TableFactor {
                     write!(f, "LATERAL ")?;
                 }
                 write!(f, "({subquery})")?;
+                if let Some(alias) = alias {
+                    write!(f, " AS {alias}")?;
+                }
+                Ok(())
+            }
+            TableFactor::Function {
+                lateral,
+                name,
+                args,
+                alias,
+            } => {
+                if *lateral {
+                    write!(f, "LATERAL ")?;
+                }
+                write!(f, "{name}")?;
+                write!(f, "({})", display_comma_separated(args))?;
                 if let Some(alias) = alias {
                     write!(f, " AS {alias}")?;
                 }
@@ -784,32 +853,42 @@ impl fmt::Display for TableFactor {
                 Ok(())
             }
             TableFactor::Pivot {
-                name,
-                table_alias,
+                table,
                 aggregate_function,
                 value_column,
                 pivot_values,
-                pivot_alias,
+                alias,
             } => {
-                write!(f, "{}", name)?;
-                if table_alias.is_some() {
-                    write!(f, " AS {}", table_alias.as_ref().unwrap())?;
-                }
                 write!(
                     f,
-                    " PIVOT({} FOR {} IN (",
+                    "{} PIVOT({} FOR {} IN ({}))",
+                    table,
                     aggregate_function,
-                    Expr::CompoundIdentifier(value_column.to_vec())
+                    Expr::CompoundIdentifier(value_column.to_vec()),
+                    display_comma_separated(pivot_values)
                 )?;
-                for value in pivot_values {
-                    write!(f, "{}", value)?;
-                    if !value.eq(pivot_values.last().unwrap()) {
-                        write!(f, ", ")?;
-                    }
+                if alias.is_some() {
+                    write!(f, " AS {}", alias.as_ref().unwrap())?;
                 }
-                write!(f, "))")?;
-                if pivot_alias.is_some() {
-                    write!(f, " AS {}", pivot_alias.as_ref().unwrap())?;
+                Ok(())
+            }
+            TableFactor::Unpivot {
+                table,
+                value,
+                name,
+                columns,
+                alias,
+            } => {
+                write!(
+                    f,
+                    "{} UNPIVOT({} FOR {} IN ({}))",
+                    table,
+                    value,
+                    name,
+                    display_comma_separated(columns)
+                )?;
+                if alias.is_some() {
+                    write!(f, " AS {}", alias.as_ref().unwrap())?;
                 }
                 Ok(())
             }
@@ -830,6 +909,22 @@ impl fmt::Display for TableAlias {
         write!(f, "{}", self.name)?;
         if !self.columns.is_empty() {
             write!(f, " ({})", display_comma_separated(&self.columns))?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub enum TableVersion {
+    ForSystemTimeAsOf(Expr),
+}
+
+impl Display for TableVersion {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            TableVersion::ForSystemTimeAsOf(e) => write!(f, " FOR SYSTEM_TIME AS OF {e}")?,
         }
         Ok(())
     }
@@ -1192,5 +1287,31 @@ impl fmt::Display for SelectInto {
         let table = if self.table { " TABLE" } else { "" };
 
         write!(f, "INTO{}{}{} {}", temporary, unlogged, table, self.name)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub enum GroupByExpr {
+    /// ALL syntax of [Snowflake], and [DuckDB]
+    ///
+    /// [Snowflake]: <https://docs.snowflake.com/en/sql-reference/constructs/group-by#label-group-by-all-columns>
+    /// [DuckDB]:  <https://duckdb.org/docs/sql/query_syntax/groupby.html>
+    All,
+
+    /// Expressions
+    Expressions(Vec<Expr>),
+}
+
+impl fmt::Display for GroupByExpr {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            GroupByExpr::All => write!(f, "GROUP BY ALL"),
+            GroupByExpr::Expressions(col_names) => {
+                let col_names = display_comma_separated(col_names);
+                write!(f, "GROUP BY ({col_names})")
+            }
+        }
     }
 }

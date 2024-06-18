@@ -11,9 +11,9 @@
 
 [package]
 edition = "2021"
-rust-version = "1.61"
+rust-version = "1.64"
 name = "simd-json"
-version = "0.10.7"
+version = "0.13.10"
 authors = [
     "Heinz N. Gies <heinz@licenser.net>",
     "Sunny Gleason",
@@ -28,14 +28,17 @@ readme = "README.md"
 license = "Apache-2.0 OR MIT"
 repository = "https://github.com/simd-lite/simd-json"
 
-[package.metadata.docs.rs]
-features = ["docsrs"]
-
 [profile.bench]
-lto = "thin"
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
 
 [profile.release]
-lto = "thin"
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
 
 [lib]
 bench = false
@@ -45,6 +48,10 @@ name = "perf"
 
 [[bench]]
 name = "parse"
+harness = false
+
+[[bench]]
+name = "to_tape"
 harness = false
 
 [dependencies.ahash]
@@ -86,6 +93,9 @@ optional = true
 version = "0.8"
 optional = true
 
+[dependencies.ref-cast]
+version = "1.0"
+
 [dependencies.serde]
 version = "1"
 features = ["derive"]
@@ -103,13 +113,10 @@ features = [
 ]
 
 [dependencies.value-trait]
-version = "0.6.1"
+version = "0.8"
 
 [dev-dependencies.core_affinity]
 version = "0.8"
-
-[dev-dependencies.criterion]
-version = "0.5"
 
 [dev-dependencies.float-cmp]
 version = "0.9"
@@ -120,12 +127,30 @@ version = "0.2"
 [features]
 128bit = ["value-trait/128bit"]
 alloc = ["alloc_counter"]
-allow-non-simd = []
 approx-number-parsing = []
+arraybackend = ["halfbrown/arraybackend"]
+bench-all = [
+    "bench-apache_builds",
+    "bench-event_stacktrace_10kb",
+    "bench-github_events",
+    "bench-canada",
+    "bench-citm_catalog",
+    "bench-log",
+    "bench-twitter",
+]
+bench-apache_builds = []
+bench-canada = []
+bench-citm_catalog = []
+bench-event_stacktrace_10kb = []
+bench-github_events = []
+bench-log = []
 bench-serde = ["serde_json"]
+bench-twitter = []
+big-int-as-float = []
 default = [
     "swar-number-parsing",
     "serde_impl",
+    "runtime-detection",
 ]
 docsrs = []
 hints = []
@@ -140,7 +165,7 @@ perf = [
     "colored",
     "serde_json",
 ]
-safe = []
+runtime-detection = ["value-trait/runtime-detection"]
 serde_impl = [
     "serde",
     "serde_json",
@@ -149,7 +174,10 @@ serde_impl = [
 swar-number-parsing = []
 value-no-dup-keys = []
 
-[target."cfg(not(target_arch = \"wasm32\"))".dev-dependencies.proptest]
+[target."cfg(not(target_family = \"wasm\"))".dev-dependencies.criterion]
+version = "0.5"
+
+[target."cfg(not(target_family = \"wasm\"))".dev-dependencies.proptest]
 version = "1.0"
 
 [target."cfg(target_family = \"wasm\")".dependencies.getrandom]

@@ -12,7 +12,7 @@
 [package]
 edition = "2018"
 name = "allocator-api2"
-version = "0.2.16"
+version = "0.2.18"
 authors = ["Zakarum <zaq.dev@icloud.com>"]
 description = "Mirror of Rust's allocator API"
 homepage = "https://github.com/zakarumych/allocator-api2"

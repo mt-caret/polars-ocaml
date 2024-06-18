@@ -3,7 +3,8 @@ use super::*;
 pub(crate) struct SortExec {
     pub(crate) input: Box<dyn Executor>,
     pub(crate) by_column: Vec<Arc<dyn PhysicalExpr>>,
-    pub(crate) args: SortArguments,
+    pub(crate) slice: Option<(i64, usize)>,
+    pub(crate) sort_options: SortMultipleOptions,
 }
 
 impl SortExec {
@@ -12,6 +13,7 @@ impl SortExec {
         state: &ExecutionState,
         mut df: DataFrame,
     ) -> PolarsResult<DataFrame> {
+        state.should_stop()?;
         df.as_single_chunk_par();
 
         let by_columns = self
@@ -20,10 +22,10 @@ impl SortExec {
             .enumerate()
             .map(|(i, e)| {
                 let mut s = e.evaluate(&df, state)?;
-                // polars core will try to set the sorted columns as sorted
-                // this should only be done with simple col("foo") expressions
+                // Polars core will try to set the sorted columns as sorted.
+                // This should only be done with simple col("foo") expressions,
                 // therefore we rename more complex expressions so that
-                // polars core does not match these
+                // polars core does not match these.
                 if !matches!(e.as_expression(), Some(&Expr::Column(_))) {
                     s.rename(&format!("_POLARS_SORT_BY_{i}"));
                 }
@@ -31,14 +33,7 @@ impl SortExec {
             })
             .collect::<PolarsResult<Vec<_>>>()?;
 
-        df.sort_impl(
-            by_columns,
-            std::mem::take(&mut self.args.descending),
-            self.args.nulls_last,
-            self.args.maintain_order,
-            self.args.slice,
-            true,
-        )
+        df.sort_impl(by_columns, self.sort_options.clone(), self.slice)
     }
 }
 
@@ -47,7 +42,7 @@ impl Executor for SortExec {
         #[cfg(debug_assertions)]
         {
             if state.verbose() {
-                println!("run SortExec")
+                eprintln!("run SortExec")
             }
         }
         let df = self.input.execute(state)?;

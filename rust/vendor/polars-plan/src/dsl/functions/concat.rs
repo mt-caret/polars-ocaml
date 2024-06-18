@@ -2,17 +2,21 @@ use super::*;
 
 #[cfg(all(feature = "concat_str", feature = "strings"))]
 /// Horizontally concat string columns in linear time
-pub fn concat_str<E: AsRef<[Expr]>>(s: E, separator: &str) -> Expr {
+pub fn concat_str<E: AsRef<[Expr]>>(s: E, separator: &str, ignore_nulls: bool) -> Expr {
     let input = s.as_ref().to_vec();
     let separator = separator.to_string();
 
     Expr::Function {
         input,
-        function: StringFunction::ConcatHorizontal(separator).into(),
+        function: StringFunction::ConcatHorizontal {
+            delimiter: separator,
+            ignore_nulls,
+        }
+        .into(),
         options: FunctionOptions {
-            collect_groups: ApplyOptions::ApplyFlat,
+            collect_groups: ApplyOptions::ElementWise,
             input_wildcard_expansion: true,
-            auto_explode: true,
+            returns_scalar: false,
             ..Default::default()
         },
     }
@@ -45,7 +49,7 @@ pub fn format_str<E: AsRef<[Expr]>>(format: &str, args: E) -> PolarsResult<Expr>
         }
     }
 
-    Ok(concat_str(exprs, ""))
+    Ok(concat_str(exprs, "", false))
 }
 
 /// Concat lists entries.
@@ -58,7 +62,7 @@ pub fn concat_list<E: AsRef<[IE]>, IE: Into<Expr> + Clone>(s: E) -> PolarsResult
         input: s,
         function: FunctionExpr::ListExpr(ListFunction::Concat),
         options: FunctionOptions {
-            collect_groups: ApplyOptions::ApplyGroups,
+            collect_groups: ApplyOptions::ElementWise,
             input_wildcard_expansion: true,
             ..Default::default()
         },
@@ -76,7 +80,7 @@ pub fn concat_expr<E: AsRef<[IE]>, IE: Into<Expr> + Clone>(
         input: s,
         function: FunctionExpr::ConcatExpr(rechunk),
         options: FunctionOptions {
-            collect_groups: ApplyOptions::ApplyGroups,
+            collect_groups: ApplyOptions::ElementWise,
             input_wildcard_expansion: true,
             cast_to_supertypes: true,
             ..Default::default()

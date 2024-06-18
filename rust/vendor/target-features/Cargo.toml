@@ -13,7 +13,7 @@
 edition = "2021"
 rust-version = "1.61"
 name = "target-features"
-version = "0.1.5"
+version = "0.1.6"
 authors = ["Caleb Zulawski <caleb.zulawski@gmail.com>"]
 description = "Rust compiler target feature database"
 readme = "README.md"

@@ -350,12 +350,26 @@ impl fmt::Display for Whitespace {
 }
 
 /// Location in input string
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Copy)]
 pub struct Location {
     /// Line number, starting from 1
     pub line: u64,
     /// Line column, starting from 1
     pub column: u64,
+}
+
+impl fmt::Display for Location {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.line == 0 {
+            return Ok(());
+        }
+        write!(
+            f,
+            // TODO: use standard compiler location syntax (<path>:<line>:<col>)
+            " at Line: {}, Column {}",
+            self.line, self.column,
+        )
+    }
 }
 
 /// A [Token] with [Location] attached to it
@@ -400,17 +414,12 @@ impl fmt::Display for TokenWithLocation {
 #[derive(Debug, PartialEq, Eq)]
 pub struct TokenizerError {
     pub message: String,
-    pub line: u64,
-    pub col: u64,
+    pub location: Location,
 }
 
 impl fmt::Display for TokenizerError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{} at Line: {}, Column {}",
-            self.message, self.line, self.col
-        )
+        write!(f, "{}{}", self.message, self.location,)
     }
 }
 
@@ -546,10 +555,7 @@ impl<'a> Tokenizer<'a> {
 
         let mut location = state.location();
         while let Some(token) = self.next_token(&mut state)? {
-            tokens.push(TokenWithLocation {
-                token,
-                location: location.clone(),
-            });
+            tokens.push(TokenWithLocation { token, location });
 
             location = state.location();
         }
@@ -879,6 +885,7 @@ impl<'a> Tokenizer<'a> {
                     chars.next(); // consume
                     match chars.peek() {
                         Some('>') => self.consume_and_return(chars, Token::RArrow),
+                        Some('=') => self.consume_and_return(chars, Token::DoubleEq),
                         _ => Ok(Some(Token::Eq)),
                     }
                 }
@@ -1122,8 +1129,7 @@ impl<'a> Tokenizer<'a> {
     ) -> Result<R, TokenizerError> {
         Err(TokenizerError {
             message: message.into(),
-            col: loc.column,
-            line: loc.line,
+            location: loc,
         })
     }
 
@@ -1362,14 +1368,13 @@ fn peeking_take_while(chars: &mut State, mut predicate: impl FnMut(char) -> bool
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::dialect::{GenericDialect, MsSqlDialect};
+    use crate::dialect::{ClickHouseDialect, GenericDialect, MsSqlDialect};
 
     #[test]
     fn tokenizer_error_impl() {
         let err = TokenizerError {
             message: "test".into(),
-            line: 1,
-            col: 1,
+            location: Location { line: 1, column: 1 },
         };
         #[cfg(feature = "std")]
         {
@@ -1404,6 +1409,28 @@ mod tests {
             Token::make_keyword("SELECT"),
             Token::Whitespace(Whitespace::Space),
             Token::Number(String::from(".1"), false),
+        ];
+
+        compare(expected, tokens);
+    }
+
+    #[test]
+    fn tokenize_clickhouse_double_equal() {
+        let sql = String::from("SELECT foo=='1'");
+        let dialect = ClickHouseDialect {};
+        let mut tokenizer = Tokenizer::new(&dialect, &sql);
+        let tokens = tokenizer.tokenize().unwrap();
+
+        let expected = vec![
+            Token::make_keyword("SELECT"),
+            Token::Whitespace(Whitespace::Space),
+            Token::Word(Word {
+                value: "foo".to_string(),
+                quote_style: None,
+                keyword: Keyword::NoKeyword,
+            }),
+            Token::DoubleEq,
+            Token::SingleQuotedString("1".to_string()),
         ];
 
         compare(expected, tokens);
@@ -1694,8 +1721,7 @@ mod tests {
             tokenizer.tokenize(),
             Err(TokenizerError {
                 message: "Unterminated string literal".to_string(),
-                line: 1,
-                col: 8
+                location: Location { line: 1, column: 8 },
             })
         );
     }
@@ -1710,8 +1736,10 @@ mod tests {
             tokenizer.tokenize(),
             Err(TokenizerError {
                 message: "Unterminated string literal".to_string(),
-                line: 1,
-                col: 35
+                location: Location {
+                    line: 1,
+                    column: 35
+                }
             })
         );
     }
@@ -1873,8 +1901,7 @@ mod tests {
             tokenizer.tokenize(),
             Err(TokenizerError {
                 message: "Expected close delimiter '\"' before EOF.".to_string(),
-                line: 1,
-                col: 1
+                location: Location { line: 1, column: 1 },
             })
         );
     }
@@ -1970,6 +1997,19 @@ mod tests {
             Token::Whitespace(Whitespace::Space),
             Token::make_word(r#"c """#, Some('"')),
             Token::Whitespace(Whitespace::Space),
+        ];
+        compare(expected, tokens);
+    }
+
+    #[test]
+    fn tokenize_snowflake_div() {
+        let sql = r#"field/1000"#;
+        let dialect = SnowflakeDialect {};
+        let tokens = Tokenizer::new(&dialect, sql).tokenize().unwrap();
+        let expected = vec![
+            Token::make_word(r#"field"#, None),
+            Token::Div,
+            Token::Number("1000".to_string(), false),
         ];
         compare(expected, tokens);
     }

@@ -2,9 +2,8 @@ use std::fmt::Display;
 use std::ops::BitAnd;
 
 use super::*;
-use crate::dsl::selector::Selector;
-use crate::logical_plan::projection::is_regex_projection;
-use crate::logical_plan::tree_format::TreeFmtVisitor;
+use crate::logical_plan::alp::tree_format::TreeFmtVisitor;
+use crate::logical_plan::conversion::is_regex_projection;
 use crate::logical_plan::visitor::{AexprNode, TreeWalker};
 
 /// Specialized expressions for Categorical dtypes.
@@ -28,6 +27,7 @@ impl MetaNameSpace {
     pub fn root_names(&self) -> Vec<Arc<str>> {
         expr_to_leaf_column_names(&self.0)
     }
+
     /// A projection that only takes a column or a column + alias.
     pub fn is_simple_projection(&self) -> bool {
         let mut arena = Arena::with_capacity(8);
@@ -41,34 +41,34 @@ impl MetaNameSpace {
     }
 
     /// Undo any renaming operation like `alias`, `keep_name`.
-    pub fn undo_aliases(mut self) -> Expr {
-        self.0.mutate().apply(|e| match e {
+    pub fn undo_aliases(self) -> Expr {
+        self.0.map_expr(|e| match e {
             Expr::Alias(input, _)
             | Expr::KeepName(input)
-            | Expr::RenameAlias { expr: input, .. } => {
-                // remove this node
-                *e = *input.clone();
-
-                // continue iteration
-                true
-            },
-            // continue iteration
-            _ => true,
-        });
-
-        self.0
+            | Expr::RenameAlias { expr: input, .. } => Arc::unwrap_or_clone(input),
+            e => e,
+        })
     }
 
-    /// Whether this expression expands to multiple expressions.
+    /// Indicate if this expression expands to multiple expressions.
     pub fn has_multiple_outputs(&self) -> bool {
         self.0.into_iter().any(|e| match e {
             Expr::Selector(_) | Expr::Wildcard | Expr::Columns(_) | Expr::DtypeColumn(_) => true,
+            Expr::IndexColumn(idxs) => idxs.len() > 1,
             Expr::Column(name) => is_regex_projection(name),
             _ => false,
         })
     }
 
-    /// Whether this expression expands to multiple expressions with regex expansion.
+    /// Indicate if this expression is a basic (non-regex) column.
+    pub fn is_column(&self) -> bool {
+        match &self.0 {
+            Expr::Column(name) => !is_regex_projection(name),
+            _ => false,
+        }
+    }
+
+    /// Indicate if this expression expands to multiple expressions with regex expansion.
     pub fn is_regex_projection(&self) -> bool {
         self.0.into_iter().any(|e| match e {
             Expr::Column(name) => is_regex_projection(name),
@@ -85,7 +85,7 @@ impl MetaNameSpace {
             }
             Ok(Expr::Selector(s))
         } else {
-            polars_bail!(ComputeError: "expected selector, got {}", self.0)
+            polars_bail!(ComputeError: "expected selector, got {:?}", self.0)
         }
     }
 
@@ -98,7 +98,7 @@ impl MetaNameSpace {
             }
             Ok(Expr::Selector(s))
         } else {
-            polars_bail!(ComputeError: "expected selector, got {}", self.0)
+            polars_bail!(ComputeError: "expected selector, got {:?}", self.0)
         }
     }
 
@@ -111,7 +111,7 @@ impl MetaNameSpace {
             }
             Ok(Expr::Selector(s))
         } else {
-            polars_bail!(ComputeError: "expected selector, got {}", self.0)
+            polars_bail!(ComputeError: "expected selector, got {:?}", self.0)
         }
     }
 
@@ -128,8 +128,10 @@ impl MetaNameSpace {
     pub fn into_tree_formatter(self) -> PolarsResult<impl Display> {
         let mut arena = Default::default();
         let node = to_aexpr(self.0, &mut arena);
-        let mut visitor = TreeFmtVisitor::new();
-        AexprNode::with_context(node, &mut arena, |ae_node| ae_node.visit(&mut visitor))?;
+        let mut visitor = TreeFmtVisitor::default();
+
+        AexprNode::new(node).visit(&mut visitor, &arena)?;
+
         Ok(visitor)
     }
 }

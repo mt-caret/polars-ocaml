@@ -1,68 +1,48 @@
 //! Traits for miscellaneous operations on ChunkedArray
 use arrow::offset::OffsetsBuffer;
-use polars_arrow::prelude::QuantileInterpolOptions;
 
-pub use self::take::*;
-#[cfg(feature = "object")]
-use crate::datatypes::ObjectType;
 use crate::prelude::*;
 
-#[cfg(feature = "abs")]
-mod abs;
 pub(crate) mod aggregate;
 pub(crate) mod any_value;
 pub(crate) mod append;
 mod apply;
+pub mod arity;
 mod bit_repr;
 pub(crate) mod chunkops;
 pub(crate) mod compare_inner;
-#[cfg(feature = "concat_str")]
-mod concat_str;
-#[cfg(feature = "cum_agg")]
-mod cum_agg;
 #[cfg(feature = "dtype-decimal")]
 mod decimal;
 pub(crate) mod downcast;
 pub(crate) mod explode;
 mod explode_and_offsets;
 mod extend;
-mod fill_null;
+pub mod fill_null;
 mod filter;
+pub mod float_sorted_arg_max;
+mod for_each;
 pub mod full;
-#[cfg(feature = "interpolate")]
-mod interpolate;
-#[cfg(feature = "is_in")]
-mod is_in;
-mod len;
+pub mod gather;
 #[cfg(feature = "zip_with")]
 pub(crate) mod min_max_binary;
-mod nulls;
-mod peaks;
-#[cfg(feature = "repeat_by")]
-mod repeat_by;
+pub(crate) mod nulls;
 mod reverse;
+#[cfg(feature = "rolling_window")]
 pub(crate) mod rolling_window;
+pub mod search_sorted;
 mod set;
 mod shift;
 pub mod sort;
-pub(crate) mod take;
-mod tile;
+#[cfg(feature = "algorithm_group_by")]
 pub(crate) mod unique;
 #[cfg(feature = "zip_with")]
 pub mod zip;
 
 #[cfg(feature = "serde-lazy")]
 use serde::{Deserialize, Serialize};
+pub use sort::options::*;
 
 use crate::series::IsSorted;
-
-#[cfg(feature = "to_list")]
-pub trait ToList<T: PolarsDataType> {
-    fn to_list(&self) -> PolarsResult<ListChunked> {
-        polars_bail!(opq = to_list, T::get_dtype());
-    }
-}
-
 #[cfg(feature = "reinterpret")]
 pub trait Reinterpret {
     fn reinterpret_signed(&self) -> Series {
@@ -96,31 +76,12 @@ pub trait ChunkAnyValue {
     fn get_any_value(&self, index: usize) -> PolarsResult<AnyValue>;
 }
 
-#[cfg(feature = "cum_agg")]
-pub trait ChunkCumAgg<T: PolarsDataType> {
-    /// Get an array with the cumulative max computed at every element
-    fn cummax(&self, _reverse: bool) -> ChunkedArray<T> {
-        panic!("operation cummax not supported for this dtype")
-    }
-    /// Get an array with the cumulative min computed at every element
-    fn cummin(&self, _reverse: bool) -> ChunkedArray<T> {
-        panic!("operation cummin not supported for this dtype")
-    }
-    /// Get an array with the cumulative sum computed at every element
-    fn cumsum(&self, _reverse: bool) -> ChunkedArray<T> {
-        panic!("operation cumsum not supported for this dtype")
-    }
-    /// Get an array with the cumulative product computed at every element
-    fn cumprod(&self, _reverse: bool) -> ChunkedArray<T> {
-        panic!("operation cumprod not supported for this dtype")
-    }
-}
-
-/// Explode/ flatten a List or Utf8 Series
+/// Explode/flatten a List or String Series
 pub trait ChunkExplode {
     fn explode(&self) -> PolarsResult<Series> {
         self.explode_and_offsets().map(|t| t.0)
     }
+    fn offsets(&self) -> PolarsResult<OffsetsBuffer<i64>>;
     fn explode_and_offsets(&self) -> PolarsResult<(Series, OffsetsBuffer<i64>)>;
 }
 
@@ -133,7 +94,7 @@ pub trait ChunkBytes {
 /// This likely is a bit slower than ChunkWindow
 #[cfg(feature = "rolling_window")]
 pub trait ChunkRollApply: AsRefDataType {
-    fn rolling_apply(
+    fn rolling_map(
         &self,
         _f: &dyn Fn(&Series) -> Series,
         _options: RollingOptionsFixedWindow,
@@ -141,87 +102,23 @@ pub trait ChunkRollApply: AsRefDataType {
     where
         Self: Sized,
     {
-        polars_bail!(opq = rolling_apply, self.as_ref_dtype());
+        polars_bail!(opq = rolling_map, self.as_ref_dtype());
     }
 }
 
-/// Random access
-pub trait TakeRandom {
-    type Item;
-
-    /// Get a nullable value by index.
-    ///
-    /// # Panics
-    /// Panics if `index >= self.len()`
-    fn get(&self, index: usize) -> Option<Self::Item>;
-
-    /// Get a value by index and ignore the null bit.
-    ///
-    /// # Safety
-    ///
-    /// Does not do bound checks.
-    unsafe fn get_unchecked(&self, index: usize) -> Option<Self::Item>
+pub trait ChunkTake<Idx: ?Sized>: ChunkTakeUnchecked<Idx> {
+    /// Gather values from ChunkedArray by index.
+    fn take(&self, indices: &Idx) -> PolarsResult<Self>
     where
-        Self: Sized,
-    {
-        self.get(index)
-    }
-
-    /// This is much faster if we have many chunks as we don't have to compute the index
-    /// # Panics
-    /// Panics if `index >= self.len()`
-    fn last(&self) -> Option<Self::Item>;
-}
-// Utility trait because associated type needs a lifetime
-pub trait TakeRandomUtf8 {
-    type Item;
-
-    /// Get a nullable value by index.
-    ///
-    /// # Panics
-    /// Panics if `index >= self.len()`
-    fn get(self, index: usize) -> Option<Self::Item>;
-
-    /// Get a value by index and ignore the null bit.
-    ///
-    /// # Safety
-    ///
-    /// Does not do bound checks.
-    unsafe fn get_unchecked(self, index: usize) -> Option<Self::Item>
-    where
-        Self: Sized,
-    {
-        self.get(index)
-    }
-
-    /// This is much faster if we have many chunks
-    /// # Panics
-    /// Panics if `index >= self.len()`
-    fn last(&self) -> Option<Self::Item>;
+        Self: Sized;
 }
 
-/// Fast access by index.
-pub trait ChunkTake {
-    /// Take values from ChunkedArray by index.
+pub trait ChunkTakeUnchecked<Idx: ?Sized> {
+    /// Gather values from ChunkedArray by index.
     ///
     /// # Safety
-    ///
-    /// Doesn't do any bound checking.
-    #[must_use]
-    unsafe fn take_unchecked<I, INulls>(&self, indices: TakeIdx<I, INulls>) -> Self
-    where
-        Self: Sized,
-        I: TakeIterator,
-        INulls: TakeIteratorNulls;
-
-    /// Take values from ChunkedArray by index.
-    /// Note that the iterator will be cloned, so prefer an iterator that takes the owned memory
-    /// by reference.
-    fn take<I, INulls>(&self, indices: TakeIdx<I, INulls>) -> PolarsResult<Self>
-    where
-        Self: Sized,
-        I: TakeIterator,
-        INulls: TakeIteratorNulls;
+    /// The non-null indices must be valid.
+    unsafe fn take_unchecked(&self, indices: &Idx) -> Self;
 }
 
 /// Create a `ChunkedArray` with new values by index or by boolean mask.
@@ -235,11 +132,11 @@ pub trait ChunkSet<'a, A, B> {
     /// ```rust
     /// # use polars_core::prelude::*;
     /// let ca = UInt32Chunked::new("a", &[1, 2, 3]);
-    /// let new = ca.set_at_idx(vec![0, 1], Some(10)).unwrap();
+    /// let new = ca.scatter_single(vec![0, 1], Some(10)).unwrap();
     ///
     /// assert_eq!(Vec::from(&new), &[Some(10), Some(10), Some(3)]);
     /// ```
-    fn set_at_idx<I: IntoIterator<Item = IdxSize>>(
+    fn scatter_single<I: IntoIterator<Item = IdxSize>>(
         &'a self,
         idx: I,
         opt_value: Option<A>,
@@ -254,11 +151,11 @@ pub trait ChunkSet<'a, A, B> {
     /// ```rust
     /// # use polars_core::prelude::*;
     /// let ca = Int32Chunked::new("a", &[1, 2, 3]);
-    /// let new = ca.set_at_idx_with(vec![0, 1], |opt_v| opt_v.map(|v| v - 5)).unwrap();
+    /// let new = ca.scatter_with(vec![0, 1], |opt_v| opt_v.map(|v| v - 5)).unwrap();
     ///
     /// assert_eq!(Vec::from(&new), &[Some(-4), Some(-3), Some(3)]);
     /// ```
-    fn set_at_idx_with<I: IntoIterator<Item = IdxSize>, F>(
+    fn scatter_with<I: IntoIterator<Item = IdxSize>, F>(
         &'a self,
         idx: I,
         f: F,
@@ -296,22 +193,9 @@ pub trait ChunkCast {
 }
 
 /// Fastest way to do elementwise operations on a [`ChunkedArray<T>`] when the operation is cheaper than
-/// branching due to null checking
-pub trait ChunkApply<'a, A, B> {
-    /// Apply a closure elementwise and cast to a Numeric [`ChunkedArray`]. This is fastest when the null check branching is more expensive
-    /// than the closure application.
-    ///
-    /// Null values remain null.
-    fn apply_cast_numeric<F, S>(&'a self, f: F) -> ChunkedArray<S>
-    where
-        F: Fn(A) -> S::Native + Copy,
-        S: PolarsNumericType;
-
-    /// Apply a closure on optional values and cast to Numeric ChunkedArray without null values.
-    fn branch_apply_cast_numeric_no_null<F, S>(&'a self, f: F) -> ChunkedArray<S>
-    where
-        F: Fn(Option<A>) -> S::Native + Copy,
-        S: PolarsNumericType;
+/// branching due to null checking.
+pub trait ChunkApply<'a, T> {
+    type FuncRet;
 
     /// Apply a closure elementwise. This is fastest when the null check branching is more expensive
     /// than the closure application. Often it is.
@@ -323,45 +207,28 @@ pub trait ChunkApply<'a, A, B> {
     /// ```
     /// use polars_core::prelude::*;
     /// fn double(ca: &UInt32Chunked) -> UInt32Chunked {
-    ///     ca.apply(|v| v * 2)
+    ///     ca.apply_values(|v| v * 2)
     /// }
     /// ```
     #[must_use]
-    fn apply<F>(&'a self, f: F) -> Self
+    fn apply_values<F>(&'a self, f: F) -> Self
     where
-        F: Fn(A) -> B + Copy;
-
-    fn try_apply<F>(&'a self, f: F) -> PolarsResult<Self>
-    where
-        F: Fn(A) -> PolarsResult<B> + Copy,
-        Self: Sized;
+        F: Fn(T) -> Self::FuncRet + Copy;
 
     /// Apply a closure elementwise including null values.
     #[must_use]
-    fn apply_on_opt<F>(&'a self, f: F) -> Self
+    fn apply<F>(&'a self, f: F) -> Self
     where
-        F: Fn(Option<A>) -> Option<B> + Copy;
-
-    /// Apply a closure elementwise. The closure gets the index of the element as first argument.
-    #[must_use]
-    fn apply_with_idx<F>(&'a self, f: F) -> Self
-    where
-        F: Fn((usize, A)) -> B + Copy;
-
-    /// Apply a closure elementwise. The closure gets the index of the element as first argument.
-    #[must_use]
-    fn apply_with_idx_on_opt<F>(&'a self, f: F) -> Self
-    where
-        F: Fn((usize, Option<A>)) -> Option<B> + Copy;
+        F: Fn(Option<T>) -> Option<Self::FuncRet> + Copy;
 
     /// Apply a closure elementwise and write results to a mutable slice.
-    fn apply_to_slice<F, T>(&'a self, f: F, slice: &mut [T])
+    fn apply_to_slice<F, S>(&'a self, f: F, slice: &mut [S])
     // (value of chunkedarray, value of slice) -> value of slice
     where
-        F: Fn(Option<A>, &T) -> T;
+        F: Fn(Option<T>, &S) -> S;
 }
 
-/// Aggregation operations
+/// Aggregation operations.
 pub trait ChunkAgg<T> {
     /// Aggregate the sum of the ChunkedArray.
     /// Returns `None` if not implemented for `T`.
@@ -373,10 +240,15 @@ pub trait ChunkAgg<T> {
     fn min(&self) -> Option<T> {
         None
     }
+
     /// Returns the maximum value in the array, according to the natural order.
     /// Returns `None` if the array is empty or only contains null values.
     fn max(&self) -> Option<T> {
         None
+    }
+
+    fn min_max(&self) -> Option<(T, T)> {
+        Some((self.min()?, self.max()?))
     }
 
     /// Returns the mean value in the array.
@@ -386,7 +258,7 @@ pub trait ChunkAgg<T> {
     }
 }
 
-/// Quantile and median aggregation
+/// Quantile and median aggregation.
 pub trait ChunkQuantile<T> {
     /// Returns the mean value in the array.
     /// Returns `None` if the array is empty or only contains null values.
@@ -405,14 +277,14 @@ pub trait ChunkQuantile<T> {
 }
 
 /// Variance and standard deviation aggregation.
-pub trait ChunkVar<T> {
+pub trait ChunkVar {
     /// Compute the variance of this ChunkedArray/Series.
-    fn var(&self, _ddof: u8) -> Option<T> {
+    fn var(&self, _ddof: u8) -> Option<f64> {
         None
     }
 
     /// Compute the standard deviation of this ChunkedArray/Series.
-    fn std(&self, _ddof: u8) -> Option<T> {
+    fn std(&self, _ddof: u8) -> Option<f64> {
         None
     }
 }
@@ -461,10 +333,12 @@ pub trait ChunkCompare<Rhs> {
 }
 
 /// Get unique values in a `ChunkedArray`
-pub trait ChunkUnique<T: PolarsDataType> {
+pub trait ChunkUnique {
     // We don't return Self to be able to use AutoRef specialization
     /// Get unique values of a ChunkedArray
-    fn unique(&self) -> PolarsResult<ChunkedArray<T>>;
+    fn unique(&self) -> PolarsResult<Self>
+    where
+        Self: Sized;
 
     /// Get first index of the unique values in a `ChunkedArray`.
     /// This Vec is sorted.
@@ -473,40 +347,6 @@ pub trait ChunkUnique<T: PolarsDataType> {
     /// Number of unique values in the `ChunkedArray`
     fn n_unique(&self) -> PolarsResult<usize> {
         self.arg_unique().map(|v| v.len())
-    }
-
-    /// The most occurring value(s). Can return multiple Values
-    #[cfg(feature = "mode")]
-    fn mode(&self) -> PolarsResult<ChunkedArray<T>> {
-        polars_bail!(opq = mode, T::get_dtype());
-    }
-}
-
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
-#[cfg_attr(feature = "serde-lazy", derive(Serialize, Deserialize))]
-pub struct SortOptions {
-    pub descending: bool,
-    pub nulls_last: bool,
-    pub multithreaded: bool,
-    pub maintain_order: bool,
-}
-
-#[derive(Clone)]
-#[cfg_attr(feature = "serde-lazy", derive(Serialize, Deserialize))]
-pub struct SortMultipleOptions {
-    pub other: Vec<Series>,
-    pub descending: Vec<bool>,
-    pub multithreaded: bool,
-}
-
-impl Default for SortOptions {
-    fn default() -> Self {
-        Self {
-            descending: false,
-            nulls_last: false,
-            multithreaded: true,
-            maintain_order: false,
-        }
     }
 }
 
@@ -522,14 +362,20 @@ pub trait ChunkSort<T: PolarsDataType> {
     fn arg_sort(&self, options: SortOptions) -> IdxCa;
 
     /// Retrieve the indexes need to sort this and the other arrays.
-    fn arg_sort_multiple(&self, _options: &SortMultipleOptions) -> PolarsResult<IdxCa> {
+    #[allow(unused_variables)]
+    fn arg_sort_multiple(
+        &self,
+        by: &[Series],
+        _options: &SortMultipleOptions,
+    ) -> PolarsResult<IdxCa> {
         polars_bail!(opq = arg_sort_multiple, T::get_dtype());
     }
 }
 
 pub type FillNullLimit = Option<IdxSize>;
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Hash)]
+#[cfg_attr(feature = "serde-lazy", derive(Serialize, Deserialize))]
 pub enum FillNullStrategy {
     /// previous value in array
     Backward(FillNullLimit),
@@ -614,10 +460,9 @@ macro_rules! impl_chunk_expand {
     }};
 }
 
-impl<T: PolarsDataType> ChunkExpandAtIndex<T> for ChunkedArray<T>
+impl<T: PolarsNumericType> ChunkExpandAtIndex<T> for ChunkedArray<T>
 where
-    ChunkedArray<T>: ChunkFull<T::Native> + TakeRandom<Item = T::Native>,
-    T: PolarsNumericType,
+    ChunkedArray<T>: ChunkFull<T::Native>,
 {
     fn new_from_index(&self, index: usize, length: usize) -> ChunkedArray<T> {
         let mut out = impl_chunk_expand!(self, length, index);
@@ -634,8 +479,8 @@ impl ChunkExpandAtIndex<BooleanType> for BooleanChunked {
     }
 }
 
-impl ChunkExpandAtIndex<Utf8Type> for Utf8Chunked {
-    fn new_from_index(&self, index: usize, length: usize) -> Utf8Chunked {
+impl ChunkExpandAtIndex<StringType> for StringChunked {
+    fn new_from_index(&self, index: usize, length: usize) -> StringChunked {
         let mut out = impl_chunk_expand!(self, length, index);
         out.set_sorted_flag(IsSorted::Ascending);
         out
@@ -650,13 +495,21 @@ impl ChunkExpandAtIndex<BinaryType> for BinaryChunked {
     }
 }
 
+impl ChunkExpandAtIndex<BinaryOffsetType> for BinaryOffsetChunked {
+    fn new_from_index(&self, index: usize, length: usize) -> BinaryOffsetChunked {
+        let mut out = impl_chunk_expand!(self, length, index);
+        out.set_sorted_flag(IsSorted::Ascending);
+        out
+    }
+}
+
 impl ChunkExpandAtIndex<ListType> for ListChunked {
     fn new_from_index(&self, index: usize, length: usize) -> ListChunked {
-        let opt_val = self.get(index);
+        let opt_val = self.get_as_series(index);
         match opt_val {
             Some(val) => {
                 let mut ca = ListChunked::full(self.name(), &val, length);
-                ca.to_logical(self.inner_dtype());
+                unsafe { ca.to_logical(self.inner_dtype()) };
                 ca
             },
             None => ListChunked::full_null_with_dtype(self.name(), length, &self.inner_dtype()),
@@ -667,14 +520,19 @@ impl ChunkExpandAtIndex<ListType> for ListChunked {
 #[cfg(feature = "dtype-array")]
 impl ChunkExpandAtIndex<FixedSizeListType> for ArrayChunked {
     fn new_from_index(&self, index: usize, length: usize) -> ArrayChunked {
-        let opt_val = self.get(index);
+        let opt_val = self.get_as_series(index);
         match opt_val {
             Some(val) => {
                 let mut ca = ArrayChunked::full(self.name(), &val, length);
-                ca.to_physical(self.inner_dtype());
+                unsafe { ca.to_logical(self.inner_dtype()) };
                 ca
             },
-            None => ArrayChunked::full_null_with_dtype(self.name(), length, &self.inner_dtype(), 0),
+            None => ArrayChunked::full_null_with_dtype(
+                self.name(),
+                length,
+                &self.inner_dtype(),
+                self.width(),
+            ),
         }
     }
 }
@@ -724,59 +582,18 @@ pub trait ChunkApplyKernel<A: Array> {
         S: PolarsDataType;
 }
 
-/// Find local minima/ maxima
-pub trait ChunkPeaks {
-    /// Get a boolean mask of the local maximum peaks.
-    fn peak_max(&self) -> BooleanChunked {
-        unimplemented!()
-    }
-
-    /// Get a boolean mask of the local minimum peaks.
-    fn peak_min(&self) -> BooleanChunked {
-        unimplemented!()
-    }
-}
-
-/// Check if element is member of list array
-#[cfg(feature = "is_in")]
-pub trait IsIn {
-    /// Check if elements of this array are in the right Series, or List values of the right Series.
-    fn is_in(&self, _other: &Series) -> PolarsResult<BooleanChunked> {
-        unimplemented!()
-    }
-}
-
-/// Repeat the values `n` times.
-#[cfg(feature = "repeat_by")]
-pub trait RepeatBy {
-    /// Repeat the values `n` times, where `n` is determined by the values in `by`.
-    fn repeat_by(&self, _by: &IdxCa) -> PolarsResult<ListChunked> {
-        unimplemented!()
-    }
-}
-
-#[cfg(feature = "is_first")]
+#[cfg(feature = "is_first_distinct")]
 /// Mask the first unique values as `true`
-pub trait IsFirst<T: PolarsDataType> {
-    fn is_first(&self) -> PolarsResult<BooleanChunked> {
-        polars_bail!(opq = is_first, T::get_dtype());
+pub trait IsFirstDistinct<T: PolarsDataType> {
+    fn is_first_distinct(&self) -> PolarsResult<BooleanChunked> {
+        polars_bail!(opq = is_first_distinct, T::get_dtype());
     }
 }
 
-#[cfg(feature = "is_last")]
+#[cfg(feature = "is_last_distinct")]
 /// Mask the last unique values as `true`
-pub trait IsLast<T: PolarsDataType> {
-    fn is_last(&self) -> PolarsResult<BooleanChunked> {
-        polars_bail!(opq = is_last, T::get_dtype());
+pub trait IsLastDistinct<T: PolarsDataType> {
+    fn is_last_distinct(&self) -> PolarsResult<BooleanChunked> {
+        polars_bail!(opq = is_last_distinct, T::get_dtype());
     }
-}
-
-#[cfg(feature = "concat_str")]
-/// Concat the values into a string array.
-pub trait StrConcat {
-    /// Concat the values into a string array.
-    /// # Arguments
-    ///
-    /// * `delimiter` - A string that will act as delimiter between values.
-    fn str_concat(&self, delimiter: &str) -> Utf8Chunked;
 }

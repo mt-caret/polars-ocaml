@@ -24,13 +24,11 @@ mod from;
 mod serialize;
 
 use super::ObjectHasher;
-use crate::prelude::*;
-use crate::safer_unchecked::GetSaferUnchecked;
-use crate::{AlignedBuf, Deserializer, Node, Result, StaticNode};
+use crate::{prelude::*, Buffers};
+use crate::{Deserializer, Node, Result};
 use halfbrown::HashMap;
 use std::fmt;
 use std::ops::{Index, IndexMut};
-use value_trait::{ValueAccess, ValueInto};
 
 /// Representation of a JSON object
 pub type Object = HashMap<String, Value, ObjectHasher>;
@@ -57,15 +55,13 @@ pub fn to_value(s: &mut [u8]) -> Result<Value> {
 /// owned memory wherever required thus returning a value without
 /// a lifetime.
 ///
+/// Passes in reusable buffers to reduce allocations.
+///
 /// # Errors
 ///
 /// Will return `Err` if `s` is invalid JSON.
-pub fn to_value_with_buffers(
-    s: &mut [u8],
-    input_buffer: &mut AlignedBuf,
-    string_buffer: &mut [u8],
-) -> Result<Value> {
-    match Deserializer::from_slice_with_buffers(s, input_buffer, string_buffer) {
+pub fn to_value_with_buffers(s: &mut [u8], buffers: &mut Buffers) -> Result<Value> {
+    match Deserializer::from_slice_with_buffers(s, buffers) {
         Ok(de) => Ok(OwnedDeserializer::from_deserializer(de).parse()),
         Err(e) => Err(e),
     }
@@ -87,18 +83,27 @@ pub enum Value {
     Object(Box<Object>),
 }
 
-impl<'input> Builder<'input> for Value {
-    #[inline]
+impl Value {
+    fn as_static(&self) -> Option<StaticNode> {
+        match self {
+            Value::Static(s) => Some(*s),
+            _ => None,
+        }
+    }
+}
+
+impl<'input> ValueBuilder<'input> for Value {
+    #[cfg_attr(not(feature = "no-inline"), inline)]
     #[must_use]
     fn null() -> Self {
         Self::Static(StaticNode::Null)
     }
-    #[inline]
+    #[cfg_attr(not(feature = "no-inline"), inline)]
     #[must_use]
     fn array_with_capacity(capacity: usize) -> Self {
         Self::Array(Vec::with_capacity(capacity))
     }
-    #[inline]
+    #[cfg_attr(not(feature = "no-inline"), inline)]
     #[must_use]
     fn object_with_capacity(capacity: usize) -> Self {
         Self::Object(Box::new(Object::with_capacity_and_hasher(
@@ -108,8 +113,10 @@ impl<'input> Builder<'input> for Value {
     }
 }
 
-impl Mutable for Value {
-    #[inline]
+impl ValueAsMutContainer for Value {
+    type Array = Vec<Self>;
+    type Object = Object;
+    #[cfg_attr(not(feature = "no-inline"), inline)]
     #[must_use]
     fn as_array_mut(&mut self) -> Option<&mut Vec<Self>> {
         match self {
@@ -117,7 +124,7 @@ impl Mutable for Value {
             _ => None,
         }
     }
-    #[inline]
+    #[cfg_attr(not(feature = "no-inline"), inline)]
     #[must_use]
     fn as_object_mut(&mut self) -> Option<&mut Object> {
         match self {
@@ -127,21 +134,8 @@ impl Mutable for Value {
     }
 }
 
-impl ValueTrait for Value {
-    #[inline]
-    #[must_use]
-    fn is_null(&self) -> bool {
-        matches!(self, Self::Static(StaticNode::Null))
-    }
-}
-
-impl ValueAccess for Value {
-    type Target = Value;
-    type Key = String;
-    type Array = Vec<Self>;
-    type Object = Object;
-
-    #[inline]
+impl TypedValue for Value {
+    #[cfg_attr(not(feature = "no-inline"), inline)]
     #[must_use]
     fn value_type(&self) -> ValueType {
         match self {
@@ -151,75 +145,56 @@ impl ValueAccess for Value {
             Self::Object(_) => ValueType::Object,
         }
     }
-
-    #[inline]
+}
+impl ValueAsScalar for Value {
+    #[cfg_attr(not(feature = "no-inline"), inline)]
+    #[must_use]
+    fn as_null(&self) -> Option<()> {
+        self.as_static()?.as_null()
+    }
+    #[cfg_attr(not(feature = "no-inline"), inline)]
     #[must_use]
     fn as_bool(&self) -> Option<bool> {
-        match self {
-            Self::Static(StaticNode::Bool(b)) => Some(*b),
-            _ => None,
-        }
+        self.as_static()?.as_bool()
     }
 
-    #[inline]
+    #[cfg_attr(not(feature = "no-inline"), inline)]
     #[must_use]
     fn as_i64(&self) -> Option<i64> {
-        match self {
-            Self::Static(s) => s.as_i64(),
-            _ => None,
-        }
+        self.as_static()?.as_i64()
     }
 
-    #[inline]
+    #[cfg_attr(not(feature = "no-inline"), inline)]
     #[must_use]
     fn as_i128(&self) -> Option<i128> {
-        match self {
-            Self::Static(s) => s.as_i128(),
-            _ => None,
-        }
+        self.as_static()?.as_i128()
     }
 
-    #[inline]
+    #[cfg_attr(not(feature = "no-inline"), inline)]
     #[must_use]
-    #[allow(clippy::cast_sign_loss)]
     fn as_u64(&self) -> Option<u64> {
-        match self {
-            Self::Static(s) => s.as_u64(),
-            _ => None,
-        }
+        self.as_static()?.as_u64()
     }
 
-    #[cfg(feature = "128bit")]
-    #[inline]
+    #[cfg_attr(not(feature = "no-inline"), inline)]
     #[must_use]
-    #[allow(clippy::cast_sign_loss)]
     fn as_u128(&self) -> Option<u128> {
-        match self {
-            Self::Static(s) => s.as_u128(),
-            _ => None,
-        }
+        self.as_static()?.as_u128()
     }
 
-    #[inline]
+    #[cfg_attr(not(feature = "no-inline"), inline)]
     #[must_use]
     fn as_f64(&self) -> Option<f64> {
-        match self {
-            Self::Static(s) => s.as_f64(),
-            _ => None,
-        }
+        self.as_static()?.as_f64()
     }
 
-    #[inline]
+    #[cfg_attr(not(feature = "no-inline"), inline)]
     #[must_use]
-    #[allow(clippy::cast_precision_loss)]
     fn cast_f64(&self) -> Option<f64> {
-        match self {
-            Self::Static(s) => s.cast_f64(),
-            _ => None,
-        }
+        self.as_static()?.cast_f64()
     }
 
-    #[inline]
+    #[cfg_attr(not(feature = "no-inline"), inline)]
     #[must_use]
     fn as_str(&self) -> Option<&str> {
         match self {
@@ -227,8 +202,11 @@ impl ValueAccess for Value {
             _ => None,
         }
     }
-
-    #[inline]
+}
+impl ValueAsContainer for Value {
+    type Array = Vec<Self>;
+    type Object = Object;
+    #[cfg_attr(not(feature = "no-inline"), inline)]
     #[must_use]
     fn as_array(&self) -> Option<&Vec<Self>> {
         match self {
@@ -237,7 +215,7 @@ impl ValueAccess for Value {
         }
     }
 
-    #[inline]
+    #[cfg_attr(not(feature = "no-inline"), inline)]
     #[must_use]
     fn as_object(&self) -> Option<&Object> {
         match self {
@@ -247,24 +225,28 @@ impl ValueAccess for Value {
     }
 }
 
-impl ValueInto for Value {
+impl ValueIntoString for Value {
     type String = String;
 
-    fn into_string(self) -> Option<<Value as ValueInto>::String> {
+    fn into_string(self) -> Option<<Value as ValueIntoString>::String> {
         match self {
             Self::String(s) => Some(s),
             _ => None,
         }
     }
+}
+impl ValueIntoContainer for Value {
+    type Array = Vec<Self>;
+    type Object = Object;
 
-    fn into_array(self) -> Option<<Value as ValueAccess>::Array> {
+    fn into_array(self) -> Option<<Value as ValueIntoContainer>::Array> {
         match self {
             Self::Array(a) => Some(a),
             _ => None,
         }
     }
 
-    fn into_object(self) -> Option<<Value as ValueAccess>::Object> {
+    fn into_object(self) -> Option<<Value as ValueIntoContainer>::Object> {
         match self {
             Self::Object(a) => Some(*a),
             _ => None,
@@ -286,7 +268,7 @@ impl fmt::Display for Value {
 
 impl Index<&str> for Value {
     type Output = Self;
-    #[inline]
+    #[cfg_attr(not(feature = "no-inline"), inline)]
     #[must_use]
     fn index(&self, index: &str) -> &Self::Output {
         self.get(index).expect("index out of bounds")
@@ -295,7 +277,7 @@ impl Index<&str> for Value {
 
 impl Index<usize> for Value {
     type Output = Self;
-    #[inline]
+    #[cfg_attr(not(feature = "no-inline"), inline)]
     #[must_use]
     fn index(&self, index: usize) -> &Self::Output {
         self.get_idx(index).expect("index out of bounds")
@@ -303,7 +285,7 @@ impl Index<usize> for Value {
 }
 
 impl IndexMut<&str> for Value {
-    #[inline]
+    #[cfg_attr(not(feature = "no-inline"), inline)]
     #[must_use]
     fn index_mut(&mut self, index: &str) -> &mut Self::Output {
         self.get_mut(index).expect("index out of bounds")
@@ -311,7 +293,7 @@ impl IndexMut<&str> for Value {
 }
 
 impl IndexMut<usize> for Value {
-    #[inline]
+    #[cfg_attr(not(feature = "no-inline"), inline)]
     #[must_use]
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         self.get_idx_mut(index).expect("index out of bounds")
@@ -319,7 +301,7 @@ impl IndexMut<usize> for Value {
 }
 
 impl Default for Value {
-    #[inline]
+    #[cfg_attr(not(feature = "no-inline"), inline)]
     #[must_use]
     fn default() -> Self {
         Self::Static(StaticNode::Null)
@@ -334,33 +316,33 @@ impl<'de> OwnedDeserializer<'de> {
     pub fn from_deserializer(de: Deserializer<'de>) -> Self {
         Self { de }
     }
-    #[cfg_attr(not(feature = "no-inline"), inline(always))]
+    #[cfg_attr(not(feature = "no-inline"), inline)]
     pub fn parse(&mut self) -> Value {
         match unsafe { self.de.next_() } {
             Node::Static(s) => Value::Static(s),
             Node::String(s) => Value::from(s),
-            Node::Array(len, _) => self.parse_array(len),
-            Node::Object(len, _) => self.parse_map(len),
+            Node::Array { len, count: _ } => self.parse_array(len),
+            Node::Object { len, count: _ } => self.parse_map(len),
         }
     }
 
-    #[cfg_attr(not(feature = "no-inline"), inline(always))]
-    #[allow(clippy::uninit_vec)]
+    #[cfg_attr(not(feature = "no-inline"), inline)]
     fn parse_array(&mut self, len: usize) -> Value {
         // Rust doesn't optimize the normal loop away here
         // so we write our own avoiding the length
         // checks during push
-        let mut res = Vec::with_capacity(len);
+        let mut res: Vec<Value> = Vec::with_capacity(len);
+        let res_ptr = res.as_mut_ptr();
         unsafe {
-            res.set_len(len);
             for i in 0..len {
-                std::ptr::write(res.get_kinda_unchecked_mut(i), self.parse());
+                res_ptr.add(i).write(self.parse());
             }
+            res.set_len(len);
         }
         Value::Array(res)
     }
 
-    #[cfg_attr(not(feature = "no-inline"), inline(always))]
+    #[cfg_attr(not(feature = "no-inline"), inline)]
     fn parse_map(&mut self, len: usize) -> Value {
         let mut res = Object::with_capacity_and_hasher(len, ObjectHasher::default());
 
@@ -380,7 +362,7 @@ impl<'de> OwnedDeserializer<'de> {
 
 #[cfg(test)]
 mod test {
-    #![allow(clippy::cognitive_complexity)]
+    #![allow(clippy::cognitive_complexity, clippy::ignored_unit_patterns)]
     use super::*;
 
     #[test]
@@ -908,7 +890,6 @@ mod test {
         }
 
         #[test]
-        #[allow(clippy::cast_possible_truncation)]
         fn prop_usize_cmp(f in proptest::num::usize::ANY) {
             let v: Value = f.into();
             prop_assert_eq!(v, f);
@@ -962,7 +943,7 @@ mod test {
         let v: Value = Value::from_iter(vec![("a", 1)]);
         assert_eq!(
             v,
-            vec![("a", 1)]
+            [("a", 1)]
                 .iter()
                 .copied()
                 .collect::<std::collections::HashMap<&str, i32>>()

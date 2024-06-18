@@ -1,6 +1,6 @@
 use core::fmt;
 
-#[cfg(feature = "rkyv")]
+#[cfg(any(feature = "rkyv", feature = "rkyv-16", feature = "rkyv-32", feature = "rkyv-64"))]
 use rkyv::{Archive, Deserialize, Serialize};
 
 use crate::OutOfRange;
@@ -29,9 +29,14 @@ use crate::OutOfRange;
 /// Can be Serialized/Deserialized with serde
 // Actual implementation is zero-indexed, API intended as 1-indexed for more intuitive behavior.
 #[derive(PartialEq, Eq, Copy, Clone, Debug, Hash, PartialOrd, Ord)]
-#[cfg_attr(feature = "rustc-serialize", derive(RustcEncodable, RustcDecodable))]
-#[cfg_attr(feature = "rkyv", derive(Archive, Deserialize, Serialize))]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
+#[cfg_attr(
+    any(feature = "rkyv", feature = "rkyv-16", feature = "rkyv-32", feature = "rkyv-64"),
+    derive(Archive, Deserialize, Serialize),
+    archive(compare(PartialEq, PartialOrd)),
+    archive_attr(derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash))
+)]
+#[cfg_attr(feature = "rkyv-validation", archive(check_bytes))]
+#[cfg_attr(all(feature = "arbitrary", feature = "std"), derive(arbitrary::Arbitrary))]
 pub enum Month {
     /// January
     January = 0,
@@ -219,13 +224,19 @@ impl num_traits::FromPrimitive for Month {
 
 /// A duration in calendar months
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
+#[cfg_attr(all(feature = "arbitrary", feature = "std"), derive(arbitrary::Arbitrary))]
 pub struct Months(pub(crate) u32);
 
 impl Months {
     /// Construct a new `Months` from a number of months
     pub const fn new(num: u32) -> Self {
         Self(num)
+    }
+
+    /// Returns the total number of months in the `Months` instance.
+    #[inline]
+    pub const fn as_u32(&self) -> u32 {
+        self.0
     }
 }
 
@@ -236,7 +247,6 @@ pub struct ParseMonthError {
 }
 
 #[cfg(feature = "std")]
-#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl std::error::Error for ParseMonthError {}
 
 impl fmt::Display for ParseMonthError {
@@ -252,7 +262,6 @@ impl fmt::Debug for ParseMonthError {
 }
 
 #[cfg(feature = "serde")]
-#[cfg_attr(docsrs, doc(cfg(feature = "serde")))]
 mod month_serde {
     use super::Month;
     use serde::{de, ser};
@@ -298,7 +307,7 @@ mod month_serde {
 #[cfg(test)]
 mod tests {
     use super::Month;
-    use crate::{Datelike, OutOfRange, TimeZone, Utc};
+    use crate::{Datelike, Months, OutOfRange, TimeZone, Utc};
 
     #[test]
     fn test_month_enum_try_from() {
@@ -351,6 +360,13 @@ mod tests {
         assert!(Month::January < Month::December);
         assert!(Month::July >= Month::May);
         assert!(Month::September > Month::March);
+    }
+
+    #[test]
+    fn test_months_as_u32() {
+        assert_eq!(Months::new(0).as_u32(), 0);
+        assert_eq!(Months::new(1).as_u32(), 1);
+        assert_eq!(Months::new(u32::MAX).as_u32(), u32::MAX);
     }
 
     #[test]
@@ -414,5 +430,13 @@ mod tests {
         for string in errors {
             from_str::<Month>(string).unwrap_err();
         }
+    }
+
+    #[test]
+    #[cfg(feature = "rkyv-validation")]
+    fn test_rkyv_validation() {
+        let month = Month::January;
+        let bytes = rkyv::to_bytes::<_, 1>(&month).unwrap();
+        assert_eq!(rkyv::from_bytes::<Month>(&bytes).unwrap(), month);
     }
 }

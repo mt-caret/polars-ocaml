@@ -153,6 +153,37 @@ in its space itself.
 }
 ```
 
+#### Serde
+
+Adding the `serde` feature flag will enable transparent serialization of Vecs and 
+boxed values.
+
+```toml
+[dependencies]
+bumpalo = { version = "3.9", features = ["collections", "boxed", "serde"] }
+```
+
+```rust,ignore
+use bumpalo::{Bump, boxed::Box, collections::Vec};
+
+// Create a new bump arena.
+let bump = Bump::new();
+
+// Create a `Box`
+let box = Box::new_in("hello", &bump);
+
+// Serialize with serde_json
+assert_eq!(serde_json::to_string(&box).unwrap(), "\"hello\"");
+
+// Create a `Vec`
+let vec = Vec::new_in( &bump);
+vec.push(1);
+vec.push(2);
+
+// Serialize with serde_json
+assert_eq!(serde_json::to_string(&vec).unwrap(), "[1, 2]");
+```
+
 ### `#![no_std]` Support
 
 Bumpalo is a `no_std` crate by default. It depends only on the `alloc` and `core` crates.
@@ -216,15 +247,15 @@ v.push(2);
 
 ### Using the `Allocator` API on Stable Rust
 
-You can enable the `allocator_api2` Cargo feature and `bumpalo` will use [the
-`allocator_api2` crate](https://crates.io/crates/allocator-api2) to implement
+You can enable the `allocator-api2` Cargo feature and `bumpalo` will use [the
+`allocator-api2` crate](https://crates.io/crates/allocator-api2) to implement
 the unstable nightly`Allocator` API on stable Rust. This means that
 `bumpalo::Bump` will be usable with any collection that is generic over
 `allocator_api2::Allocator`.
 
 ### Minimum Supported Rust Version (MSRV)
 
-This crate is guaranteed to compile on stable Rust **1.63** and up. It might
+This crate is guaranteed to compile on stable Rust **1.73** and up. It might
 compile with older versions but that may change in any new patch release.
 
 We reserve the right to increment the MSRV on minor releases, however we will

@@ -13,7 +13,7 @@
 edition = "2018"
 rust-version = "1.60"
 name = "gimli"
-version = "0.28.1"
+version = "0.29.0"
 include = [
     "/CHANGELOG.md",
     "/Cargo.toml",
