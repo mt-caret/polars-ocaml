@@ -1,12 +1,17 @@
+use std::io::Write;
+
 pub use arrow::io::avro::avro_schema::file::Compression;
 use arrow::io::avro::avro_schema::{self};
 use arrow::io::avro::write;
 use polars_core::error::to_compute_err;
+use polars_core::prelude::*;
 pub use Compression as AvroCompression;
 
-use super::*;
+use crate::shared::SerWriter;
 
-/// Write a DataFrame to Apache Avro format
+/// Write a [`DataFrame`] to [Apache Avro] format
+///
+/// [Apache Avro]: https://avro.apache.org
 ///
 /// # Example
 ///
@@ -27,6 +32,7 @@ use super::*;
 pub struct AvroWriter<W> {
     writer: W,
     compression: Option<AvroCompression>,
+    name: String,
 }
 
 impl<W> AvroWriter<W>
@@ -36,6 +42,11 @@ where
     /// Set the compression used. Defaults to None.
     pub fn with_compression(mut self, compression: Option<AvroCompression>) -> Self {
         self.compression = compression;
+        self
+    }
+
+    pub fn with_name(mut self, name: String) -> Self {
+        self.name = name;
         self
     }
 }
@@ -48,16 +59,17 @@ where
         Self {
             writer,
             compression: None,
+            name: "".to_string(),
         }
     }
 
     fn finish(&mut self, df: &mut DataFrame) -> PolarsResult<()> {
-        let schema = df.schema().to_arrow();
-        let record = write::to_record(&schema)?;
+        let schema = df.schema().to_arrow(false);
+        let record = write::to_record(&schema, self.name.clone())?;
 
         let mut data = vec![];
         let mut compressed_block = avro_schema::file::CompressedBlock::default();
-        for chunk in df.iter_chunks() {
+        for chunk in df.iter_chunks(false) {
             let mut serializers = chunk
                 .iter()
                 .zip(record.fields.iter())

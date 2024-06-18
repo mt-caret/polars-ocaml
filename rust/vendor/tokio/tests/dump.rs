@@ -1,3 +1,4 @@
+#![allow(unknown_lints, unexpected_cfgs)]
 #![cfg(all(
     tokio_unstable,
     tokio_taskdump,
@@ -41,8 +42,9 @@ fn current_thread() {
         assert_eq!(tasks.len(), 3);
 
         for task in tasks {
+            let id = task.id();
             let trace = task.trace().to_string();
-            eprintln!("\n\n{trace}\n\n");
+            eprintln!("\n\n{id}:\n{trace}\n\n");
             assert!(trace.contains("dump::a"));
             assert!(trace.contains("dump::b"));
             assert!(trace.contains("dump::c"));
@@ -78,8 +80,9 @@ fn multi_thread() {
         assert_eq!(tasks.len(), 3);
 
         for task in tasks {
+            let id = task.id();
             let trace = task.trace().to_string();
-            eprintln!("\n\n{trace}\n\n");
+            eprintln!("\n\n{id}:\n{trace}\n\n");
             assert!(trace.contains("dump::a"));
             assert!(trace.contains("dump::b"));
             assert!(trace.contains("dump::c"));

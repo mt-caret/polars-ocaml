@@ -1,26 +1,35 @@
-use std::convert::TryFrom;
-
 use arrow::array::*;
 
 use crate::prelude::*;
 #[cfg(feature = "dtype-struct")]
 use crate::series::iterator::SeriesIter;
-use crate::utils::CustomIterTools;
 
-type LargeStringArray = Utf8Array<i64>;
-type LargeBinaryArray = BinaryArray<i64>;
-type LargeListArray = ListArray<i64>;
 pub mod par;
 
-/// A `PolarsIterator` is an iterator over a `ChunkedArray` which contains polars types. A `PolarsIterator`
-/// must implement `ExactSizeIterator` and `DoubleEndedIterator`.
+impl<T> ChunkedArray<T>
+where
+    T: PolarsDataType,
+{
+    #[inline]
+    pub fn iter(&self) -> impl PolarsIterator<Item = Option<T::Physical<'_>>> {
+        // SAFETY: we set the correct length of the iterator.
+        unsafe {
+            self.downcast_iter()
+                .flat_map(|arr| arr.iter())
+                .trust_my_length(self.len())
+        }
+    }
+}
+
+/// A [`PolarsIterator`] is an iterator over a [`ChunkedArray`] which contains polars types. A [`PolarsIterator`]
+/// must implement [`ExactSizeIterator`] and [`DoubleEndedIterator`].
 pub trait PolarsIterator:
     ExactSizeIterator + DoubleEndedIterator + Send + Sync + TrustedLen
 {
 }
 unsafe impl<'a, I> TrustedLen for Box<dyn PolarsIterator<Item = I> + 'a> {}
 
-/// Implement PolarsIterator for every iterator that implements the needed traits.
+/// Implement [`PolarsIterator`] for every iterator that implements the needed traits.
 impl<T: ?Sized> PolarsIterator for T where
     T: ExactSizeIterator + DoubleEndedIterator + Send + Sync + TrustedLen
 {
@@ -54,7 +63,7 @@ impl<'a> IntoIterator for &'a BooleanChunked {
     }
 }
 
-/// The no null iterator for a BooleanArray
+/// The no null iterator for a [`BooleanArray`]
 pub struct BoolIterNoNull<'a> {
     array: &'a BooleanArray,
     current: usize,
@@ -112,13 +121,8 @@ impl BooleanChunked {
     #[doc(hidden)]
     pub fn into_no_null_iter(
         &self,
-    ) -> impl Iterator<Item = bool>
-           + '_
-           + Send
-           + Sync
-           + ExactSizeIterator
-           + DoubleEndedIterator
-           + TrustedLen {
+    ) -> impl '_ + Send + Sync + ExactSizeIterator<Item = bool> + DoubleEndedIterator + TrustedLen
+    {
         // we know that we only iterate over length == self.len()
         unsafe {
             self.downcast_iter()
@@ -128,7 +132,7 @@ impl BooleanChunked {
     }
 }
 
-impl<'a> IntoIterator for &'a Utf8Chunked {
+impl<'a> IntoIterator for &'a StringChunked {
     type Item = Option<&'a str>;
     type IntoIter = Box<dyn PolarsIterator<Item = Self::Item> + 'a>;
     fn into_iter(self) -> Self::IntoIter {
@@ -137,74 +141,17 @@ impl<'a> IntoIterator for &'a Utf8Chunked {
     }
 }
 
-pub struct Utf8IterNoNull<'a> {
-    array: &'a LargeStringArray,
-    current: usize,
-    current_end: usize,
-}
-
-impl<'a> Utf8IterNoNull<'a> {
-    /// create a new iterator
-    pub fn new(array: &'a LargeStringArray) -> Self {
-        Utf8IterNoNull {
-            array,
-            current: 0,
-            current_end: array.len(),
-        }
-    }
-}
-
-impl<'a> Iterator for Utf8IterNoNull<'a> {
-    type Item = &'a str;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.current == self.current_end {
-            None
-        } else {
-            let old = self.current;
-            self.current += 1;
-            unsafe { Some(self.array.value_unchecked(old)) }
-        }
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        (
-            self.array.len() - self.current,
-            Some(self.array.len() - self.current),
-        )
-    }
-}
-
-impl<'a> DoubleEndedIterator for Utf8IterNoNull<'a> {
-    fn next_back(&mut self) -> Option<Self::Item> {
-        if self.current_end == self.current {
-            None
-        } else {
-            self.current_end -= 1;
-            unsafe { Some(self.array.value_unchecked(self.current_end)) }
-        }
-    }
-}
-
-/// all arrays have known size.
-impl<'a> ExactSizeIterator for Utf8IterNoNull<'a> {}
-
-impl Utf8Chunked {
+impl StringChunked {
     #[allow(clippy::wrong_self_convention)]
     #[doc(hidden)]
     pub fn into_no_null_iter(
         &self,
-    ) -> impl Iterator<Item = &str>
-           + '_
-           + Send
-           + Sync
-           + ExactSizeIterator
-           + DoubleEndedIterator
-           + TrustedLen {
+    ) -> impl '_ + Send + Sync + ExactSizeIterator<Item = &str> + DoubleEndedIterator + TrustedLen
+    {
         // we know that we only iterate over length == self.len()
         unsafe {
             self.downcast_iter()
-                .flat_map(Utf8IterNoNull::new)
+                .flat_map(|arr| arr.values_iter())
                 .trust_my_length(self.len())
         }
     }
@@ -219,74 +166,42 @@ impl<'a> IntoIterator for &'a BinaryChunked {
     }
 }
 
-pub struct BinaryIterNoNull<'a> {
-    array: &'a LargeBinaryArray,
-    current: usize,
-    current_end: usize,
-}
-
-impl<'a> BinaryIterNoNull<'a> {
-    /// create a new iterator
-    pub fn new(array: &'a LargeBinaryArray) -> Self {
-        BinaryIterNoNull {
-            array,
-            current: 0,
-            current_end: array.len(),
-        }
-    }
-}
-
-impl<'a> Iterator for BinaryIterNoNull<'a> {
-    type Item = &'a [u8];
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.current == self.current_end {
-            None
-        } else {
-            let old = self.current;
-            self.current += 1;
-            unsafe { Some(self.array.value_unchecked(old)) }
-        }
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        (
-            self.array.len() - self.current,
-            Some(self.array.len() - self.current),
-        )
-    }
-}
-
-impl<'a> DoubleEndedIterator for BinaryIterNoNull<'a> {
-    fn next_back(&mut self) -> Option<Self::Item> {
-        if self.current_end == self.current {
-            None
-        } else {
-            self.current_end -= 1;
-            unsafe { Some(self.array.value_unchecked(self.current_end)) }
-        }
-    }
-}
-
-/// all arrays have known size.
-impl<'a> ExactSizeIterator for BinaryIterNoNull<'a> {}
-
 impl BinaryChunked {
     #[allow(clippy::wrong_self_convention)]
     #[doc(hidden)]
     pub fn into_no_null_iter(
         &self,
-    ) -> impl Iterator<Item = &[u8]>
-           + '_
-           + Send
-           + Sync
-           + ExactSizeIterator
-           + DoubleEndedIterator
-           + TrustedLen {
+    ) -> impl '_ + Send + Sync + ExactSizeIterator<Item = &[u8]> + DoubleEndedIterator + TrustedLen
+    {
         // we know that we only iterate over length == self.len()
         unsafe {
             self.downcast_iter()
-                .flat_map(BinaryIterNoNull::new)
+                .flat_map(|arr| arr.values_iter())
+                .trust_my_length(self.len())
+        }
+    }
+}
+
+impl<'a> IntoIterator for &'a BinaryOffsetChunked {
+    type Item = Option<&'a [u8]>;
+    type IntoIter = Box<dyn PolarsIterator<Item = Self::Item> + 'a>;
+    fn into_iter(self) -> Self::IntoIter {
+        // we know that we only iterate over length == self.len()
+        unsafe { Box::new(self.downcast_iter().flatten().trust_my_length(self.len())) }
+    }
+}
+
+impl BinaryOffsetChunked {
+    #[allow(clippy::wrong_self_convention)]
+    #[doc(hidden)]
+    pub fn into_no_null_iter(
+        &self,
+    ) -> impl '_ + Send + Sync + ExactSizeIterator<Item = &[u8]> + DoubleEndedIterator + TrustedLen
+    {
+        // we know that we only iterate over length == self.len()
+        unsafe {
+            self.downcast_iter()
+                .flat_map(|arr| arr.values_iter())
                 .trust_my_length(self.len())
         }
     }
@@ -332,85 +247,18 @@ impl<'a> IntoIterator for &'a ListChunked {
     }
 }
 
-pub struct ListIterNoNull<'a> {
-    array: &'a LargeListArray,
-    inner_type: DataType,
-    current: usize,
-    current_end: usize,
-}
-
-impl<'a> ListIterNoNull<'a> {
-    /// create a new iterator
-    pub fn new(array: &'a LargeListArray, inner_type: DataType) -> Self {
-        ListIterNoNull {
-            array,
-            inner_type,
-            current: 0,
-            current_end: array.len(),
-        }
-    }
-}
-
-impl<'a> Iterator for ListIterNoNull<'a> {
-    type Item = Series;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.current == self.current_end {
-            None
-        } else {
-            let old = self.current;
-            self.current += 1;
-            unsafe {
-                Some(Series::from_chunks_and_dtype_unchecked(
-                    "",
-                    vec![self.array.value_unchecked(old)],
-                    &self.inner_type,
-                ))
-            }
-        }
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        (
-            self.array.len() - self.current,
-            Some(self.array.len() - self.current),
-        )
-    }
-}
-
-impl<'a> DoubleEndedIterator for ListIterNoNull<'a> {
-    fn next_back(&mut self) -> Option<Self::Item> {
-        if self.current_end == self.current {
-            None
-        } else {
-            self.current_end -= 1;
-            unsafe {
-                Some(Series::try_from(("", self.array.value_unchecked(self.current_end))).unwrap())
-            }
-        }
-    }
-}
-
-/// all arrays have known size.
-impl<'a> ExactSizeIterator for ListIterNoNull<'a> {}
-
 impl ListChunked {
     #[allow(clippy::wrong_self_convention)]
     #[doc(hidden)]
     pub fn into_no_null_iter(
         &self,
-    ) -> impl Iterator<Item = Series>
-           + '_
-           + Send
-           + Sync
-           + ExactSizeIterator
-           + DoubleEndedIterator
-           + TrustedLen {
-        // we know that we only iterate over length == self.len()
+    ) -> impl '_ + Send + Sync + ExactSizeIterator<Item = Series> + DoubleEndedIterator + TrustedLen
+    {
         let inner_type = self.inner_dtype();
         unsafe {
             self.downcast_iter()
-                .flat_map(move |arr| ListIterNoNull::new(arr, inner_type.clone()))
+                .flat_map(|arr| arr.values_iter())
+                .map(move |arr| Series::from_chunks_and_dtype_unchecked("", vec![arr], &inner_type))
                 .trust_my_length(self.len())
         }
     }
@@ -530,13 +378,8 @@ impl ArrayChunked {
     #[doc(hidden)]
     pub fn into_no_null_iter(
         &self,
-    ) -> impl Iterator<Item = Series>
-           + '_
-           + Send
-           + Sync
-           + ExactSizeIterator
-           + DoubleEndedIterator
-           + TrustedLen {
+    ) -> impl '_ + Send + Sync + ExactSizeIterator<Item = Series> + DoubleEndedIterator + TrustedLen
+    {
         // we know that we only iterate over length == self.len()
         let inner_type = self.inner_dtype();
         unsafe {
@@ -566,7 +409,7 @@ impl<T: PolarsObject> ObjectChunked<T> {
     #[doc(hidden)]
     pub fn into_no_null_iter(
         &self,
-    ) -> impl Iterator<Item = &T> + '_ + Send + Sync + ExactSizeIterator + DoubleEndedIterator + TrustedLen
+    ) -> impl '_ + Send + Sync + ExactSizeIterator<Item = &T> + DoubleEndedIterator + TrustedLen
     {
         // we know that we only iterate over length == self.len()
         unsafe {
@@ -609,7 +452,7 @@ impl<'a> Iterator for StructIter<'a> {
         for it in &mut self.field_iter {
             self.buf.push(it.next()?);
         }
-        // Safety:
+        // SAFETY:
         // Lifetime is bound to struct, we just cannot set the lifetime for the iterator trait
         unsafe {
             Some(std::mem::transmute::<&'_ [AnyValue], &'a [AnyValue]>(
@@ -619,8 +462,8 @@ impl<'a> Iterator for StructIter<'a> {
     }
 }
 
-/// Wrapper struct to convert an iterator of type `T` into one of type `Option<T>`.  It is useful to make the
-/// `IntoIterator` trait, in which every iterator shall return an `Option<T>`.
+/// Wrapper struct to convert an iterator of type `T` into one of type [`Option<T>`].  It is useful to make the
+/// [`IntoIterator`] trait, in which every iterator shall return an [`Option<T>`].
 pub struct SomeIterator<I>(I)
 where
     I: Iterator;
@@ -668,14 +511,14 @@ mod test {
         )
     }
 
-    /// Generate test for `IntoIterator` trait for chunked arrays with just one chunk and no null values.
-    /// The expected return value of the iterator generated by `IntoIterator` trait is `Option<T>`, where
+    /// Generate test for [`IntoIterator`] trait for chunked arrays with just one chunk and no null values.
+    /// The expected return value of the iterator generated by [`IntoIterator`] trait is [`Option<T>`], where
     /// `T` is the chunked array type.
     ///
     /// # Input
     ///
     /// test_name: The name of the test to generate.
-    /// ca_type: The chunked array to use for this test. Ex: `Utf8Chunked`, `UInt32Chunked` ...
+    /// ca_type: The chunked array to use for this test. Ex: [`StringChunked`], [`UInt32Chunked`] ...
     /// first_val: The first value contained in the chunked array.
     /// second_val: The second value contained in the chunked array.
     /// third_val: The third value contained in the chunked array.
@@ -726,20 +569,20 @@ mod test {
     }
 
     impl_test_iter_single_chunk!(num_iter_single_chunk, UInt32Chunked, 1, 2, 3);
-    impl_test_iter_single_chunk!(utf8_iter_single_chunk, Utf8Chunked, "a", "b", "c");
+    impl_test_iter_single_chunk!(utf8_iter_single_chunk, StringChunked, "a", "b", "c");
     impl_test_iter_single_chunk!(bool_iter_single_chunk, BooleanChunked, true, true, false);
 
-    /// Generate test for `IntoIterator` trait for chunked arrays with just one chunk and null values.
-    /// The expected return value of the iterator generated by `IntoIterator` trait is `Option<T>`, where
+    /// Generate test for [`IntoIterator`] trait for chunked arrays with just one chunk and null values.
+    /// The expected return value of the iterator generated by [`IntoIterator`] trait is [`Option<T>`], where
     /// `T` is the chunked array type.
     ///
     /// # Input
     ///
     /// test_name: The name of the test to generate.
-    /// ca_type: The chunked array to use for this test. Ex: `Utf8Chunked`, `UInt32Chunked` ...
-    /// first_val: The first value contained in the chunked array. Must be an `Option<T>`.
-    /// second_val: The second value contained in the chunked array. Must be an `Option<T>`.
-    /// third_val: The third value contained in the chunked array. Must be an `Option<T>`.
+    /// ca_type: The chunked array to use for this test. Ex: [`StringChunked`], [`UInt32Chunked`] ...
+    /// first_val: The first value contained in the chunked array. Must be an [`Option<T>`].
+    /// second_val: The second value contained in the chunked array. Must be an [`Option<T>`].
+    /// third_val: The third value contained in the chunked array. Must be an [`Option<T>`].
     macro_rules! impl_test_iter_single_chunk_null_check {
         ($test_name:ident, $ca_type:ty, $first_val:expr, $second_val:expr, $third_val:expr) => {
             #[test]
@@ -795,7 +638,7 @@ mod test {
     );
     impl_test_iter_single_chunk_null_check!(
         utf8_iter_single_chunk_null_check,
-        Utf8Chunked,
+        StringChunked,
         Some("a"),
         None,
         Some("c")
@@ -808,14 +651,14 @@ mod test {
         Some(false)
     );
 
-    /// Generate test for `IntoIterator` trait for chunked arrays with many chunks and no null values.
-    /// The expected return value of the iterator generated by `IntoIterator` trait is `Option<T>`, where
+    /// Generate test for [`IntoIterator`] trait for chunked arrays with many chunks and no null values.
+    /// The expected return value of the iterator generated by [`IntoIterator`] trait is [`Option<T>`], where
     /// `T` is the chunked array type.
     ///
     /// # Input
     ///
     /// test_name: The name of the test to generate.
-    /// ca_type: The chunked array to use for this test. Ex: `Utf8Chunked`, `UInt32Chunked` ...
+    /// ca_type: The chunked array to use for this test. Ex: [`StringChunked`], [`UInt32Chunked`] ...
     /// first_val: The first value contained in the chunked array.
     /// second_val: The second value contained in the chunked array.
     /// third_val: The third value contained in the chunked array.
@@ -868,20 +711,20 @@ mod test {
     }
 
     impl_test_iter_many_chunk!(num_iter_many_chunk, UInt32Chunked, 1, 2, 3);
-    impl_test_iter_many_chunk!(utf8_iter_many_chunk, Utf8Chunked, "a", "b", "c");
+    impl_test_iter_many_chunk!(utf8_iter_many_chunk, StringChunked, "a", "b", "c");
     impl_test_iter_many_chunk!(bool_iter_many_chunk, BooleanChunked, true, true, false);
 
-    /// Generate test for `IntoIterator` trait for chunked arrays with many chunk and null values.
-    /// The expected return value of the iterator generated by `IntoIterator` trait is `Option<T>`, where
+    /// Generate test for [`IntoIterator`] trait for chunked arrays with many chunk and null values.
+    /// The expected return value of the iterator generated by [`IntoIterator`] trait is [`Option<T>`], where
     /// `T` is the chunked array type.
     ///
     /// # Input
     ///
     /// test_name: The name of the test to generate.
-    /// ca_type: The chunked array to use for this test. Ex: `Utf8Chunked`, `UInt32Chunked` ...
-    /// first_val: The first value contained in the chunked array. Must be an `Option<T>`.
-    /// second_val: The second value contained in the chunked array. Must be an `Option<T>`.
-    /// third_val: The third value contained in the chunked array. Must be an `Option<T>`.
+    /// ca_type: The chunked array to use for this test. Ex: [`StringChunked`], [`UInt32Chunked`] ...
+    /// first_val: The first value contained in the chunked array. Must be an [`Option<T>`].
+    /// second_val: The second value contained in the chunked array. Must be an [`Option<T>`].
+    /// third_val: The third value contained in the chunked array. Must be an [`Option<T>`].
     macro_rules! impl_test_iter_many_chunk_null_check {
         ($test_name:ident, $ca_type:ty, $first_val:expr, $second_val:expr, $third_val:expr) => {
             #[test]
@@ -939,7 +782,7 @@ mod test {
     );
     impl_test_iter_many_chunk_null_check!(
         utf8_iter_many_chunk_null_check,
-        Utf8Chunked,
+        StringChunked,
         Some("a"),
         None,
         Some("c")
@@ -952,14 +795,14 @@ mod test {
         Some(false)
     );
 
-    /// Generate test for `IntoNoNullIterator` trait for chunked arrays with just one chunk and no null values.
-    /// The expected return value of the iterator generated by `IntoNoNullIterator` trait is `T`, where
+    /// Generate test for [`IntoNoNullIterator`] trait for chunked arrays with just one chunk and no null values.
+    /// The expected return value of the iterator generated by [`IntoNoNullIterator`] trait is `T`, where
     /// `T` is the chunked array type.
     ///
     /// # Input
     ///
     /// test_name: The name of the test to generate.
-    /// ca_type: The chunked array to use for this test. Ex: `Utf8Chunked`, `UInt32Chunked` ...
+    /// ca_type: The chunked array to use for this test. Ex: [`StringChunked`], [`UInt32Chunked`] ...
     /// first_val: The first value contained in the chunked array.
     /// second_val: The second value contained in the chunked array.
     /// third_val: The third value contained in the chunked array.
@@ -1012,7 +855,7 @@ mod test {
     impl_test_no_null_iter_single_chunk!(num_no_null_iter_single_chunk, UInt32Chunked, 1, 2, 3);
     impl_test_no_null_iter_single_chunk!(
         utf8_no_null_iter_single_chunk,
-        Utf8Chunked,
+        StringChunked,
         "a",
         "b",
         "c"
@@ -1025,14 +868,14 @@ mod test {
         false
     );
 
-    /// Generate test for `IntoNoNullIterator` trait for chunked arrays with many chunks and no null values.
-    /// The expected return value of the iterator generated by `IntoNoNullIterator` trait is `T`, where
+    /// Generate test for [`IntoNoNullIterator`] trait for chunked arrays with many chunks and no null values.
+    /// The expected return value of the iterator generated by [`IntoNoNullIterator`] trait is `T`, where
     /// `T` is the chunked array type.
     ///
     /// # Input
     ///
     /// test_name: The name of the test to generate.
-    /// ca_type: The chunked array to use for this test. Ex: `Utf8Chunked`, `UInt32Chunked` ...
+    /// ca_type: The chunked array to use for this test. Ex: [`StringChunked`], [`UInt32Chunked`] ...
     /// first_val: The first value contained in the chunked array.
     /// second_val: The second value contained in the chunked array.
     /// third_val: The third value contained in the chunked array.
@@ -1085,7 +928,7 @@ mod test {
     }
 
     impl_test_no_null_iter_many_chunk!(num_no_null_iter_many_chunk, UInt32Chunked, 1, 2, 3);
-    impl_test_no_null_iter_many_chunk!(utf8_no_null_iter_many_chunk, Utf8Chunked, "a", "b", "c");
+    impl_test_no_null_iter_many_chunk!(utf8_no_null_iter_many_chunk, StringChunked, "a", "b", "c");
     impl_test_no_null_iter_many_chunk!(
         bool_no_null_iter_many_chunk,
         BooleanChunked,
@@ -1147,7 +990,7 @@ mod test {
     }
 
     impl_test_iter_skip!(utf8_iter_single_chunk_skip, 8, Some("0"), Some("9"), {
-        Utf8Chunked::from_slice("test", &generate_utf8_vec(SKIP_ITERATOR_SIZE))
+        StringChunked::from_slice("test", &generate_utf8_vec(SKIP_ITERATOR_SIZE))
     });
 
     impl_test_iter_skip!(
@@ -1155,29 +998,29 @@ mod test {
         8,
         Some("0"),
         None,
-        { Utf8Chunked::new("test", &generate_opt_utf8_vec(SKIP_ITERATOR_SIZE)) }
+        { StringChunked::new("test", &generate_opt_utf8_vec(SKIP_ITERATOR_SIZE)) }
     );
 
     impl_test_iter_skip!(utf8_iter_many_chunk_skip, 18, Some("0"), Some("9"), {
-        let mut a = Utf8Chunked::from_slice("test", &generate_utf8_vec(SKIP_ITERATOR_SIZE));
-        let a_b = Utf8Chunked::from_slice("test", &generate_utf8_vec(SKIP_ITERATOR_SIZE));
+        let mut a = StringChunked::from_slice("test", &generate_utf8_vec(SKIP_ITERATOR_SIZE));
+        let a_b = StringChunked::from_slice("test", &generate_utf8_vec(SKIP_ITERATOR_SIZE));
         a.append(&a_b);
         a
     });
 
     impl_test_iter_skip!(utf8_iter_many_chunk_null_check_skip, 18, Some("0"), None, {
-        let mut a = Utf8Chunked::new("test", &generate_opt_utf8_vec(SKIP_ITERATOR_SIZE));
-        let a_b = Utf8Chunked::new("test", &generate_opt_utf8_vec(SKIP_ITERATOR_SIZE));
+        let mut a = StringChunked::new("test", &generate_opt_utf8_vec(SKIP_ITERATOR_SIZE));
+        let a_b = StringChunked::new("test", &generate_opt_utf8_vec(SKIP_ITERATOR_SIZE));
         a.append(&a_b);
         a
     });
 
-    /// Generates a `Vec` of `bool`, with even indexes are true, and odd indexes are false.
+    /// Generates a [`Vec`] of [`bool`], with even indexes are true, and odd indexes are false.
     fn generate_boolean_vec(size: usize) -> Vec<bool> {
         (0..size).map(|n| n % 2 == 0).collect()
     }
 
-    /// Generate a `Vec` of `Option<bool>`, where:
+    /// Generate a [`Vec`] of [`Option<bool>`], where:
     /// - If the index is divisible by 3, then, the value is `None`.
     /// - If the index is not divisible by 3 and it is even, then, the value is `Some(true)`.
     /// - Otherwise, the value is `Some(false)`.

@@ -1,16 +1,17 @@
 use super::*;
 
-pub(crate) fn row_count_at_scan(q: LazyFrame) -> bool {
+#[cfg(feature = "parquet")]
+pub(crate) fn row_index_at_scan(q: LazyFrame) -> bool {
     let (mut expr_arena, mut lp_arena) = get_arenas();
     let lp = q.optimize(&mut lp_arena, &mut expr_arena).unwrap();
 
     (&lp_arena).iter(lp).any(|(_, lp)| {
-        use ALogicalPlan::*;
+        use IR::*;
         matches!(
             lp,
             Scan {
                 file_options: FileScanOptions {
-                    row_count: Some(_),
+                    row_index: Some(_),
                     ..
                 },
                 ..
@@ -24,7 +25,7 @@ pub(crate) fn predicate_at_scan(q: LazyFrame) -> bool {
     let lp = q.optimize(&mut lp_arena, &mut expr_arena).unwrap();
 
     (&lp_arena).iter(lp).any(|(_, lp)| {
-        use ALogicalPlan::*;
+        use IR::*;
         matches!(
             lp,
             DataFrameScan {
@@ -38,25 +39,46 @@ pub(crate) fn predicate_at_scan(q: LazyFrame) -> bool {
     })
 }
 
+pub(crate) fn predicate_at_all_scans(q: LazyFrame) -> bool {
+    let (mut expr_arena, mut lp_arena) = get_arenas();
+    let lp = q.optimize(&mut lp_arena, &mut expr_arena).unwrap();
+
+    (&lp_arena).iter(lp).all(|(_, lp)| {
+        use IR::*;
+        matches!(
+            lp,
+            DataFrameScan {
+                selection: Some(_),
+                ..
+            } | Scan {
+                predicate: Some(_),
+                ..
+            }
+        )
+    })
+}
+
+#[cfg(feature = "streaming")]
 pub(crate) fn is_pipeline(q: LazyFrame) -> bool {
     let (mut expr_arena, mut lp_arena) = get_arenas();
     let lp = q.optimize(&mut lp_arena, &mut expr_arena).unwrap();
     matches!(
         lp_arena.get(lp),
-        ALogicalPlan::MapFunction {
+        IR::MapFunction {
             function: FunctionNode::Pipeline { .. },
             ..
         }
     )
 }
 
+#[cfg(feature = "streaming")]
 pub(crate) fn has_pipeline(q: LazyFrame) -> bool {
     let (mut expr_arena, mut lp_arena) = get_arenas();
     let lp = q.optimize(&mut lp_arena, &mut expr_arena).unwrap();
     (&lp_arena).iter(lp).any(|(_, lp)| {
         matches!(
             lp,
-            ALogicalPlan::MapFunction {
+            IR::MapFunction {
                 function: FunctionNode::Pipeline { .. },
                 ..
             }
@@ -64,11 +86,12 @@ pub(crate) fn has_pipeline(q: LazyFrame) -> bool {
     })
 }
 
+#[cfg(any(feature = "parquet", feature = "csv"))]
 fn slice_at_scan(q: LazyFrame) -> bool {
     let (mut expr_arena, mut lp_arena) = get_arenas();
     let lp = q.optimize(&mut lp_arena, &mut expr_arena).unwrap();
     (&lp_arena).iter(lp).any(|(_, lp)| {
-        use ALogicalPlan::*;
+        use IR::*;
         match lp {
             Scan { file_options, .. } => file_options.n_rows.is_some(),
             _ => false,
@@ -88,7 +111,7 @@ fn test_pred_pd_1() -> PolarsResult<()> {
 
     assert!(predicate_at_scan(q));
 
-    // check if we understand that we can unwrap the alias
+    // Check if we understand that we can unwrap the alias.
     let q = df
         .clone()
         .lazy()
@@ -97,7 +120,7 @@ fn test_pred_pd_1() -> PolarsResult<()> {
 
     assert!(predicate_at_scan(q));
 
-    // check if we pass hstack
+    // Check if we pass hstack.
     let q = df
         .clone()
         .lazy()
@@ -142,11 +165,12 @@ fn test_no_left_join_pass() -> PolarsResult<()> {
         "bar" => [5, 5],
     ]?;
 
-    assert!(out.frame_equal(&expected));
+    assert!(out.equals(&expected));
     Ok(())
 }
 
 #[test]
+#[cfg(feature = "parquet")]
 pub fn test_simple_slice() -> PolarsResult<()> {
     let _guard = SINGLE_LOCK.lock().unwrap();
     let q = scan_foods_parquet(false).limit(3);
@@ -166,6 +190,7 @@ pub fn test_simple_slice() -> PolarsResult<()> {
 }
 
 #[test]
+#[cfg(feature = "parquet")]
 #[cfg(feature = "cse")]
 pub fn test_slice_pushdown_join() -> PolarsResult<()> {
     let _guard = SINGLE_LOCK.lock().unwrap();
@@ -188,7 +213,7 @@ pub fn test_slice_pushdown_join() -> PolarsResult<()> {
     let (mut expr_arena, mut lp_arena) = get_arenas();
     let lp = q.clone().optimize(&mut lp_arena, &mut expr_arena).unwrap();
     assert!((&lp_arena).iter(lp).all(|(_, lp)| {
-        use ALogicalPlan::*;
+        use IR::*;
         match lp {
             Join { options, .. } => options.args.slice == Some((1, 3)),
             Slice { .. } => false,
@@ -202,24 +227,25 @@ pub fn test_slice_pushdown_join() -> PolarsResult<()> {
 }
 
 #[test]
-pub fn test_slice_pushdown_groupby() -> PolarsResult<()> {
+#[cfg(feature = "parquet")]
+pub fn test_slice_pushdown_group_by() -> PolarsResult<()> {
     let _guard = SINGLE_LOCK.lock().unwrap();
     let q = scan_foods_parquet(false).limit(100);
 
     let q = q
-        .groupby([col("category")])
+        .group_by([col("category")])
         .agg([col("calories").sum()])
         .slice(1, 3);
 
-    // test if optimization continued beyond the groupby node
+    // test if optimization continued beyond the group_by node
     assert!(slice_at_scan(q.clone()));
 
     let (mut expr_arena, mut lp_arena) = get_arenas();
     let lp = q.clone().optimize(&mut lp_arena, &mut expr_arena).unwrap();
     assert!((&lp_arena).iter(lp).all(|(_, lp)| {
-        use ALogicalPlan::*;
+        use IR::*;
         match lp {
-            Aggregate { options, .. } => options.slice == Some((1, 3)),
+            GroupBy { options, .. } => options.slice == Some((1, 3)),
             Slice { .. } => false,
             _ => true,
         }
@@ -231,11 +257,14 @@ pub fn test_slice_pushdown_groupby() -> PolarsResult<()> {
 }
 
 #[test]
+#[cfg(feature = "parquet")]
 pub fn test_slice_pushdown_sort() -> PolarsResult<()> {
     let _guard = SINGLE_LOCK.lock().unwrap();
     let q = scan_foods_parquet(false).limit(100);
 
-    let q = q.sort("category", SortOptions::default()).slice(1, 3);
+    let q = q
+        .sort(["category"], SortMultipleOptions::default())
+        .slice(1, 3);
 
     // test if optimization continued beyond the sort node
     assert!(slice_at_scan(q.clone()));
@@ -243,9 +272,9 @@ pub fn test_slice_pushdown_sort() -> PolarsResult<()> {
     let (mut expr_arena, mut lp_arena) = get_arenas();
     let lp = q.clone().optimize(&mut lp_arena, &mut expr_arena).unwrap();
     assert!((&lp_arena).iter(lp).all(|(_, lp)| {
-        use ALogicalPlan::*;
+        use IR::*;
         match lp {
-            Sort { args, .. } => args.slice == Some((1, 3)),
+            Sort { slice, .. } => *slice == Some((1, 3)),
             Slice { .. } => false,
             _ => true,
         }
@@ -266,12 +295,12 @@ pub fn test_predicate_block_cast() -> PolarsResult<()> {
     let lf1 = df
         .clone()
         .lazy()
-        .with_column(col("value").cast(DataType::Int16) * lit(0.1f32))
+        .with_column(col("value").cast(DataType::Int16) * lit(0.1).cast(DataType::Float32))
         .filter(col("value").lt(lit(2.5f32)));
 
     let lf2 = df
         .lazy()
-        .select([col("value").cast(DataType::Int16) * lit(0.1f32)])
+        .select([col("value").cast(DataType::Int16) * lit(0.1).cast(DataType::Float32)])
         .filter(col("value").lt(lit(2.5f32)));
 
     for lf in [lf1, lf2] {
@@ -302,7 +331,7 @@ fn test_lazy_filter_and_rename() {
         "x" => &[4, 5]
     }
     .unwrap();
-    assert!(lf.collect().unwrap().frame_equal(&correct));
+    assert!(lf.collect().unwrap().equals(&correct));
 
     // now we check if the column is rename or added when we don't select
     let lf = df.lazy().rename(["a"], ["x"]).filter(col("x").map(
@@ -316,7 +345,7 @@ fn test_lazy_filter_and_rename() {
 }
 
 #[test]
-fn test_with_row_count_opts() -> PolarsResult<()> {
+fn test_with_row_index_opts() -> PolarsResult<()> {
     let df = df![
         "a" => [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
     ]?;
@@ -324,23 +353,23 @@ fn test_with_row_count_opts() -> PolarsResult<()> {
     let out = df
         .clone()
         .lazy()
-        .with_row_count("row_nr", None)
+        .with_row_index("index", None)
         .tail(5)
         .collect()?;
     let expected = df![
-        "row_nr" => [5 as IdxSize, 6, 7, 8, 9],
+        "index" => [5 as IdxSize, 6, 7, 8, 9],
         "a" => [5, 6, 7, 8, 9],
     ]?;
 
-    assert!(out.frame_equal(&expected));
+    assert!(out.equals(&expected));
     let out = df
         .clone()
         .lazy()
-        .with_row_count("row_nr", None)
+        .with_row_index("index", None)
         .slice(1, 2)
         .collect()?;
     assert_eq!(
-        out.column("row_nr")?
+        out.column("index")?
             .idx()?
             .into_no_null_iter()
             .collect::<Vec<_>>(),
@@ -350,11 +379,11 @@ fn test_with_row_count_opts() -> PolarsResult<()> {
     let out = df
         .clone()
         .lazy()
-        .with_row_count("row_nr", None)
+        .with_row_index("index", None)
         .filter(col("a").eq(lit(3i32)))
         .collect()?;
     assert_eq!(
-        out.column("row_nr")?
+        out.column("index")?
             .idx()?
             .into_no_null_iter()
             .collect::<Vec<_>>(),
@@ -365,10 +394,10 @@ fn test_with_row_count_opts() -> PolarsResult<()> {
         .clone()
         .lazy()
         .slice(1, 2)
-        .with_row_count("row_nr", None)
+        .with_row_index("index", None)
         .collect()?;
     assert_eq!(
-        out.column("row_nr")?
+        out.column("index")?
             .idx()?
             .into_no_null_iter()
             .collect::<Vec<_>>(),
@@ -378,62 +407,15 @@ fn test_with_row_count_opts() -> PolarsResult<()> {
     let out = df
         .lazy()
         .filter(col("a").eq(lit(3i32)))
-        .with_row_count("row_nr", None)
+        .with_row_index("index", None)
         .collect()?;
     assert_eq!(
-        out.column("row_nr")?
+        out.column("index")?
             .idx()?
             .into_no_null_iter()
             .collect::<Vec<_>>(),
         &[0]
     );
-
-    Ok(())
-}
-
-#[test]
-fn test_groupby_ternary_literal_predicate() -> PolarsResult<()> {
-    let df = df![
-        "a" => [1, 2, 3],
-        "b" => [1, 2, 3]
-    ]?;
-
-    for predicate in [true, false] {
-        let q = df
-            .clone()
-            .lazy()
-            .groupby(["a"])
-            .agg([when(lit(predicate))
-                .then(col("b").sum())
-                .otherwise(NULL.lit())])
-            .sort("a", Default::default());
-
-        let (mut expr_arena, mut lp_arena) = get_arenas();
-        let lp = q.clone().optimize(&mut lp_arena, &mut expr_arena).unwrap();
-
-        (&lp_arena).iter(lp).any(|(_, lp)| {
-            use ALogicalPlan::*;
-            match lp {
-                Aggregate { aggs, .. } => {
-                    for node in aggs {
-                        // we should not have a ternary expression anymore
-                        assert!(!matches!(expr_arena.get(*node), AExpr::Ternary { .. }));
-                    }
-                    false
-                },
-                _ => false,
-            }
-        });
-
-        let out = q.collect()?;
-        let b = out.column("b")?;
-        let b = b.i32()?;
-        if predicate {
-            assert_eq!(Vec::from(b), &[Some(1), Some(2), Some(3)]);
-        } else {
-            assert_eq!(b.null_count(), 3);
-        };
-    }
 
     Ok(())
 }
@@ -454,8 +436,8 @@ fn test_string_addition_to_concat_str() -> PolarsResult<()> {
     let root = q.clone().optimize(&mut lp_arena, &mut expr_arena)?;
     let lp = lp_arena.get(root);
     let mut exprs = lp.get_exprs();
-    let expr_node = exprs.pop().unwrap();
-    if let AExpr::Function { input, .. } = expr_arena.get(expr_node) {
+    let e = exprs.pop().unwrap();
+    if let AExpr::Function { input, .. } = expr_arena.get(e.node()) {
         // the concat_str has the 4 expressions as input
         assert_eq!(input.len(), 4);
     } else {
@@ -464,7 +446,7 @@ fn test_string_addition_to_concat_str() -> PolarsResult<()> {
 
     let out = q.collect()?;
     let s = out.column("literal")?;
-    assert_eq!(s.get(0)?, AnyValue::Utf8("fooabbar"));
+    assert_eq!(s.get(0)?, AnyValue::String("fooabbar"));
 
     Ok(())
 }
@@ -486,7 +468,7 @@ fn test_with_column_prune() -> PolarsResult<()> {
         .select([col("c1"), col("c4")]);
     let lp = q.optimize(&mut lp_arena, &mut expr_arena).unwrap();
     (&lp_arena).iter(lp).for_each(|(_, lp)| {
-        use ALogicalPlan::*;
+        use IR::*;
         match lp {
             DataFrameScan { projection, .. } => {
                 let projection = projection.as_ref().unwrap();
@@ -509,15 +491,9 @@ fn test_with_column_prune() -> PolarsResult<()> {
 
     // check if with_column is pruned
     assert!((&lp_arena).iter(lp).all(|(_, lp)| {
-        use ALogicalPlan::*;
+        use IR::*;
 
-        matches!(
-            lp,
-            ALogicalPlan::MapFunction {
-                function: FunctionNode::FastProjection { .. },
-                ..
-            } | DataFrameScan { .. }
-        )
+        matches!(lp, IR::SimpleProjection { .. } | DataFrameScan { .. })
     }));
     assert_eq!(
         q.schema().unwrap().as_ref(),
@@ -527,14 +503,15 @@ fn test_with_column_prune() -> PolarsResult<()> {
 }
 
 #[test]
-fn test_slice_at_scan_groupby() -> PolarsResult<()> {
+#[cfg(feature = "csv")]
+fn test_slice_at_scan_group_by() -> PolarsResult<()> {
     let ldf = scan_foods_csv();
 
     // this tests if slice pushdown restarts aggregation nodes (it did not)
     let q = ldf
         .slice(0, 5)
         .filter(col("calories").lt(lit(10)))
-        .groupby([col("calories")])
+        .group_by([col("calories")])
         .agg([col("fats_g").first()])
         .select([col("fats_g")]);
 
@@ -563,7 +540,7 @@ fn test_flatten_unions() -> PolarsResult<()> {
     let root = lf4.optimize(&mut lp_arena, &mut expr_arena).unwrap();
     let lp = lp_arena.get(root);
     match lp {
-        ALogicalPlan::Union { inputs, .. } => {
+        IR::Union { inputs, .. } => {
             // we make sure that the nested unions are flattened into a single union
             assert_eq!(inputs.len(), 5);
         },

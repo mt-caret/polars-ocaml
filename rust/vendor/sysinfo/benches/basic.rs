@@ -3,7 +3,6 @@
 extern crate test;
 
 use sysinfo::get_current_pid;
-use sysinfo::{DiskExt, SystemExt};
 
 #[bench]
 fn bench_new(b: &mut test::Bencher) {
@@ -25,16 +24,6 @@ fn bench_refresh_all(b: &mut test::Bencher) {
 
     b.iter(move || {
         s.refresh_all();
-    });
-}
-
-#[bench]
-fn bench_refresh_system(b: &mut test::Bencher) {
-    let mut s = sysinfo::System::new_all();
-
-    s.refresh_system();
-    b.iter(move || {
-        s.refresh_system();
     });
 }
 
@@ -70,9 +59,9 @@ fn bench_refresh_process(b: &mut test::Bencher) {
 
 #[bench]
 fn bench_refresh_disk(b: &mut test::Bencher) {
-    let mut s = sysinfo::System::new_all();
+    let mut disks = sysinfo::Disks::new_with_refreshed_list();
 
-    let disks = s.disks_mut();
+    let disks = disks.list_mut();
     let disk = &mut disks[0];
     b.iter(move || {
         disk.refresh();
@@ -81,37 +70,37 @@ fn bench_refresh_disk(b: &mut test::Bencher) {
 
 #[bench]
 fn bench_refresh_disks(b: &mut test::Bencher) {
-    let mut s = sysinfo::System::new_all();
+    let mut disks = sysinfo::Disks::new_with_refreshed_list();
 
     b.iter(move || {
-        s.refresh_disks();
+        disks.refresh();
     });
 }
 
 #[bench]
 fn bench_refresh_disks_list(b: &mut test::Bencher) {
-    let mut s = sysinfo::System::new();
+    let mut disks = sysinfo::Disks::new_with_refreshed_list();
 
     b.iter(move || {
-        s.refresh_disks_list();
+        disks.refresh_list();
     });
 }
 
 #[bench]
 fn bench_refresh_networks(b: &mut test::Bencher) {
-    let mut s = sysinfo::System::new_all();
+    let mut n = sysinfo::Networks::new_with_refreshed_list();
 
     b.iter(move || {
-        s.refresh_networks();
+        n.refresh();
     });
 }
 
 #[bench]
 fn bench_refresh_networks_list(b: &mut test::Bencher) {
-    let mut s = sysinfo::System::new();
+    let mut n = sysinfo::Networks::new_with_refreshed_list();
 
     b.iter(move || {
-        s.refresh_networks_list();
+        n.refresh_list();
     });
 }
 
@@ -135,27 +124,27 @@ fn bench_refresh_cpu(b: &mut test::Bencher) {
 
 #[bench]
 fn bench_refresh_components(b: &mut test::Bencher) {
-    let mut s = sysinfo::System::new_all();
+    let mut c = sysinfo::Components::new_with_refreshed_list();
 
     b.iter(move || {
-        s.refresh_components();
+        c.refresh();
     });
 }
 
 #[bench]
 fn bench_refresh_components_list(b: &mut test::Bencher) {
-    let mut s = sysinfo::System::new_all();
+    let mut c = sysinfo::Components::new_with_refreshed_list();
 
     b.iter(move || {
-        s.refresh_components_list();
+        c.refresh_list();
     });
 }
 
 #[bench]
 fn bench_refresh_users_list(b: &mut test::Bencher) {
-    let mut s = sysinfo::System::new_all();
+    let mut users = sysinfo::Users::new_with_refreshed_list();
 
     b.iter(move || {
-        s.refresh_users_list();
+        users.refresh_list();
     });
 }

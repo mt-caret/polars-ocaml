@@ -13,7 +13,7 @@
 edition = "2018"
 rust-version = "1.60.0"
 name = "zerocopy-derive"
-version = "0.7.32"
+version = "0.7.34"
 authors = ["Joshua Liebow-Feeser <joshlf@google.com>"]
 exclude = [
     ".*",

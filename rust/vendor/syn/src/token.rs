@@ -88,6 +88,8 @@
 //! [Printing]: https://docs.rs/quote/1.0/quote/trait.ToTokens.html
 //! [`Span`]: https://docs.rs/proc-macro2/1.0/proc_macro2/struct.Span.html
 
+#[cfg(feature = "parsing")]
+pub(crate) use self::private::CustomToken;
 use self::private::WithSpan;
 #[cfg(feature = "parsing")]
 use crate::buffer::Cursor;
@@ -134,7 +136,9 @@ pub trait Token: private::Sealed {
     fn display() -> &'static str;
 }
 
-mod private {
+pub(crate) mod private {
+    #[cfg(feature = "parsing")]
+    use crate::buffer::Cursor;
     use proc_macro2::Span;
 
     #[cfg(feature = "parsing")]
@@ -143,8 +147,17 @@ mod private {
     /// Support writing `token.span` rather than `token.spans[0]` on tokens that
     /// hold a single span.
     #[repr(transparent)]
+    #[allow(unknown_lints, repr_transparent_external_private_fields)] // False positive: https://github.com/rust-lang/rust/issues/78586#issuecomment-1722680482
     pub struct WithSpan {
         pub span: Span,
+    }
+
+    // Not public API.
+    #[doc(hidden)]
+    #[cfg(feature = "parsing")]
+    pub trait CustomToken {
+        fn peek(cursor: Cursor) -> bool;
+        fn display() -> &'static str;
     }
 }
 
@@ -217,14 +230,6 @@ impl_low_level_token!("punctuation token" Punct punct);
 impl_low_level_token!("literal" Literal literal);
 impl_low_level_token!("token" TokenTree token_tree);
 
-// Not public API.
-#[doc(hidden)]
-#[cfg(feature = "parsing")]
-pub trait CustomToken {
-    fn peek(cursor: Cursor) -> bool;
-    fn display() -> &'static str;
-}
-
 #[cfg(feature = "parsing")]
 impl<T: CustomToken> private::Sealed for T {}
 
@@ -269,11 +274,11 @@ macro_rules! define_keywords {
             }
 
             #[cfg(feature = "clone-impls")]
-            #[cfg_attr(doc_cfg, doc(cfg(feature = "clone-impls")))]
+            #[cfg_attr(docsrs, doc(cfg(feature = "clone-impls")))]
             impl Copy for $name {}
 
             #[cfg(feature = "clone-impls")]
-            #[cfg_attr(doc_cfg, doc(cfg(feature = "clone-impls")))]
+            #[cfg_attr(docsrs, doc(cfg(feature = "clone-impls")))]
             impl Clone for $name {
                 fn clone(&self) -> Self {
                     *self
@@ -281,7 +286,7 @@ macro_rules! define_keywords {
             }
 
             #[cfg(feature = "extra-traits")]
-            #[cfg_attr(doc_cfg, doc(cfg(feature = "extra-traits")))]
+            #[cfg_attr(docsrs, doc(cfg(feature = "extra-traits")))]
             impl Debug for $name {
                 fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
                     f.write_str(stringify!($name))
@@ -289,11 +294,11 @@ macro_rules! define_keywords {
             }
 
             #[cfg(feature = "extra-traits")]
-            #[cfg_attr(doc_cfg, doc(cfg(feature = "extra-traits")))]
+            #[cfg_attr(docsrs, doc(cfg(feature = "extra-traits")))]
             impl cmp::Eq for $name {}
 
             #[cfg(feature = "extra-traits")]
-            #[cfg_attr(doc_cfg, doc(cfg(feature = "extra-traits")))]
+            #[cfg_attr(docsrs, doc(cfg(feature = "extra-traits")))]
             impl PartialEq for $name {
                 fn eq(&self, _other: &$name) -> bool {
                     true
@@ -301,13 +306,13 @@ macro_rules! define_keywords {
             }
 
             #[cfg(feature = "extra-traits")]
-            #[cfg_attr(doc_cfg, doc(cfg(feature = "extra-traits")))]
+            #[cfg_attr(docsrs, doc(cfg(feature = "extra-traits")))]
             impl Hash for $name {
                 fn hash<H: Hasher>(&self, _state: &mut H) {}
             }
 
             #[cfg(feature = "printing")]
-            #[cfg_attr(doc_cfg, doc(cfg(feature = "printing")))]
+            #[cfg_attr(docsrs, doc(cfg(feature = "printing")))]
             impl ToTokens for $name {
                 fn to_tokens(&self, tokens: &mut TokenStream) {
                     printing::keyword($token, self.span, tokens);
@@ -315,7 +320,7 @@ macro_rules! define_keywords {
             }
 
             #[cfg(feature = "parsing")]
-            #[cfg_attr(doc_cfg, doc(cfg(feature = "parsing")))]
+            #[cfg_attr(docsrs, doc(cfg(feature = "parsing")))]
             impl Parse for $name {
                 fn parse(input: ParseStream) -> Result<Self> {
                     Ok($name {
@@ -365,6 +370,7 @@ macro_rules! define_punctuation_structs {
     ($($token:literal pub struct $name:ident/$len:tt #[doc = $usage:literal])*) => {
         $(
             #[cfg_attr(not(doc), repr(transparent))]
+            #[allow(unknown_lints, repr_transparent_external_private_fields)] // False positive: https://github.com/rust-lang/rust/issues/78586#issuecomment-1722680482
             #[doc = concat!('`', $token, '`')]
             ///
             /// Usage:
@@ -395,11 +401,11 @@ macro_rules! define_punctuation_structs {
             }
 
             #[cfg(feature = "clone-impls")]
-            #[cfg_attr(doc_cfg, doc(cfg(feature = "clone-impls")))]
+            #[cfg_attr(docsrs, doc(cfg(feature = "clone-impls")))]
             impl Copy for $name {}
 
             #[cfg(feature = "clone-impls")]
-            #[cfg_attr(doc_cfg, doc(cfg(feature = "clone-impls")))]
+            #[cfg_attr(docsrs, doc(cfg(feature = "clone-impls")))]
             impl Clone for $name {
                 fn clone(&self) -> Self {
                     *self
@@ -407,7 +413,7 @@ macro_rules! define_punctuation_structs {
             }
 
             #[cfg(feature = "extra-traits")]
-            #[cfg_attr(doc_cfg, doc(cfg(feature = "extra-traits")))]
+            #[cfg_attr(docsrs, doc(cfg(feature = "extra-traits")))]
             impl Debug for $name {
                 fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
                     f.write_str(stringify!($name))
@@ -415,11 +421,11 @@ macro_rules! define_punctuation_structs {
             }
 
             #[cfg(feature = "extra-traits")]
-            #[cfg_attr(doc_cfg, doc(cfg(feature = "extra-traits")))]
+            #[cfg_attr(docsrs, doc(cfg(feature = "extra-traits")))]
             impl cmp::Eq for $name {}
 
             #[cfg(feature = "extra-traits")]
-            #[cfg_attr(doc_cfg, doc(cfg(feature = "extra-traits")))]
+            #[cfg_attr(docsrs, doc(cfg(feature = "extra-traits")))]
             impl PartialEq for $name {
                 fn eq(&self, _other: &$name) -> bool {
                     true
@@ -427,7 +433,7 @@ macro_rules! define_punctuation_structs {
             }
 
             #[cfg(feature = "extra-traits")]
-            #[cfg_attr(doc_cfg, doc(cfg(feature = "extra-traits")))]
+            #[cfg_attr(docsrs, doc(cfg(feature = "extra-traits")))]
             impl Hash for $name {
                 fn hash<H: Hasher>(&self, _state: &mut H) {}
             }
@@ -445,7 +451,7 @@ macro_rules! define_punctuation {
             }
 
             #[cfg(feature = "printing")]
-            #[cfg_attr(doc_cfg, doc(cfg(feature = "printing")))]
+            #[cfg_attr(docsrs, doc(cfg(feature = "printing")))]
             impl ToTokens for $name {
                 fn to_tokens(&self, tokens: &mut TokenStream) {
                     printing::punct($token, &self.spans, tokens);
@@ -453,7 +459,7 @@ macro_rules! define_punctuation {
             }
 
             #[cfg(feature = "parsing")]
-            #[cfg_attr(doc_cfg, doc(cfg(feature = "parsing")))]
+            #[cfg_attr(docsrs, doc(cfg(feature = "parsing")))]
             impl Parse for $name {
                 fn parse(input: ParseStream) -> Result<Self> {
                     Ok($name {
@@ -502,11 +508,11 @@ macro_rules! define_delimiters {
             }
 
             #[cfg(feature = "clone-impls")]
-            #[cfg_attr(doc_cfg, doc(cfg(feature = "clone-impls")))]
+            #[cfg_attr(docsrs, doc(cfg(feature = "clone-impls")))]
             impl Copy for $name {}
 
             #[cfg(feature = "clone-impls")]
-            #[cfg_attr(doc_cfg, doc(cfg(feature = "clone-impls")))]
+            #[cfg_attr(docsrs, doc(cfg(feature = "clone-impls")))]
             impl Clone for $name {
                 fn clone(&self) -> Self {
                     *self
@@ -514,7 +520,7 @@ macro_rules! define_delimiters {
             }
 
             #[cfg(feature = "extra-traits")]
-            #[cfg_attr(doc_cfg, doc(cfg(feature = "extra-traits")))]
+            #[cfg_attr(docsrs, doc(cfg(feature = "extra-traits")))]
             impl Debug for $name {
                 fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
                     f.write_str(stringify!($name))
@@ -522,11 +528,11 @@ macro_rules! define_delimiters {
             }
 
             #[cfg(feature = "extra-traits")]
-            #[cfg_attr(doc_cfg, doc(cfg(feature = "extra-traits")))]
+            #[cfg_attr(docsrs, doc(cfg(feature = "extra-traits")))]
             impl cmp::Eq for $name {}
 
             #[cfg(feature = "extra-traits")]
-            #[cfg_attr(doc_cfg, doc(cfg(feature = "extra-traits")))]
+            #[cfg_attr(docsrs, doc(cfg(feature = "extra-traits")))]
             impl PartialEq for $name {
                 fn eq(&self, _other: &$name) -> bool {
                     true
@@ -534,7 +540,7 @@ macro_rules! define_delimiters {
             }
 
             #[cfg(feature = "extra-traits")]
-            #[cfg_attr(doc_cfg, doc(cfg(feature = "extra-traits")))]
+            #[cfg_attr(docsrs, doc(cfg(feature = "extra-traits")))]
             impl Hash for $name {
                 fn hash<H: Hasher>(&self, _state: &mut H) {}
             }
@@ -562,7 +568,7 @@ define_punctuation_structs! {
 }
 
 #[cfg(feature = "printing")]
-#[cfg_attr(doc_cfg, doc(cfg(feature = "printing")))]
+#[cfg_attr(docsrs, doc(cfg(feature = "printing")))]
 impl ToTokens for Underscore {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         tokens.append(Ident::new("_", self.span));
@@ -570,7 +576,7 @@ impl ToTokens for Underscore {
 }
 
 #[cfg(feature = "parsing")]
-#[cfg_attr(doc_cfg, doc(cfg(feature = "parsing")))]
+#[cfg_attr(docsrs, doc(cfg(feature = "parsing")))]
 impl Parse for Underscore {
     fn parse(input: ParseStream) -> Result<Self> {
         input.step(|cursor| {
@@ -631,11 +637,11 @@ impl std::default::Default for Group {
 }
 
 #[cfg(feature = "clone-impls")]
-#[cfg_attr(doc_cfg, doc(cfg(feature = "clone-impls")))]
+#[cfg_attr(docsrs, doc(cfg(feature = "clone-impls")))]
 impl Copy for Group {}
 
 #[cfg(feature = "clone-impls")]
-#[cfg_attr(doc_cfg, doc(cfg(feature = "clone-impls")))]
+#[cfg_attr(docsrs, doc(cfg(feature = "clone-impls")))]
 impl Clone for Group {
     fn clone(&self) -> Self {
         *self
@@ -643,7 +649,7 @@ impl Clone for Group {
 }
 
 #[cfg(feature = "extra-traits")]
-#[cfg_attr(doc_cfg, doc(cfg(feature = "extra-traits")))]
+#[cfg_attr(docsrs, doc(cfg(feature = "extra-traits")))]
 impl Debug for Group {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.write_str("Group")
@@ -651,11 +657,11 @@ impl Debug for Group {
 }
 
 #[cfg(feature = "extra-traits")]
-#[cfg_attr(doc_cfg, doc(cfg(feature = "extra-traits")))]
+#[cfg_attr(docsrs, doc(cfg(feature = "extra-traits")))]
 impl cmp::Eq for Group {}
 
 #[cfg(feature = "extra-traits")]
-#[cfg_attr(doc_cfg, doc(cfg(feature = "extra-traits")))]
+#[cfg_attr(docsrs, doc(cfg(feature = "extra-traits")))]
 impl PartialEq for Group {
     fn eq(&self, _other: &Group) -> bool {
         true
@@ -663,7 +669,7 @@ impl PartialEq for Group {
 }
 
 #[cfg(feature = "extra-traits")]
-#[cfg_attr(doc_cfg, doc(cfg(feature = "extra-traits")))]
+#[cfg_attr(docsrs, doc(cfg(feature = "extra-traits")))]
 impl Hash for Group {
     fn hash<H: Hasher>(&self, _state: &mut H) {}
 }
@@ -839,6 +845,67 @@ define_delimiters! {
 
 /// A type-macro that expands to the name of the Rust type representation of a
 /// given token.
+///
+/// As a type, `Token!` is commonly used in the type of struct fields, the type
+/// of a `let` statement, or in turbofish for a `parse` function.
+///
+/// ```
+/// use syn::{Ident, Token};
+/// use syn::parse::{Parse, ParseStream, Result};
+///
+/// // `struct Foo;`
+/// pub struct UnitStruct {
+///     struct_token: Token![struct],
+///     ident: Ident,
+///     semi_token: Token![;],
+/// }
+///
+/// impl Parse for UnitStruct {
+///     fn parse(input: ParseStream) -> Result<Self> {
+///         let struct_token: Token![struct] = input.parse()?;
+///         let ident: Ident = input.parse()?;
+///         let semi_token = input.parse::<Token![;]>()?;
+///         Ok(UnitStruct { struct_token, ident, semi_token })
+///     }
+/// }
+/// ```
+///
+/// As an expression, `Token!` is used for peeking tokens or instantiating
+/// tokens from a span.
+///
+/// ```
+/// # use syn::{Ident, Token};
+/// # use syn::parse::{Parse, ParseStream, Result};
+/// #
+/// # struct UnitStruct {
+/// #     struct_token: Token![struct],
+/// #     ident: Ident,
+/// #     semi_token: Token![;],
+/// # }
+/// #
+/// # impl Parse for UnitStruct {
+/// #     fn parse(input: ParseStream) -> Result<Self> {
+/// #         unimplemented!()
+/// #     }
+/// # }
+/// #
+/// fn make_unit_struct(name: Ident) -> UnitStruct {
+///     let span = name.span();
+///     UnitStruct {
+///         struct_token: Token![struct](span),
+///         ident: name,
+///         semi_token: Token![;](span),
+///     }
+/// }
+///
+/// # fn parse(input: ParseStream) -> Result<()> {
+/// if input.peek(Token![struct]) {
+///     let unit_struct: UnitStruct = input.parse()?;
+///     /* ... */
+/// }
+/// # Ok(())
+/// # }
+/// ```
 ///
 /// See the [token module] documentation for details and examples.
 ///

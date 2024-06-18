@@ -2,11 +2,10 @@
 use crate::charutils::is_not_structural_or_whitespace;
 use crate::safer_unchecked::GetSaferUnchecked;
 use crate::value::tape::Node;
-use crate::{Deserializer, Error, ErrorType, Result};
+use crate::{Deserializer, Error, ErrorType, InternalError, Result};
 use value_trait::StaticNode;
 
-#[cfg_attr(not(feature = "no-inline"), inline(always))]
-#[allow(clippy::cast_ptr_alignment)]
+#[cfg_attr(not(feature = "no-inline"), inline)]
 pub fn is_valid_true_atom(loc: &[u8]) -> bool {
     debug_assert!(loc.len() >= 8, "loc too short for a u64 read");
 
@@ -18,8 +17,6 @@ pub fn is_valid_true_atom(loc: &[u8]) -> bool {
         const TV: u64 = 0x00_00_00_00_65_75_72_74;
         const MASK4: u64 = 0x00_00_00_00_ff_ff_ff_ff;
 
-        // TODO: does this has the same effect as:
-        //   std::memcpy(&locval, loc, sizeof(uint64_t));
         let locval: u64 = loc.as_ptr().cast::<u64>().read_unaligned();
 
         error = (locval & MASK4) ^ TV;
@@ -34,50 +31,48 @@ macro_rules! get {
     }};
 }
 
-#[cfg_attr(not(feature = "no-inline"), inline(always))]
-#[allow(clippy::cast_ptr_alignment, unused_unsafe)]
+#[cfg_attr(not(feature = "no-inline"), inline)]
 pub fn is_valid_false_atom(loc: &[u8]) -> bool {
+    const FV: u64 = 0x00_00_00_65_73_6c_61_66;
+    const MASK5: u64 = 0x00_00_00_ff_ff_ff_ff_ff;
+
     debug_assert!(loc.len() >= 8, "loc too short for a u64 read");
 
     // TODO: this is ugly and probably copies data every time
     let mut error: u64;
-    unsafe {
-        //let fv: u64 = *(b"false   ".as_ptr() as *const u64);
-        // this is the same:
+    //let fv: u64 = *(b"false   ".as_ptr() as *const u64);
+    // this is the same:
 
-        const FV: u64 = 0x00_00_00_65_73_6c_61_66;
-        const MASK5: u64 = 0x00_00_00_ff_ff_ff_ff_ff;
+    let locval: u64 = unsafe { loc.as_ptr().cast::<u64>().read_unaligned() };
 
-        let locval: u64 = loc.as_ptr().cast::<u64>().read_unaligned();
+    // FIXME the original code looks like this:
+    // error = ((locval & mask5) ^ fv) as u32;
+    // but that fails on falsy as the u32 conversion
+    // will mask the error on the y so we re-write it
+    // it would be interesting what the consequences are
+    error = (locval & MASK5) ^ FV;
+    error |= u64::from(is_not_structural_or_whitespace(*get!(loc, 5)));
 
-        // FIXME the original code looks like this:
-        // error = ((locval & mask5) ^ fv) as u32;
-        // but that fails on falsy as the u32 conversion
-        // will mask the error on the y so we re-write it
-        // it would be interesting what the consequences are
-        error = (locval & MASK5) ^ FV;
-        error |= u64::from(is_not_structural_or_whitespace(*get!(loc, 5)));
-    }
     error == 0
 }
 
-#[cfg_attr(not(feature = "no-inline"), inline(always))]
-#[allow(clippy::cast_ptr_alignment, unused_unsafe)]
+#[cfg_attr(not(feature = "no-inline"), inline)]
 pub fn is_valid_null_atom(loc: &[u8]) -> bool {
+    //let nv: u64 = *(b"null   ".as_ptr() as *const u64);
+    // this is the same:
+    const NV: u64 = 0x00_00_00_00_6c_6c_75_6e;
+    const MASK4: u64 = 0x00_00_00_00_ff_ff_ff_ff;
+
     debug_assert!(loc.len() >= 8, "loc too short for a u64 read");
 
     // TODO is this expensive?
     let mut error: u64;
-    unsafe {
-        //let nv: u64 = *(b"null   ".as_ptr() as *const u64);
-        // this is the same:
-        const NV: u64 = 0x00_00_00_00_6c_6c_75_6e;
-        const MASK4: u64 = 0x00_00_00_00_ff_ff_ff_ff;
-        let locval: u64 = loc.as_ptr().cast::<u64>().read_unaligned();
 
-        error = (locval & MASK4) ^ NV;
-        error |= u64::from(is_not_structural_or_whitespace(*get!(loc, 4)));
-    }
+    let locval: u64 = unsafe { loc.as_ptr().cast::<u64>().read_unaligned() };
+
+    error = (locval & MASK4) ^ NV;
+    error |= u64::from(is_not_structural_or_whitespace(*get!(loc, 4)));
+
     error == 0
 }
 
@@ -88,33 +83,36 @@ enum State {
     MainArraySwitch,
 }
 #[derive(Debug)]
-enum StackState {
+pub(crate) enum StackState {
     Start,
-    Object,
-    Array,
+    Object { last_start: usize, cnt: usize },
+    Array { last_start: usize, cnt: usize },
 }
 
 impl<'de> Deserializer<'de> {
-    #[allow(
-        clippy::cognitive_complexity,
-        clippy::too_many_lines,
-        unused_unsafe,
-        clippy::uninit_vec
-    )]
+    #[cfg_attr(not(feature = "no-inline"), inline)]
+    #[allow(clippy::cognitive_complexity, clippy::too_many_lines, unused_unsafe)]
     pub(crate) fn build_tape(
         input: &'de mut [u8],
         input2: &[u8],
         buffer: &mut [u8],
         structural_indexes: &[u32],
-    ) -> Result<Vec<Node<'de>>> {
+        stack: &mut Vec<StackState>,
+        res: &mut Vec<Node<'de>>,
+    ) -> Result<()> {
+        res.clear();
+        res.reserve(structural_indexes.len());
         // While a valid json can have at max len/2 (`[[[]]]`)elements that are relevant
         // a invalid json might exceed this `[[[[[[` and we need to protect against that.
-        let mut res: Vec<Node<'de>> = Vec::with_capacity(structural_indexes.len());
-        let mut stack = Vec::with_capacity(structural_indexes.len());
+        stack.clear();
+        stack.reserve(structural_indexes.len());
+
+        let res_ptr = res.as_mut_ptr();
+        let stack_ptr = stack.as_mut_ptr();
 
         let mut depth: usize = 0;
-        let mut last_start = 1;
-        let mut cnt: usize = 0;
+        let mut last_start;
+        let mut cnt: usize;
         let mut r_i = 0;
 
         // let mut i: usize = 0; // index of the structural character (0,1,2,3...)
@@ -124,7 +122,7 @@ impl<'de> Deserializer<'de> {
         // by UPDATE_CHAR macro
         let mut c: u8 = 0;
         // skip the zero index
-        let mut i: usize = 1;
+        let mut i: usize = 0;
         let mut state;
 
         macro_rules! s2try {
@@ -147,7 +145,7 @@ impl<'de> Deserializer<'de> {
         macro_rules! insert_res {
             ($t:expr) => {
                 unsafe {
-                    res.as_mut_ptr().add(r_i).write($t);
+                    res_ptr.add(r_i).write($t);
                     r_i += 1;
                 }
             };
@@ -157,7 +155,7 @@ impl<'de> Deserializer<'de> {
                 unsafe {
                     res.set_len(r_i);
                 }
-                return Ok(res);
+                return Ok(());
             };
         }
         macro_rules! update_char {
@@ -178,8 +176,6 @@ impl<'de> Deserializer<'de> {
                 continue;
             }};
         }
-
-        insert_res!(Node::Static(StaticNode::Null));
 
         macro_rules! insert_str {
             () => {
@@ -275,7 +271,11 @@ impl<'de> Deserializer<'de> {
                 unsafe {
                     res.set_len(r_i);
                 };
-                return Err(Error::new_c(idx, c as char, ErrorType::InternalError));
+                return Err(Error::new_c(
+                    idx,
+                    c as char,
+                    ErrorType::InternalError(InternalError::TapeError),
+                ));
             };
             ($t:expr) => {
                 // We need to ensure that rust doesn't
@@ -293,12 +293,11 @@ impl<'de> Deserializer<'de> {
         match c {
             b'{' => {
                 unsafe {
-                    let s: *mut (StackState, usize, usize) = stack.as_mut_ptr();
-                    s.add(depth).write((StackState::Start, last_start, cnt));
+                    stack_ptr.add(depth).write(StackState::Start);
                 }
 
                 last_start = r_i;
-                insert_res!(Node::Object(0, 0));
+                insert_res!(Node::Object { len: 0, count: 0 });
 
                 depth += 1;
                 cnt = 1;
@@ -320,12 +319,11 @@ impl<'de> Deserializer<'de> {
             }
             b'[' => {
                 unsafe {
-                    let s: *mut (StackState, usize, usize) = stack.as_mut_ptr();
-                    s.add(depth).write((StackState::Start, last_start, cnt));
+                    stack_ptr.add(depth).write(StackState::Start);
                 }
 
                 last_start = r_i;
-                insert_res!(Node::Array(0, 0));
+                insert_res!(Node::Array { len: 0, count: 0 });
 
                 depth += 1;
                 cnt = 1;
@@ -341,7 +339,7 @@ impl<'de> Deserializer<'de> {
             b't' => {
                 unsafe {
                     if !is_valid_true_atom(get!(input2, idx..)) {
-                        fail!(ErrorType::ExpectedNull); // TODO: better error
+                        fail!(ErrorType::ExpectedTrue);
                     }
                 };
                 insert_res!(Node::Static(StaticNode::Bool(true)));
@@ -353,7 +351,7 @@ impl<'de> Deserializer<'de> {
             b'f' => {
                 unsafe {
                     if !is_valid_false_atom(get!(input2, idx..)) {
-                        fail!(ErrorType::ExpectedNull); // TODO: better error
+                        fail!(ErrorType::ExpectedFalse);
                     }
                 };
                 insert_res!(Node::Static(StaticNode::Bool(false)));
@@ -365,7 +363,7 @@ impl<'de> Deserializer<'de> {
             b'n' => {
                 unsafe {
                     if !is_valid_null_atom(get!(input2, idx..)) {
-                        fail!(ErrorType::ExpectedNull); // TODO: better error
+                        fail!(ErrorType::ExpectedNull);
                     }
                 };
                 insert_res!(Node::Static(StaticNode::Null));
@@ -420,21 +418,21 @@ impl<'de> Deserializer<'de> {
                         b't' => {
                             insert_res!(Node::Static(StaticNode::Bool(true)));
                             if !is_valid_true_atom(get!(input2, idx..)) {
-                                fail!(ErrorType::ExpectedBoolean); // TODO: better error
+                                fail!(ErrorType::ExpectedTrue);
                             }
                             object_continue!();
                         }
                         b'f' => {
                             insert_res!(Node::Static(StaticNode::Bool(false)));
                             if !is_valid_false_atom(get!(input2, idx..)) {
-                                fail!(ErrorType::ExpectedBoolean); // TODO: better error
+                                fail!(ErrorType::ExpectedFalse);
                             }
                             object_continue!();
                         }
                         b'n' => {
                             insert_res!(Node::Static(StaticNode::Null));
                             if !is_valid_null_atom(get!(input2, idx..)) {
-                                fail!(ErrorType::ExpectedNull); // TODO: better error
+                                fail!(ErrorType::ExpectedNull);
                             }
                             object_continue!();
                         }
@@ -454,22 +452,24 @@ impl<'de> Deserializer<'de> {
                         }
                         b'{' => {
                             unsafe {
-                                let s: *mut (StackState, usize, usize) = stack.as_mut_ptr();
-                                s.add(depth).write((StackState::Object, last_start, cnt));
+                                stack_ptr
+                                    .add(depth)
+                                    .write(StackState::Object { last_start, cnt });
                             }
                             last_start = r_i;
-                            insert_res!(Node::Object(0, 0));
+                            insert_res!(Node::Object { len: 0, count: 0 });
                             depth += 1;
                             cnt = 1;
                             object_begin!();
                         }
                         b'[' => {
                             unsafe {
-                                let s: *mut (StackState, usize, usize) = stack.as_mut_ptr();
-                                s.add(depth).write((StackState::Object, last_start, cnt));
+                                stack_ptr
+                                    .add(depth)
+                                    .write(StackState::Object { last_start, cnt });
                             }
                             last_start = r_i;
-                            insert_res!(Node::Array(0, 0));
+                            insert_res!(Node::Array { len: 0, count: 0 });
                             depth += 1;
                             cnt = 1;
                             array_begin!();
@@ -486,24 +486,39 @@ impl<'de> Deserializer<'de> {
                     }
                     depth -= 1;
                     unsafe {
-                        match *res.as_mut_ptr().add(last_start) {
-                            Node::Array(ref mut len, ref mut end)
-                            | Node::Object(ref mut len, ref mut end) => {
+                        match *res_ptr.add(last_start) {
+                            Node::Array {
+                                ref mut len,
+                                count: ref mut end,
+                            }
+                            | Node::Object {
+                                ref mut len,
+                                count: ref mut end,
+                            } => {
                                 *len = cnt;
-                                *end = r_i;
+                                *end = r_i - last_start - 1;
                             }
                             _ => unreachable!(),
                         };
                     }
                     unsafe {
-                        let a = stack.as_ptr().add(depth);
-
-                        last_start = (*a).1;
-                        cnt = (*a).2;
-
-                        match (*a).0 {
-                            StackState::Object => object_continue!(),
-                            StackState::Array => array_continue!(),
+                        match *stack_ptr.add(depth) {
+                            StackState::Object {
+                                last_start: l,
+                                cnt: c,
+                            } => {
+                                last_start = l;
+                                cnt = c;
+                                object_continue!();
+                            }
+                            StackState::Array {
+                                last_start: l,
+                                cnt: c,
+                            } => {
+                                last_start = l;
+                                cnt = c;
+                                array_continue!();
+                            }
                             StackState::Start => {
                                 if i == structural_indexes.len() {
                                     success!();
@@ -526,21 +541,21 @@ impl<'de> Deserializer<'de> {
                         b't' => {
                             insert_res!(Node::Static(StaticNode::Bool(true)));
                             if !is_valid_true_atom(get!(input2, idx..)) {
-                                fail!(ErrorType::ExpectedBoolean); // TODO: better error
+                                fail!(ErrorType::ExpectedTrue);
                             }
                             array_continue!();
                         }
                         b'f' => {
                             insert_res!(Node::Static(StaticNode::Bool(false)));
                             if !is_valid_false_atom(get!(input2, idx..)) {
-                                fail!(ErrorType::ExpectedBoolean); // TODO: better error
+                                fail!(ErrorType::ExpectedFalse);
                             }
                             array_continue!();
                         }
                         b'n' => {
                             insert_res!(Node::Static(StaticNode::Null));
                             if !is_valid_null_atom(get!(input2, idx..)) {
-                                fail!(ErrorType::ExpectedNull); // TODO: better error
+                                fail!(ErrorType::ExpectedNull);
                             }
                             array_continue!();
                         }
@@ -560,22 +575,24 @@ impl<'de> Deserializer<'de> {
                         }
                         b'{' => {
                             unsafe {
-                                let s: *mut (StackState, usize, usize) = stack.as_mut_ptr();
-                                s.add(depth).write((StackState::Array, last_start, cnt));
+                                stack_ptr
+                                    .add(depth)
+                                    .write(StackState::Array { last_start, cnt });
                             }
                             last_start = r_i;
-                            insert_res!(Node::Object(0, 0));
+                            insert_res!(Node::Object { len: 0, count: 0 });
                             depth += 1;
                             cnt = 1;
                             object_begin!();
                         }
                         b'[' => {
                             unsafe {
-                                let s: *mut (StackState, usize, usize) = stack.as_mut_ptr();
-                                s.add(depth).write((StackState::Array, last_start, cnt));
+                                stack_ptr
+                                    .add(depth)
+                                    .write(StackState::Array { last_start, cnt });
                             }
                             last_start = r_i;
-                            insert_res!(Node::Array(0, 0));
+                            insert_res!(Node::Array { len: 0, count: 0 });
                             depth += 1;
                             cnt = 1;
                             array_begin!();
@@ -625,11 +642,11 @@ mod test {
     fn parsing_errors() {
         assert_eq!(
             crate::serde::from_slice::<bool>(&mut b"time".to_vec()),
-            Err(Error::new_c(0, 't', ErrorType::ExpectedNull))
+            Err(Error::new_c(0, 't', ErrorType::ExpectedTrue))
         );
         assert_eq!(
             crate::serde::from_slice::<bool>(&mut b"falsy".to_vec()),
-            Err(Error::new_c(0, 'f', ErrorType::ExpectedNull))
+            Err(Error::new_c(0, 'f', ErrorType::ExpectedFalse))
         );
         assert_eq!(
             crate::serde::from_slice::<bool>(&mut b"new".to_vec()),
@@ -637,11 +654,11 @@ mod test {
         );
         assert_eq!(
             crate::serde::from_slice::<bool>(&mut b"[true, time]".to_vec()),
-            Err(Error::new_c(7, 't', ErrorType::ExpectedBoolean))
+            Err(Error::new_c(7, 't', ErrorType::ExpectedTrue))
         );
         assert_eq!(
             crate::serde::from_slice::<bool>(&mut b"[true, falsy]".to_vec()),
-            Err(Error::new_c(7, 'f', ErrorType::ExpectedBoolean))
+            Err(Error::new_c(7, 'f', ErrorType::ExpectedFalse))
         );
         assert_eq!(
             crate::serde::from_slice::<bool>(&mut b"[null, new]".to_vec()),
@@ -649,11 +666,11 @@ mod test {
         );
         assert_eq!(
             crate::serde::from_slice::<bool>(&mut br#"{"1":time}"#.to_vec()),
-            Err(Error::new_c(5, 't', ErrorType::ExpectedBoolean))
+            Err(Error::new_c(5, 't', ErrorType::ExpectedTrue))
         );
         assert_eq!(
             crate::serde::from_slice::<bool>(&mut br#"{"0":falsy}"#.to_vec()),
-            Err(Error::new_c(5, 'f', ErrorType::ExpectedBoolean))
+            Err(Error::new_c(5, 'f', ErrorType::ExpectedFalse))
         );
         assert_eq!(
             crate::serde::from_slice::<bool>(&mut br#"{"0":new}"#.to_vec()),
@@ -668,10 +685,9 @@ mod test {
         input2.append(vec![0; SIMDJSON_PADDING * 2].as_mut());
         let mut buffer = vec![0; 1024];
 
-        let s = Deserializer::parse_str_(input.as_mut_ptr(), &input2, buffer.as_mut_slice(), 0)?;
-        dbg!(s);
-        dbg!(&input[..20]);
-        dbg!(&input2[..20]);
+        let s = unsafe {
+            Deserializer::parse_str_(input.as_mut_ptr(), &input2, buffer.as_mut_slice(), 0)?
+        };
         assert_eq!(r#"{"arg":"test"}"#, s);
         Ok(())
     }

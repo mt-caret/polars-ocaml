@@ -1,3 +1,4 @@
+#![cfg(dbginfo = "collapsible")]
 mod auxiliary;
 
 macro_rules! pos {
@@ -6,6 +7,7 @@ macro_rules! pos {
     };
 }
 
+#[collapse_debuginfo(yes)]
 macro_rules! check {
     ($($pos:expr),*) => ({
         verify(&[$($pos,)* pos!()]);
@@ -29,8 +31,10 @@ fn doit() {
         dir.pop();
         if cfg!(windows) {
             dir.push("dylib_dep.dll");
-        } else if cfg!(target_os = "macos") {
+        } else if cfg!(target_vendor = "apple") {
             dir.push("libdylib_dep.dylib");
+        } else if cfg!(target_os = "aix") {
+            dir.push("libdylib_dep.a");
         } else {
             dir.push("libdylib_dep.so");
         }
@@ -94,16 +98,16 @@ fn verify(filelines: &[Pos]) {
     println!("-----------------------------------");
     println!("looking for:");
     for (file, line) in filelines.iter().rev() {
-        println!("\t{}:{}", file, line);
+        println!("\t{file}:{line}");
     }
-    println!("found:\n{:?}", trace);
+    println!("found:\n{trace:?}");
     let mut symbols = trace.frames().iter().flat_map(|frame| frame.symbols());
     let mut iter = filelines.iter().rev();
     while let Some((file, line)) = iter.next() {
         loop {
             let sym = match symbols.next() {
                 Some(sym) => sym,
-                None => panic!("failed to find {}:{}", file, line),
+                None => panic!("failed to find {file}:{line}"),
             };
             if let Some(filename) = sym.filename() {
                 if let Some(lineno) = sym.lineno() {

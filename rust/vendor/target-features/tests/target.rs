@@ -13,6 +13,7 @@ fn cpu() {
         &[
             "cmpxchg16b",
             "fxsr",
+            "lahfsahf",
             "popcnt",
             "sse",
             "sse2",

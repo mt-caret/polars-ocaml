@@ -2,7 +2,7 @@ use core::hash::Hash;
 cfg_if::cfg_if! {
     if #[cfg(any(
         all(any(target_arch = "x86", target_arch = "x86_64"), target_feature = "aes", not(miri)),
-        all(target_arch = "aarch64", target_feature = "aes", not(miri)),
+        all(feature = "nightly-arm-aes", target_arch = "aarch64", target_feature = "aes", not(miri)),
         all(feature = "nightly-arm-aes", target_arch = "arm", target_feature = "aes", not(miri)),
     ))] {
         use crate::aes_hash::*;
@@ -470,8 +470,8 @@ impl BuildHasherExt for RandomState {
     #[inline]
     fn hash_as_u64<T: Hash + ?Sized>(&self, value: &T) -> u64 {
         let mut hasher = AHasherU64 {
-            buffer: self.k0,
-            pad: self.k1,
+            buffer: self.k1,
+            pad: self.k0,
         };
         value.hash(&mut hasher);
         hasher.finish()

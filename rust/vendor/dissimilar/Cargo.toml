@@ -13,8 +13,13 @@
 edition = "2018"
 rust-version = "1.36"
 name = "dissimilar"
-version = "1.0.7"
+version = "1.0.9"
 authors = ["David Tolnay <dtolnay@gmail.com>"]
+build = false
+autobins = false
+autoexamples = false
+autotests = false
+autobenches = false
 description = "Diff library with semantic cleanup, based on Google's diff-match-patch"
 documentation = "https://docs.rs/dissimilar"
 readme = "README.md"
@@ -31,7 +36,14 @@ rustdoc-args = ["--generate-link-to-definition"]
 targets = ["x86_64-unknown-linux-gnu"]
 
 [lib]
+name = "dissimilar"
+path = "src/lib.rs"
 doc-scrape-examples = false
 
-[dev-dependencies.once_cell]
-version = "1"
+[[test]]
+name = "test"
+path = "tests/test.rs"
+
+[[bench]]
+name = "bench"
+path = "benches/bench.rs"

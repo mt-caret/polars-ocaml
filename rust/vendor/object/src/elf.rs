@@ -3826,6 +3826,10 @@ pub const SHT_ARM_PREEMPTMAP: u32 = SHT_LOPROC + 2;
 /// ARM attributes section.
 pub const SHT_ARM_ATTRIBUTES: u32 = SHT_LOPROC + 3;
 
+// AArch64 values for `SectionHeader*::sh_type`.
+/// AArch64 attributes section.
+pub const SHT_AARCH64_ATTRIBUTES: u32 = SHT_LOPROC + 3;
+
 // AArch64 values for `Rel*::r_type`.
 
 /// No relocation.
@@ -5802,6 +5806,10 @@ pub const EF_RISCV_FLOAT_ABI_DOUBLE: u32 = 0x0004;
 pub const EF_RISCV_FLOAT_ABI_QUAD: u32 = 0x0006;
 pub const EF_RISCV_RVE: u32 = 0x0008;
 pub const EF_RISCV_TSO: u32 = 0x0010;
+
+// RISC-V values for `SectionHeader*::sh_type`.
+/// RISC-V attributes section.
+pub const SHT_RISCV_ATTRIBUTES: u32 = SHT_LOPROC + 3;
 
 // RISC-V values `Rel*::r_type`.
 pub const R_RISCV_NONE: u32 = 0;

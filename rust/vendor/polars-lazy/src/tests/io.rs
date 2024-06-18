@@ -1,8 +1,11 @@
-use polars_io::RowCount;
+use polars_io::RowIndex;
+#[cfg(feature = "is_between")]
+use polars_ops::prelude::ClosedInterval;
 
 use super::*;
 
 #[test]
+#[cfg(feature = "parquet")]
 fn test_parquet_exec() -> PolarsResult<()> {
     let _guard = SINGLE_LOCK.lock().unwrap();
     // filter
@@ -34,6 +37,7 @@ fn test_parquet_exec() -> PolarsResult<()> {
 }
 
 #[test]
+#[cfg(all(feature = "parquet", feature = "is_between"))]
 fn test_parquet_statistics_no_skip() {
     let _guard = SINGLE_LOCK.lock().unwrap();
     init_files();
@@ -62,6 +66,38 @@ fn test_parquet_statistics_no_skip() {
         .unwrap();
     assert_eq!(out.shape(), (27, 4));
 
+    // statistics and `is_between`
+    // normal case
+    let out = scan_foods_parquet(par)
+        .filter(col("calories").is_between(40, 300, ClosedInterval::Both))
+        .collect()
+        .unwrap();
+    assert_eq!(out.shape(), (19, 4));
+    // normal case
+    let out = scan_foods_parquet(par)
+        .filter(col("calories").is_between(10, 50, ClosedInterval::Both))
+        .collect()
+        .unwrap();
+    assert_eq!(out.shape(), (11, 4));
+    // edge case: 20 = min(calories) but the right end is closed
+    let out = scan_foods_parquet(par)
+        .filter(col("calories").is_between(5, 20, ClosedInterval::Right))
+        .collect()
+        .unwrap();
+    assert_eq!(out.shape(), (1, 4));
+    // edge case: 200 = max(calories) but the left end is closed
+    let out = scan_foods_parquet(par)
+        .filter(col("calories").is_between(200, 250, ClosedInterval::Left))
+        .collect()
+        .unwrap();
+    assert_eq!(out.shape(), (3, 4));
+    // edge case: left == right but both ends are closed
+    let out = scan_foods_parquet(par)
+        .filter(col("calories").is_between(200, 200, ClosedInterval::Both))
+        .collect()
+        .unwrap();
+    assert_eq!(out.shape(), (3, 4));
+
     // Or operation
     let out = scan_foods_parquet(par)
         .filter(
@@ -75,6 +111,7 @@ fn test_parquet_statistics_no_skip() {
 }
 
 #[test]
+#[cfg(all(feature = "parquet", feature = "is_between"))]
 fn test_parquet_statistics() -> PolarsResult<()> {
     let _guard = SINGLE_LOCK.lock().unwrap();
     init_files();
@@ -97,10 +134,186 @@ fn test_parquet_statistics() -> PolarsResult<()> {
         .collect()?;
     assert_eq!(out.shape(), (0, 4));
 
+    // issue: 13427
+    let out = scan_foods_parquet(par)
+        .filter(col("calories").is_in(lit(Series::new("", [0, 500]))))
+        .collect()?;
+    assert_eq!(out.shape(), (0, 4));
+
+    // statistics and `is_between`
+    // 15 < min(calories)=20
+    let out = scan_foods_parquet(par)
+        .filter(col("calories").is_between(5, 15, ClosedInterval::Both))
+        .collect()?;
+    assert_eq!(out.shape(), (0, 4));
+
+    // 300 > max(calories)=200
+    let out = scan_foods_parquet(par)
+        .filter(col("calories").is_between(300, 500, ClosedInterval::Both))
+        .collect()?;
+    assert_eq!(out.shape(), (0, 4));
+
+    // 20 == min(calories) but right end is open
+    let out = scan_foods_parquet(par)
+        .filter(col("calories").is_between(5, 20, ClosedInterval::Left))
+        .collect()?;
+    assert_eq!(out.shape(), (0, 4));
+
+    // 20 == min(calories) but both  ends are open
+    let out = scan_foods_parquet(par)
+        .filter(col("calories").is_between(5, 20, ClosedInterval::None))
+        .collect()?;
+    assert_eq!(out.shape(), (0, 4));
+
+    // 200 == max(calories) but left end is open
+    let out = scan_foods_parquet(par)
+        .filter(col("calories").is_between(200, 250, ClosedInterval::Right))
+        .collect()?;
+    assert_eq!(out.shape(), (0, 4));
+
+    // 200 == max(calories) but both ends are open
+    let out = scan_foods_parquet(par)
+        .filter(col("calories").is_between(200, 250, ClosedInterval::None))
+        .collect()?;
+    assert_eq!(out.shape(), (0, 4));
+
+    // between(100, 40) is impossible
+    let out = scan_foods_parquet(par)
+        .filter(col("calories").is_between(100, 40, ClosedInterval::Both))
+        .collect()?;
+    assert_eq!(out.shape(), (0, 4));
+
+    // with strings
+    let out = scan_foods_parquet(par)
+        .filter(col("category").is_between(lit("yams"), lit("zest"), ClosedInterval::Both))
+        .collect()?;
+    assert_eq!(out.shape(), (0, 4));
+
+    // with strings
+    let out = scan_foods_parquet(par)
+        .filter(col("category").is_between(lit("dairy"), lit("eggs"), ClosedInterval::Both))
+        .collect()?;
+    assert_eq!(out.shape(), (0, 4));
+
     let out = scan_foods_parquet(par)
         .filter(lit(1000i32).lt(col("calories")))
         .collect()?;
     assert_eq!(out.shape(), (0, 4));
+
+    // not(a > b) => a <= b
+    let out = scan_foods_parquet(par)
+        .filter(not(col("calories").gt(5)))
+        .collect()?;
+    assert_eq!(out.shape(), (0, 4));
+
+    // not(a >= b) => a < b
+    // note that min(calories)=20
+    let out = scan_foods_parquet(par)
+        .filter(not(col("calories").gt_eq(20)))
+        .collect()?;
+    assert_eq!(out.shape(), (0, 4));
+
+    // not(a < b) => a >= b
+    let out = scan_foods_parquet(par)
+        .filter(not(col("calories").lt(250)))
+        .collect()?;
+    assert_eq!(out.shape(), (0, 4));
+
+    // not(a <= b) => a > b
+    // note that max(calories)=200
+    let out = scan_foods_parquet(par)
+        .filter(not(col("calories").lt_eq(200)))
+        .collect()?;
+    assert_eq!(out.shape(), (0, 4));
+
+    // not(a == b) => a != b
+    // note that proteins_g=10 for all rows
+    let out = scan_nutri_score_null_column_parquet(par)
+        .filter(not(col("proteins_g").eq(10)))
+        .collect()?;
+    assert_eq!(out.shape(), (0, 6));
+
+    // not(a != b) => a == b
+    // note that proteins_g=10 for all rows
+    let out = scan_nutri_score_null_column_parquet(par)
+        .filter(not(col("proteins_g").neq(5)))
+        .collect()?;
+    assert_eq!(out.shape(), (0, 6));
+
+    // not(col(c) is between [a, b]) => col(c) < a or col(c) > b
+    let out = scan_foods_parquet(par)
+        .filter(not(col("calories").is_between(
+            20,
+            200,
+            ClosedInterval::Both,
+        )))
+        .collect()?;
+    assert_eq!(out.shape(), (0, 4));
+
+    // not(col(c) is between [a, b[) => col(c) < a or col(c) >= b
+    let out = scan_foods_parquet(par)
+        .filter(not(col("calories").is_between(
+            20,
+            201,
+            ClosedInterval::Left,
+        )))
+        .collect()?;
+    assert_eq!(out.shape(), (0, 4));
+
+    // not(col(c) is between ]a, b]) => col(c) <= a or col(c) > b
+    let out = scan_foods_parquet(par)
+        .filter(not(col("calories").is_between(
+            19,
+            200,
+            ClosedInterval::Right,
+        )))
+        .collect()?;
+    assert_eq!(out.shape(), (0, 4));
+
+    // not(col(c) is between ]a, b]) => col(c) <= a or col(c) > b
+    let out = scan_foods_parquet(par)
+        .filter(not(col("calories").is_between(
+            19,
+            200,
+            ClosedInterval::Right,
+        )))
+        .collect()?;
+    assert_eq!(out.shape(), (0, 4));
+
+    // not(col(c) is between ]a, b[) => col(c) <= a or col(c) >= b
+    let out = scan_foods_parquet(par)
+        .filter(not(col("calories").is_between(
+            19,
+            201,
+            ClosedInterval::None,
+        )))
+        .collect()?;
+    assert_eq!(out.shape(), (0, 4));
+
+    // not (a or b) => not(a) and not(b)
+    // note that not(fats_g <= 9) is possible; not(calories > 5) should allow us skip the rg
+    let out = scan_foods_parquet(par)
+        .filter(not(col("calories").gt(5).or(col("fats_g").lt_eq(9))))
+        .collect()?;
+    assert_eq!(out.shape(), (0, 4));
+
+    // not (a and b) => not(a) or not(b)
+    let out = scan_foods_parquet(par)
+        .filter(not(col("calories").gt(5).and(col("fats_g").lt_eq(12))))
+        .collect()?;
+    assert_eq!(out.shape(), (0, 4));
+
+    // is_not_null
+    let out = scan_nutri_score_null_column_parquet(par)
+        .filter(col("nutri_score").is_not_null())
+        .collect()?;
+    assert_eq!(out.shape(), (0, 6));
+
+    // not(is_null) (~pl.col('nutri_score').is_null())
+    let out = scan_nutri_score_null_column_parquet(par)
+        .filter(not(col("nutri_score").is_null()))
+        .collect()?;
+    assert_eq!(out.shape(), (0, 6));
 
     // Test multiple predicates
 
@@ -148,7 +361,7 @@ fn test_parquet_globbing() -> PolarsResult<()> {
     // for side effects
     init_files();
     let _guard = SINGLE_LOCK.lock().unwrap();
-    let glob = "../../examples/datasets/*.parquet";
+    let glob = "../../examples/datasets/foods*.parquet";
     let df = LazyFrame::scan_parquet(
         glob,
         ScanArgsParquet {
@@ -168,19 +381,44 @@ fn test_parquet_globbing() -> PolarsResult<()> {
 }
 
 #[test]
+fn test_scan_parquet_limit_9001() {
+    init_files();
+    let path = GLOB_PARQUET;
+    let args = ScanArgsParquet {
+        n_rows: Some(10000),
+        cache: false,
+        rechunk: true,
+        ..Default::default()
+    };
+    let q = LazyFrame::scan_parquet(path, args).unwrap().limit(3);
+    let IRPlan {
+        lp_top, lp_arena, ..
+    } = q.to_alp_optimized().unwrap();
+    (&lp_arena).iter(lp_top).all(|(_, lp)| match lp {
+        IR::Union { options, .. } => {
+            let sliced = options.slice.unwrap();
+            sliced.1 == 3
+        },
+        IR::Scan { file_options, .. } => file_options.n_rows == Some(3),
+        _ => true,
+    });
+}
+
+#[test]
 #[cfg(not(target_os = "windows"))]
 fn test_ipc_globbing() -> PolarsResult<()> {
     // for side effects
     init_files();
-    let glob = "../../examples/datasets/*.ipc";
+    let glob = "../../examples/datasets/foods*.ipc";
     let df = LazyFrame::scan_ipc(
         glob,
         ScanArgsIpc {
             n_rows: None,
             cache: true,
             rechunk: false,
-            row_count: None,
-            memmap: true,
+            row_index: None,
+            memory_map: true,
+            cloud_options: None,
         },
     )?
     .collect()?;
@@ -192,9 +430,9 @@ fn test_ipc_globbing() -> PolarsResult<()> {
     Ok(())
 }
 
-fn slice_at_union(lp_arena: &Arena<ALogicalPlan>, lp: Node) -> bool {
+fn slice_at_union(lp_arena: &Arena<IR>, lp: Node) -> bool {
     (&lp_arena).iter(lp).all(|(_, lp)| {
-        if let ALogicalPlan::Union { options, .. } = lp {
+        if let IR::Union { options, .. } = lp {
             options.slice.is_some()
         } else {
             true
@@ -203,9 +441,8 @@ fn slice_at_union(lp_arena: &Arena<ALogicalPlan>, lp: Node) -> bool {
 }
 
 #[test]
-#[cfg(not(target_os = "windows"))]
 fn test_csv_globbing() -> PolarsResult<()> {
-    let glob = "../../examples/datasets/*.csv";
+    let glob = "../../examples/datasets/foods*.csv";
     let full_df = LazyCsvReader::new(glob).finish()?.collect()?;
 
     // all 5 files * 27 rows
@@ -214,13 +451,13 @@ fn test_csv_globbing() -> PolarsResult<()> {
     assert_eq!(cal.get(0)?, AnyValue::Int64(45));
     assert_eq!(cal.get(53)?, AnyValue::Int64(194));
 
-    let glob = "../../examples/datasets/*.csv";
+    let glob = "../../examples/datasets/foods*.csv";
     let lf = LazyCsvReader::new(glob).finish()?.slice(0, 100);
 
     let df = lf.clone().collect()?;
-    assert_eq!(df.shape(), (100, 4));
+    assert_eq!(df, full_df.slice(0, 100));
     let df = LazyCsvReader::new(glob).finish()?.slice(20, 60).collect()?;
-    assert!(full_df.slice(20, 60).frame_equal(&df));
+    assert_eq!(df, full_df.slice(20, 60));
 
     let mut expr_arena = Arena::with_capacity(16);
     let mut lp_arena = Arena::with_capacity(8);
@@ -238,12 +475,11 @@ fn test_csv_globbing() -> PolarsResult<()> {
 }
 
 #[test]
-#[cfg(not(target_os = "windows"))]
 #[cfg(feature = "json")]
 fn test_ndjson_globbing() -> PolarsResult<()> {
     // for side effects
     init_files();
-    let glob = "../../examples/datasets/*.ndjson";
+    let glob = "../../examples/datasets/foods*.ndjson";
     let df = LazyJsonLineReader::new(glob).finish()?.collect()?;
     assert_eq!(df.shape(), (54, 4));
     let cal = df.column("calories")?;
@@ -341,53 +577,53 @@ fn skip_rows_and_slice() -> PolarsResult<()> {
         .finish()?
         .limit(1)
         .collect()?;
-    assert_eq!(out.column("fruit")?.get(0)?, AnyValue::Utf8("seafood"));
+    assert_eq!(out.column("fruit")?.get(0)?, AnyValue::String("seafood"));
     assert_eq!(out.shape(), (1, 4));
     Ok(())
 }
 
 #[test]
-fn test_row_count_on_files() -> PolarsResult<()> {
+fn test_row_index_on_files() -> PolarsResult<()> {
     let _guard = SINGLE_LOCK.lock().unwrap();
     for offset in [0 as IdxSize, 10] {
         let lf = LazyCsvReader::new(FOODS_CSV)
-            .with_row_count(Some(RowCount {
-                name: "rc".into(),
+            .with_row_index(Some(RowIndex {
+                name: Arc::from("index"),
                 offset,
             }))
             .finish()?;
 
-        assert!(row_count_at_scan(lf.clone()));
+        assert!(row_index_at_scan(lf.clone()));
         let df = lf.collect()?;
-        let rc = df.column("rc")?;
+        let idx = df.column("index")?;
         assert_eq!(
-            rc.idx()?.into_no_null_iter().collect::<Vec<_>>(),
+            idx.idx()?.into_no_null_iter().collect::<Vec<_>>(),
             (offset..27 + offset).collect::<Vec<_>>()
         );
 
         let lf = LazyFrame::scan_parquet(FOODS_PARQUET, Default::default())?
-            .with_row_count("rc", Some(offset));
-        assert!(row_count_at_scan(lf.clone()));
+            .with_row_index("index", Some(offset));
+        assert!(row_index_at_scan(lf.clone()));
         let df = lf.collect()?;
-        let rc = df.column("rc")?;
+        let idx = df.column("index")?;
         assert_eq!(
-            rc.idx()?.into_no_null_iter().collect::<Vec<_>>(),
+            idx.idx()?.into_no_null_iter().collect::<Vec<_>>(),
             (offset..27 + offset).collect::<Vec<_>>()
         );
 
-        let lf =
-            LazyFrame::scan_ipc(FOODS_IPC, Default::default())?.with_row_count("rc", Some(offset));
+        let lf = LazyFrame::scan_ipc(FOODS_IPC, Default::default())?
+            .with_row_index("index", Some(offset));
 
-        assert!(row_count_at_scan(lf.clone()));
+        assert!(row_index_at_scan(lf.clone()));
         let df = lf.clone().collect()?;
-        let rc = df.column("rc")?;
+        let idx = df.column("index")?;
         assert_eq!(
-            rc.idx()?.into_no_null_iter().collect::<Vec<_>>(),
+            idx.idx()?.into_no_null_iter().collect::<Vec<_>>(),
             (offset..27 + offset).collect::<Vec<_>>()
         );
 
         let out = lf
-            .filter(col("rc").gt(lit(-1)))
+            .filter(col("index").gt(lit(-1)))
             .select([col("calories")])
             .collect()?;
         assert!(out.column("calories").is_ok());
@@ -413,10 +649,10 @@ fn scan_predicate_on_set_null_values() -> PolarsResult<()> {
 
 #[test]
 fn scan_anonymous_fn() -> PolarsResult<()> {
-    let function = Arc::new(|_scan_opts: AnonymousScanOptions| Ok(fruits_cars()));
+    let function = Arc::new(|_scan_opts: AnonymousScanArgs| Ok(fruits_cars()));
 
     let args = ScanArgsAnonymous {
-        schema: Some(fruits_cars().schema()),
+        schema: Some(Arc::new(fruits_cars().schema())),
         ..ScanArgsAnonymous::default()
     };
 
@@ -437,11 +673,11 @@ fn scan_small_dtypes() -> PolarsResult<()> {
     ];
     for dt in small_dt {
         let df = LazyCsvReader::new(FOODS_CSV)
-            .has_header(true)
-            .with_dtype_overwrite(Some(&Schema::from_iter([Field::new(
+            .with_has_header(true)
+            .with_dtype_overwrite(Some(Arc::new(Schema::from_iter([Field::new(
                 "sugars_g",
                 dt.clone(),
-            )])))
+            )]))))
             .finish()?
             .select(&[col("sugars_g")])
             .collect()?;

@@ -21,8 +21,8 @@ pub struct Decoder<R> {
 }
 
 impl<R: Read> Decoder<R> {
-    /// Creates a new encoder which will have its output written to the given
-    /// output stream. The output stream can be re-acquired by calling
+    /// Creates a new decoder which reads its input from the given
+    /// input stream. The input stream can be re-acquired by calling
     /// `finish()`
     pub fn new(r: R) -> Result<Decoder<R>> {
         Ok(Decoder {

@@ -10,10 +10,11 @@ pub(crate) struct UnionExec {
 
 impl Executor for UnionExec {
     fn execute(&mut self, state: &mut ExecutionState) -> PolarsResult<DataFrame> {
+        state.should_stop()?;
         #[cfg(debug_assertions)]
         {
             if state.verbose() {
-                println!("run UnionExec")
+                eprintln!("run UnionExec")
             }
         }
         // keep scans thread local if 'fetch' is used.
@@ -31,9 +32,9 @@ impl Executor for UnionExec {
         if !self.options.parallel || sliced_path {
             if state.verbose() {
                 if !self.options.parallel {
-                    println!("UNION: `parallel=false` union is run sequentially")
+                    eprintln!("UNION: `parallel=false` union is run sequentially")
                 } else {
-                    println!("UNION: `slice is set` union is run sequentially")
+                    eprintln!("UNION: `slice is set` union is run sequentially")
                 }
             }
 
@@ -79,7 +80,7 @@ impl Executor for UnionExec {
             concat_df(&dfs)
         } else {
             if state.verbose() {
-                println!("UNION: union is run in parallel")
+                eprintln!("UNION: union is run in parallel")
             }
 
             // we don't use par_iter directly because the LP may also start threads for every LP (for instance scan_csv)
@@ -103,7 +104,13 @@ impl Executor for UnionExec {
                     .collect::<PolarsResult<Vec<_>>>()
             });
 
-            concat_df(out?.iter().flat_map(|dfs| dfs.iter()))
+            concat_df(out?.iter().flat_map(|dfs| dfs.iter())).map(|df| {
+                if let Some((offset, len)) = self.options.slice {
+                    df.slice(offset, len)
+                } else {
+                    df
+                }
+            })
         }
         .map(|mut df| {
             if self.options.rechunk {

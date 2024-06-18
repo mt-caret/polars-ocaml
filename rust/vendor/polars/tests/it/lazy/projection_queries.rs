@@ -29,7 +29,7 @@ fn test_swap_rename() -> PolarsResult<()> {
         "b" => [1],
         "a" => [2],
     ]?;
-    assert!(df.frame_equal(&expected));
+    assert!(df.equals(&expected));
     Ok(())
 }
 
@@ -54,17 +54,17 @@ fn test_outer_join_with_column_2988() -> PolarsResult<()> {
             ldf2,
             [col("key1"), col("key2")],
             [col("key1"), col("key2")],
-            JoinType::Outer.into(),
+            JoinArgs::new(JoinType::Outer).with_coalesce(JoinCoalesce::CoalesceColumns),
         )
         .with_columns([col("key1")])
         .collect()?;
     assert_eq!(out.get_column_names(), &["key1", "key2", "val1", "val2"]);
     assert_eq!(
-        Vec::from(out.column("key1")?.utf8()?),
+        Vec::from(out.column("key1")?.str()?),
         &[Some("bar"), Some("baz"), Some("foo")]
     );
     assert_eq!(
-        Vec::from(out.column("key2")?.utf8()?),
+        Vec::from(out.column("key2")?.str()?),
         &[Some("bar"), Some("baz"), Some("foo")]
     );
     assert_eq!(
@@ -77,20 +77,6 @@ fn test_outer_join_with_column_2988() -> PolarsResult<()> {
     );
 
     Ok(())
-}
-
-#[test]
-fn test_err_no_found() {
-    let df = df![
-        "a" => [1, 2, 3],
-        "b" => [None, Some("a"), Some("b")]
-    ]
-    .unwrap();
-
-    assert!(matches!(
-        df.lazy().filter(col("nope").gt(lit(2))).collect(),
-        Err(PolarsError::ColumnNotFound(_))
-    ));
 }
 
 #[test]
@@ -114,7 +100,7 @@ fn test_many_aliasing_projections_5070() -> PolarsResult<()> {
         "val" => [2, 3],
         "output" => [0, 1],
     ]?;
-    assert!(out.frame_equal(&expected));
+    assert!(out.equals(&expected));
 
     Ok(())
 }
@@ -131,12 +117,16 @@ fn test_projection_5086() -> PolarsResult<()> {
         .lazy()
         .select([
             col("a"),
-            col("b").take("c").cumsum(false).over([col("a")]).gt(lit(0)),
+            col("b")
+                .gather("c")
+                .cum_sum(false)
+                .over([col("a")])
+                .gt(lit(0)),
         ])
         .select([
             col("a"),
             col("b")
-                .xor(col("b").shift(1).over([col("a")]))
+                .xor(col("b").shift(lit(1)).over([col("a")]))
                 .fill_null(lit(true))
                 .alias("keep"),
         ])
@@ -147,7 +137,7 @@ fn test_projection_5086() -> PolarsResult<()> {
         "keep" => [true, false, false, true]
     ]?;
 
-    assert!(out.frame_equal(&expected));
+    assert!(out.equals(&expected));
 
     Ok(())
 }
@@ -157,7 +147,7 @@ fn test_projection_5086() -> PolarsResult<()> {
 fn test_unnest_pushdown() -> PolarsResult<()> {
     let df = df![
         "collection" => Series::full_null("", 1, &DataType::Int32),
-        "users" => Series::full_null("", 1, &DataType::List(Box::new(DataType::Struct(vec![Field::new("email", DataType::Utf8)])))),
+        "users" => Series::full_null("", 1, &DataType::List(Box::new(DataType::Struct(vec![Field::new("email", DataType::String)])))),
     ]?;
 
     let out = df

@@ -30,7 +30,7 @@ fn create_expected(expr: Expr, sql: &str) -> (DataFrame, DataFrame) {
     let expected = df
         .clone()
         .select(&[expr.alias(alias)])
-        .sort(alias, SortOptions::default())
+        .sort([alias], Default::default())
         .collect()
         .unwrap();
     let mut ctx = SQLContext::new();
@@ -42,30 +42,36 @@ fn create_expected(expr: Expr, sql: &str) -> (DataFrame, DataFrame) {
 
 #[test]
 fn test_cumulative_sum() {
-    let expr = col("Sales").sort(true).cumsum(false);
+    let expr = col("Sales")
+        .sort(SortOptions::default().with_order_descending(true))
+        .cum_sum(false);
 
     let sql_expr = "SUM(Sales) OVER (ORDER BY Sales DESC)";
     let (expected, actual) = create_expected(expr, sql_expr);
 
-    assert!(expected.frame_equal(&actual))
+    assert!(expected.equals(&actual))
 }
 
 #[test]
 fn test_cumulative_min() {
-    let expr = col("Sales").sort(true).cummin(false);
+    let expr = col("Sales")
+        .sort(SortOptions::default().with_order_descending(true))
+        .cum_min(false);
 
     let sql_expr = "MIN(Sales) OVER (ORDER BY Sales DESC)";
     let (expected, actual) = create_expected(expr, sql_expr);
 
-    assert!(expected.frame_equal(&actual))
+    assert!(expected.equals(&actual))
 }
 
 #[test]
 fn test_cumulative_max() {
-    let expr = col("Sales").sort(true).cummax(false);
+    let expr = col("Sales")
+        .sort(SortOptions::default().with_order_descending(true))
+        .cum_max(false);
 
     let sql_expr = "MAX(Sales) OVER (ORDER BY Sales DESC)";
     let (expected, actual) = create_expected(expr, sql_expr);
 
-    assert!(expected.frame_equal(&actual))
+    assert!(expected.equals(&actual))
 }

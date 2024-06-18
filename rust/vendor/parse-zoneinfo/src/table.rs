@@ -1,8 +1,53 @@
+//! Collecting parsed zoneinfo data lines into a set of time zone data.
+//!
+//! This module provides the `Table` struct, which is able to take parsed
+//! lines of input from the `line` module and coalesce them into a single
+//! set of data.
+//!
+//! It’s not as simple as it seems, because the zoneinfo data lines refer to
+//! each other through strings: lines of the form “link zone A to B” could be
+//! *parsed* successfully but still fail to be *interpreted* successfully if
+//! “B” doesn’t exist. So it has to check every step of the way—nothing wrong
+//! with this, it’s just a consequence of reading data from a text file.
+//!
+//! This module only deals with constructing a table from data: any analysis
+//! of the data is done elsewhere.
+//!
+//!
+//! ## Example
+//!
+//! ```
+//! use parse_zoneinfo::line::{Zone, Line, LineParser, Link};
+//! use parse_zoneinfo::table::{TableBuilder};
+//!
+//! let parser = LineParser::default();
+//! let mut builder = TableBuilder::new();
+//!
+//! let zone = "Zone  Pacific/Auckland  11:39:04  -  LMT  1868  Nov  2";
+//! let link = "Link  Pacific/Auckland  Antarctica/McMurdo";
+//!
+//! for line in [zone, link] {
+//!     match parser.parse_str(&line)? {
+//!         Line::Zone(zone) => builder.add_zone_line(zone).unwrap(),
+//!         Line::Continuation(cont) => builder.add_continuation_line(cont).unwrap(),
+//!         Line::Rule(rule) => builder.add_rule_line(rule).unwrap(),
+//!         Line::Link(link) => builder.add_link_line(link).unwrap(),
+//!         Line::Space => {}
+//!     }
+//! }
+//!
+//! let table = builder.build();
+//!
+//! assert!(table.get_zoneset("Pacific/Auckland").is_some());
+//! assert!(table.get_zoneset("Antarctica/McMurdo").is_some());
+//! assert!(table.get_zoneset("UTC").is_none());
+//! # Ok::<(), parse_zoneinfo::line::Error>(())
+//! ```
+
 use std::collections::hash_map::{Entry, HashMap};
-use std::error::Error as ErrorTrait;
 use std::fmt;
 
-use line::{self, ChangeTime, DaySpec, Month, TimeType, Year};
+use crate::line::{self, ChangeTime, DaySpec, Month, TimeType, Year};
 
 /// A **table** of all the data in one or more zoneinfo files.
 #[derive(PartialEq, Debug, Default)]
@@ -25,7 +70,7 @@ impl Table {
             Some(&*self.zonesets[zone_name])
         } else if self.links.contains_key(zone_name) {
             let target = &self.links[zone_name];
-            Some(&*self.zonesets[&*target])
+            Some(&*self.zonesets[target])
         } else {
             None
         }
@@ -240,6 +285,12 @@ pub struct TableBuilder {
     current_zoneset_name: Option<String>,
 }
 
+impl Default for TableBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TableBuilder {
     /// Creates a new builder with an empty table.
     pub fn new() -> TableBuilder {
@@ -263,7 +314,7 @@ impl TableBuilder {
             }
         }
 
-        let zoneset: &mut _ = match self.table.zonesets.entry(zone_line.name.to_owned()) {
+        let zoneset = match self.table.zonesets.entry(zone_line.name.to_owned()) {
             Entry::Occupied(_) => return Err(Error::DuplicateZone),
             Entry::Vacant(e) => e.insert(Vec::new()),
         };
@@ -281,7 +332,7 @@ impl TableBuilder {
         &mut self,
         continuation_line: line::ZoneInfo,
     ) -> Result<(), Error> {
-        let zoneset: &mut _ = match self.current_zoneset_name {
+        let zoneset = match self.current_zoneset_name {
             Some(ref name) => self.table.zonesets.get_mut(name).unwrap(),
             None => return Err(Error::SurpriseContinuationLine),
         };
@@ -297,7 +348,7 @@ impl TableBuilder {
             .table
             .rulesets
             .entry(rule_line.name.to_owned())
-            .or_insert_with(Vec::new);
+            .or_default();
 
         ruleset.push(rule_line.into());
         self.current_zoneset_name = None;
@@ -346,17 +397,20 @@ pub enum Error<'line> {
 
 impl<'line> fmt::Display for Error<'line> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.description())
+        match self {
+            Error::SurpriseContinuationLine => {
+                write!(
+                    f,
+                    "continuation line follows line that isn't a zone definition line"
+                )
+            }
+            Error::UnknownRuleset(_) => {
+                write!(f, "zone definition refers to a ruleset that isn't defined")
+            }
+            Error::DuplicateLink(_) => write!(f, "link line with name that already exists"),
+            Error::DuplicateZone => write!(f, "zone line with name that already exists"),
+        }
     }
 }
 
-impl<'line> ErrorTrait for Error<'line> {
-    fn description(&self) -> &str {
-        "interpretation error"
-    }
-
-    #[allow(bare_trait_objects)] // remove when we require edition 2018
-    fn cause(&self) -> Option<&ErrorTrait> {
-        None
-    }
-}
+impl<'line> std::error::Error for Error<'line> {}

@@ -9,7 +9,7 @@ use ahash::{AHasher, RandomState};
 use once_cell::sync::OnceCell;
 static NOT_RANDOM: OnceCell<RandomState> = OnceCell::new();
 
-/// `AHash` `BuildHasher` thast uses a startup initialized random state for known keys
+/// `AHash` `BuildHasher` that uses a startup initialized random state for known keys
 #[derive(Clone)]
 pub struct NotSoRandomState(RandomState);
 
@@ -21,7 +21,7 @@ impl Default for NotSoRandomState {
 
 impl BuildHasher for NotSoRandomState {
     type Hasher = AHasher;
-    #[inline]
+    #[cfg_attr(not(feature = "no-inline"), inline)]
     fn build_hasher(&self) -> AHasher {
         self.0.build_hasher()
     }
@@ -70,7 +70,7 @@ where
 
 impl<'key> KnownKey<'key> {
     /// The known key
-    #[inline]
+    #[cfg_attr(not(feature = "no-inline"), inline)]
     #[must_use]
     pub fn key(&self) -> &Cow<'key, str> {
         &self.key
@@ -83,6 +83,7 @@ impl<'key> KnownKey<'key> {
     ///  * If target is not an object
     ///
     /// ```rust
+    /// use simd_json::prelude::*;
     /// use simd_json::*;
     /// let object = json!({
     ///   "answer": 42,
@@ -91,7 +92,7 @@ impl<'key> KnownKey<'key> {
     /// let known_key = KnownKey::from("answer");
     /// assert_eq!(known_key.lookup(&object).unwrap(), &42);
     /// ```
-    #[inline]
+    #[cfg_attr(not(feature = "no-inline"), inline)]
     #[must_use]
     pub fn lookup<'target, 'value>(
         &self,
@@ -108,6 +109,7 @@ impl<'key> KnownKey<'key> {
     /// key wasn't present.
     ///
     /// ```rust
+    /// use simd_json::prelude::*;
     /// use simd_json::*;
     /// let object: BorrowedValue = json!({
     ///   "answer": 42,
@@ -118,7 +120,7 @@ impl<'key> KnownKey<'key> {
     ///   assert_eq!(known_key.map_lookup(inner).unwrap(), &42);
     /// }
     /// ```
-    #[inline]
+    #[cfg_attr(not(feature = "no-inline"), inline)]
     #[must_use]
     pub fn map_lookup<'target, 'value>(
         &self,
@@ -137,6 +139,7 @@ impl<'key> KnownKey<'key> {
     /// key wasn't present or `target` isn't an object
     ///
     /// ```rust
+    /// use simd_json::prelude::*;
     /// use simd_json::*;
     /// let mut object: BorrowedValue = json!({
     ///   "answer": 23,
@@ -152,7 +155,7 @@ impl<'key> KnownKey<'key> {
     ///
     /// assert_eq!(object["answer"], 42);
     /// ```
-    #[inline]
+    #[cfg_attr(not(feature = "no-inline"), inline)]
     pub fn lookup_mut<'target, 'value>(
         &self,
         target: &'target mut Value<'value>,
@@ -168,6 +171,7 @@ impl<'key> KnownKey<'key> {
     /// returns None if the key wasn't present.
     ///
     /// ```rust
+    /// use simd_json::prelude::*;
     /// use simd_json::*;
     /// let mut object: BorrowedValue = json!({
     ///   "answer": 23,
@@ -185,7 +189,7 @@ impl<'key> KnownKey<'key> {
     /// assert_eq!(object["answer"], 42);
     ///
     /// ```
-    #[inline]
+    #[cfg_attr(not(feature = "no-inline"), inline)]
     pub fn map_lookup_mut<'target, 'value>(
         &self,
         map: &'target mut super::borrowed::Object<'value>,
@@ -209,6 +213,7 @@ impl<'key> KnownKey<'key> {
     /// * if target is not a record
     ///
     /// ```rust
+    /// use simd_json::prelude::*;
     /// use simd_json::*;
     /// let mut object: BorrowedValue = json!({
     ///   "answer": 23,
@@ -233,7 +238,7 @@ impl<'key> KnownKey<'key> {
     ///
     /// assert_eq!(object["also the answer"], 42);
     /// ```
-    #[inline]
+    #[cfg_attr(not(feature = "no-inline"), inline)]
     pub fn lookup_or_insert_mut<'target, 'value, F>(
         &self,
         target: &'target mut Value<'value>,
@@ -254,6 +259,7 @@ impl<'key> KnownKey<'key> {
     /// Inserts `with` when the key when wasn't present.
     ///
     /// ```rust
+    /// use simd_json::prelude::*;
     /// use simd_json::*;
     /// let mut object: BorrowedValue = json!({
     ///   "answer": 23,
@@ -280,7 +286,7 @@ impl<'key> KnownKey<'key> {
     ///
     /// assert_eq!(object["also the answer"], 42);
     /// ```
-    #[inline]
+    #[cfg_attr(not(feature = "no-inline"), inline)]
     pub fn map_lookup_or_insert_mut<'target, 'value, F>(
         &self,
         map: &'target mut super::borrowed::Object<'value>,
@@ -303,6 +309,7 @@ impl<'key> KnownKey<'key> {
     ///   * if `target` isn't an object
     ///
     /// ```rust
+    /// use simd_json::prelude::*;
     /// use simd_json::*;
     /// let mut object: BorrowedValue = json!({
     ///   "answer": 23,
@@ -323,7 +330,7 @@ impl<'key> KnownKey<'key> {
     /// assert_eq!(object["also the answer"], 42);
     ///
     /// ```
-    #[inline]
+    #[cfg_attr(not(feature = "no-inline"), inline)]
     pub fn insert<'target, 'value>(
         &self,
         target: &'target mut Value<'value>,
@@ -343,6 +350,7 @@ impl<'key> KnownKey<'key> {
     /// key wasn't present otherwise Some(`old value`).
     ///
     /// ```rust
+    /// use simd_json::prelude::*;
     /// use simd_json::*;
     ///
     /// let mut object: BorrowedValue = json!({
@@ -367,7 +375,7 @@ impl<'key> KnownKey<'key> {
     ///
     /// assert_eq!(object["also the answer"], 42);
     /// ```
-    #[inline]
+    #[cfg_attr(not(feature = "no-inline"), inline)]
     pub fn map_insert<'target, 'value>(
         &self,
         map: &'target mut super::borrowed::Object<'value>,

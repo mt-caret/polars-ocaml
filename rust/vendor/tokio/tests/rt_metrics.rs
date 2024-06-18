@@ -1,8 +1,14 @@
+#![allow(unknown_lints, unexpected_cfgs)]
 #![warn(rust_2018_idioms)]
-#![cfg(all(feature = "full", tokio_unstable, not(target_os = "wasi")))]
+#![cfg(all(
+    feature = "full",
+    tokio_unstable,
+    not(target_os = "wasi"),
+    target_has_atomic = "64"
+))]
 
 use std::future::Future;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Barrier, Mutex};
 use std::task::Poll;
 use tokio::macros::support::poll_fn;
 
@@ -22,6 +28,11 @@ fn num_workers() {
 #[test]
 fn num_blocking_threads() {
     let rt = current_thread();
+    assert_eq!(0, rt.metrics().num_blocking_threads());
+    let _ = rt.block_on(rt.spawn_blocking(move || {}));
+    assert_eq!(1, rt.metrics().num_blocking_threads());
+
+    let rt = threaded();
     assert_eq!(0, rt.metrics().num_blocking_threads());
     let _ = rt.block_on(rt.spawn_blocking(move || {}));
     assert_eq!(1, rt.metrics().num_blocking_threads());
@@ -175,13 +186,14 @@ fn worker_noop_count() {
 }
 
 #[test]
+#[ignore] // this test is flaky, see https://github.com/tokio-rs/tokio/issues/6470
 fn worker_steal_count() {
     // This metric only applies to the multi-threaded runtime.
     //
     // We use a blocking channel to backup one worker thread.
     use std::sync::mpsc::channel;
 
-    let rt = threaded();
+    let rt = threaded_no_lifo();
     let metrics = rt.metrics();
 
     rt.block_on(async {
@@ -190,13 +202,11 @@ fn worker_steal_count() {
         // Move to the runtime.
         tokio::spawn(async move {
             // Spawn the task that sends to the channel
+            //
+            // Since the lifo slot is disabled, this task is stealable.
             tokio::spawn(async move {
                 tx.send(()).unwrap();
             });
-
-            // Spawn a task that bumps the previous task out of the "next
-            // scheduled" slot.
-            tokio::spawn(async {});
 
             // Blocking receive on the channel.
             rx.recv().unwrap();
@@ -504,7 +514,7 @@ fn worker_overflow_count() {
 }
 
 #[test]
-fn injection_queue_depth() {
+fn injection_queue_depth_current_thread() {
     use std::thread;
 
     let rt = current_thread();
@@ -518,44 +528,34 @@ fn injection_queue_depth() {
     .unwrap();
 
     assert_eq!(1, metrics.injection_queue_depth());
+}
 
+#[test]
+fn injection_queue_depth_multi_thread() {
     let rt = threaded();
-    let handle = rt.handle().clone();
     let metrics = rt.metrics();
 
-    // First we need to block the runtime workers
-    let (tx1, rx1) = std::sync::mpsc::channel();
-    let (tx2, rx2) = std::sync::mpsc::channel();
-    let (tx3, rx3) = std::sync::mpsc::channel();
-    let rx3 = Arc::new(Mutex::new(rx3));
+    let barrier1 = Arc::new(Barrier::new(3));
+    let barrier2 = Arc::new(Barrier::new(3));
 
-    rt.spawn(async move { rx1.recv().unwrap() });
-    rt.spawn(async move { rx2.recv().unwrap() });
-
-    // Spawn some more to make sure there are items
-    for _ in 0..10 {
-        let rx = rx3.clone();
+    // Spawn a task per runtime worker to block it.
+    for _ in 0..2 {
+        let barrier1 = barrier1.clone();
+        let barrier2 = barrier2.clone();
         rt.spawn(async move {
-            rx.lock().unwrap().recv().unwrap();
+            barrier1.wait();
+            barrier2.wait();
         });
     }
 
-    thread::spawn(move || {
-        handle.spawn(async {});
-    })
-    .join()
-    .unwrap();
+    barrier1.wait();
 
-    let n = metrics.injection_queue_depth();
-    assert!(1 <= n, "{}", n);
-    assert!(15 >= n, "{}", n);
-
-    for _ in 0..10 {
-        tx3.send(()).unwrap();
+    for i in 0..10 {
+        assert_eq!(i, metrics.injection_queue_depth());
+        rt.spawn(async {});
     }
 
-    tx1.send(()).unwrap();
-    tx2.send(()).unwrap();
+    barrier2.wait();
 }
 
 #[test]
@@ -724,6 +724,15 @@ fn current_thread() -> Runtime {
 fn threaded() -> Runtime {
     tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)
+        .enable_all()
+        .build()
+        .unwrap()
+}
+
+fn threaded_no_lifo() -> Runtime {
+    tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .disable_lifo_slot()
         .enable_all()
         .build()
         .unwrap()

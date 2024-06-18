@@ -13,13 +13,20 @@ macro_rules! bitflags {
     ) => {
         // First, use the inner bitflags
         inner_bitflags! {
-            #[derive(Default)]
+            #[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Clone, Copy, Default)]
             $(#[$outer])*
             pub struct $BitFlags: $T {
                 $(
                     $(#[$inner $($args)*])*
                     const $Flag = $value;
                 )+
+            }
+        }
+
+        impl $BitFlags {
+            #[deprecated = "use the safe `from_bits_retain` method instead"]
+            pub unsafe fn from_bits_unchecked(bits: $T) -> Self {
+                Self::from_bits_retain(bits)
             }
         }
 
@@ -59,6 +66,37 @@ pub const SKMSG_FRETURNFD: usize = 0;
 
 // packet.uid:packet.gid = offset, packet.c = base address, packet.d = page count
 pub const SKMSG_PROVIDE_MMAP: usize = 1;
+
+// packet.id provides state, packet.c = dest fd or pointer to dest fd, packet.d = flags
+pub const SKMSG_FOBTAINFD: usize = 2;
+
+// TODO: Split SendFdFlags into caller flags and flags that the scheme receives?
+bitflags::bitflags! {
+    #[derive(Clone, Copy, Debug)]
+    pub struct SendFdFlags: usize {
+        /// If set, the kernel will enforce that the file descriptor is exclusively owned.
+        ///
+        /// That is, there will no longer exist any other reference to that FD when removed from
+        /// the file table (SYS_SENDFD always removes the FD from the file table, but without this
+        /// flag, it can be retained by SYS_DUPing it first).
+        const EXCLUSIVE = 1;
+    }
+}
+bitflags::bitflags! {
+    #[derive(Clone, Copy, Debug)]
+    pub struct FobtainFdFlags: usize {
+        /// If set, `packet.c` specifies the destination file descriptor slot, otherwise the lowest
+        /// available slot will be selected, and placed in the usize pointed to by `packet.c`.
+        const MANUAL_FD = 1;
+
+        // If set, the file descriptor received is guaranteed to be exclusively owned (by the file
+        // table the obtainer is running in).
+        const EXCLUSIVE = 2;
+
+        // No, cloexec won't be stored in the kernel in the future, when the stable ABI is moved to
+        // relibc, so no flag for that!
+    }
+}
 
 bitflags! {
     pub struct MapFlags: usize {
@@ -130,79 +168,6 @@ pub const O_SYMLINK: usize =    0x4000_0000;
 pub const O_NOFOLLOW: usize =   0x8000_0000;
 pub const O_ACCMODE: usize =    O_RDONLY | O_WRONLY | O_RDWR;
 
-bitflags! {
-    pub struct PhysmapFlags: usize {
-        const PHYSMAP_WRITE = 0x0000_0001;
-        const PHYSMAP_WRITE_COMBINE = 0x0000_0002;
-        const PHYSMAP_NO_CACHE = 0x0000_0004;
-    }
-}
-bitflags! {
-    /// Extra flags for [`physalloc2`] or [`physalloc3`].
-    ///
-    /// [`physalloc2`]: ../call/fn.physalloc2.html
-    /// [`physalloc3`]: ../call/fn.physalloc3.html
-    pub struct PhysallocFlags: usize {
-        /// Only allocate memory within the 32-bit physical memory space. This is necessary for
-        /// some devices may not support 64-bit memory.
-        const SPACE_32 =        0x0000_0001;
-
-        /// The frame that will be allocated, is going to reside anywhere in 64-bit space. This
-        /// flag is redundant for the most part, except when overriding some other default.
-        const SPACE_64 =        0x0000_0002;
-
-        /// Do a "partial allocation", which means that not all of the frames specified in the
-        /// frame count `size` actually have to be allocated. This means that if the allocator was
-        /// unable to find a physical memory range large enough, it can instead return whatever
-        /// range it decides is optimal. Thus, instead of letting one driver get an expensive
-        /// 128MiB physical memory range when the physical memory has become fragmented, and
-        /// failing, it can instead be given a more optimal range. If the device supports
-        /// scatter-gather lists, then the driver only has to allocate more ranges, and the device
-        /// will do vectored I/O.
-        ///
-        /// PARTIAL_ALLOC supports different allocation strategies, refer to
-        /// [`Optimal`], [`GreatestRange`].
-        ///
-        /// [`Optimal`]: ./enum.PartialAllocStrategy.html
-        /// [`GreatestRange`]: ./enum.PartialAllocStrategy.html
-        const PARTIAL_ALLOC =   0x0000_0004;
-    }
-}
-
-/// The bitmask of the partial allocation strategy. Currently four different strategies are
-/// supported. If [`PARTIAL_ALLOC`] is not set, this bitmask is no longer reserved.
-pub const PARTIAL_ALLOC_STRATEGY_MASK: usize = 0x0003_0000;
-
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-#[repr(usize)]
-pub enum PartialAllocStrategy {
-    /// The allocator decides itself the size of the memory range, based on e.g. free memory ranges
-    /// and other processes which require large physical memory chunks.
-    Optimal = 0x0001_0000,
-
-    /// The allocator returns the absolute greatest range it can find.
-    GreatestRange = 0x0002_0000,
-
-    /// The allocator returns the first range that fits the minimum count, without searching extra.
-    Greedy = 0x0003_0000,
-}
-impl Default for PartialAllocStrategy {
-    fn default() -> Self {
-        Self::Optimal
-    }
-}
-
-impl PartialAllocStrategy {
-    pub fn from_raw(raw: usize) -> Option<Self> {
-        match raw {
-            0x0001_0000 => Some(Self::Optimal),
-            0x0002_0000 => Some(Self::GreatestRange),
-            0x0003_0000 => Some(Self::Greedy),
-            _ => None,
-        }
-    }
-}
-
 // The top 48 bits of PTRACE_* are reserved, for now
 
 bitflags! {
@@ -249,7 +214,7 @@ impl Deref for PtraceFlags {
         // Same as to_ne_bytes but in-place
         unsafe {
             slice::from_raw_parts(
-                &self.bits as *const _ as *const u8,
+                &self.bits() as *const _ as *const u8,
                 mem::size_of::<u64>()
             )
         }
@@ -370,5 +335,13 @@ bitflags! {
         const FIXED = 1;
         const FIXED_REPLACE = 3;
         // TODO: MAYMOVE, DONTUNMAP
+    }
+}
+bitflags! {
+    pub struct RwFlags: u32 {
+        const NONBLOCK = 1;
+        const APPEND = 2;
+        // TODO: sync/dsync
+        // TODO: O_DIRECT?
     }
 }

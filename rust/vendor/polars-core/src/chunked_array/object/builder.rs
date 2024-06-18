@@ -1,9 +1,7 @@
 use std::marker::PhantomData;
-use std::sync::Arc;
-
-use arrow::bitmap::MutableBitmap;
 
 use super::*;
+use crate::chunked_array::object::registry::{AnonymousObjectBuilder, ObjectRegistry};
 use crate::utils::get_iter_capacity;
 
 pub struct ObjectChunkedBuilder<T> {
@@ -18,7 +16,7 @@ where
 {
     pub fn new(name: &str, capacity: usize) -> Self {
         ObjectChunkedBuilder {
-            field: Field::new(name, DataType::Object(T::type_name())),
+            field: Field::new(name, DataType::Object(T::type_name(), None)),
             values: Vec::with_capacity(capacity),
             bitmask_builder: MutableBitmap::with_capacity(capacity),
         }
@@ -55,10 +53,14 @@ where
         }
     }
 
-    pub fn finish(self) -> ObjectChunked<T> {
+    pub fn finish(mut self) -> ObjectChunked<T> {
         let null_bitmap: Option<Bitmap> = self.bitmask_builder.into();
 
         let len = self.values.len();
+        let null_count = null_bitmap
+            .as_ref()
+            .map(|validity| validity.unset_bits())
+            .unwrap_or(0) as IdxSize;
 
         let arr = Box::new(ObjectArray {
             values: Arc::new(self.values),
@@ -66,14 +68,32 @@ where
             offset: 0,
             len,
         });
+
+        self.field.dtype = get_object_type::<T>();
+
         ChunkedArray {
             field: Arc::new(self.field),
             chunks: vec![arr],
             phantom: PhantomData,
             bit_settings: Default::default(),
             length: len as IdxSize,
+            null_count,
         }
     }
+}
+
+/// Initialize a polars Object data type. The type has got information needed to
+/// construct new objects.
+pub(crate) fn get_object_type<T: PolarsObject>() -> DataType {
+    let object_builder = Box::new(|name: &str, capacity: usize| {
+        Box::new(ObjectChunkedBuilder::<T>::new(name, capacity)) as Box<dyn AnonymousObjectBuilder>
+    });
+
+    let object_size = std::mem::size_of::<T>();
+    let physical_dtype = ArrowDataType::FixedSizeBinary(object_size);
+
+    let registry = ObjectRegistry::new(object_builder, physical_dtype);
+    DataType::Object(T::type_name(), Some(Arc::new(registry)))
 }
 
 impl<T> Default for ObjectChunkedBuilder<T>
@@ -121,7 +141,7 @@ where
     T: PolarsObject,
 {
     pub fn new_from_vec(name: &str, v: Vec<T>) -> Self {
-        let field = Arc::new(Field::new(name, DataType::Object(T::type_name())));
+        let field = Arc::new(Field::new(name, DataType::Object(T::type_name(), None)));
         let len = v.len();
         let arr = Box::new(ObjectArray {
             values: Arc::new(v),
@@ -136,6 +156,28 @@ where
             phantom: PhantomData,
             bit_settings: Default::default(),
             length: len as IdxSize,
+            null_count: 0,
+        }
+    }
+
+    pub fn new_from_vec_and_validity(name: &str, v: Vec<T>, validity: Bitmap) -> Self {
+        let field = Arc::new(Field::new(name, DataType::Object(T::type_name(), None)));
+        let len = v.len();
+        let null_count = validity.unset_bits();
+        let arr = Box::new(ObjectArray {
+            values: Arc::new(v),
+            null_bitmap: Some(validity),
+            offset: 0,
+            len,
+        });
+
+        ObjectChunked {
+            field,
+            chunks: vec![arr],
+            phantom: PhantomData,
+            bit_settings: Default::default(),
+            length: len as IdxSize,
+            null_count: null_count as IdxSize,
         }
     }
 
@@ -149,7 +191,7 @@ pub(crate) fn object_series_to_arrow_array(s: &Series) -> ArrayRef {
     // The list builder knows how to create an arrow array
     // we simply piggy back on that code.
 
-    // safety: 0..len is in bounds
+    // SAFETY: 0..len is in bounds
     let list_s = unsafe {
         s.agg_list(&GroupsProxy::Slice {
             groups: vec![[0, s.len() as IdxSize]],

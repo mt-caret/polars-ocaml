@@ -58,10 +58,10 @@ pub unsafe trait RawMutex {
     /// This method may only be called if the mutex is held in the current context, i.e. it must
     /// be paired with a successful call to [`lock`], [`try_lock`], [`try_lock_for`] or [`try_lock_until`].
     ///
-    /// [`lock`]: #tymethod.lock
-    /// [`try_lock`]: #tymethod.try_lock
-    /// [`try_lock_for`]: trait.RawMutexTimed.html#tymethod.try_lock_for
-    /// [`try_lock_until`]: trait.RawMutexTimed.html#tymethod.try_lock_until
+    /// [`lock`]: RawMutex::lock
+    /// [`try_lock`]: RawMutex::try_lock
+    /// [`try_lock_for`]: RawMutexTimed::try_lock_for
+    /// [`try_lock_until`]: RawMutexTimed::try_lock_until
     unsafe fn unlock(&self);
 
     /// Checks whether the mutex is currently locked.
@@ -90,9 +90,7 @@ pub unsafe trait RawMutexFair: RawMutex {
     /// # Safety
     ///
     /// This method may only be called if the mutex is held in the current context, see
-    /// the documentation of [`unlock`].
-    ///
-    /// [`unlock`]: trait.RawMutex.html#tymethod.unlock
+    /// the documentation of [`unlock`](RawMutex::unlock).
     unsafe fn unlock_fair(&self);
 
     /// Temporarily yields the mutex to a waiting thread if there is one.
@@ -104,9 +102,7 @@ pub unsafe trait RawMutexFair: RawMutex {
     /// # Safety
     ///
     /// This method may only be called if the mutex is held in the current context, see
-    /// the documentation of [`unlock`].
-    ///
-    /// [`unlock`]: trait.RawMutex.html#tymethod.unlock
+    /// the documentation of [`unlock`](RawMutex::unlock).
     unsafe fn bump(&self) {
         self.unlock_fair();
         self.lock();
@@ -177,14 +173,22 @@ impl<R: RawMutex, T> Mutex<R, T> {
 
 impl<R, T> Mutex<R, T> {
     /// Creates a new mutex based on a pre-existing raw mutex.
-    ///
-    /// This allows creating a mutex in a constant context on stable Rust.
     #[inline]
-    pub const fn const_new(raw_mutex: R, val: T) -> Mutex<R, T> {
+    pub const fn from_raw(raw_mutex: R, val: T) -> Mutex<R, T> {
         Mutex {
             raw: raw_mutex,
             data: UnsafeCell::new(val),
         }
+    }
+
+    /// Creates a new mutex based on a pre-existing raw mutex.
+    ///
+    /// This allows creating a mutex in a constant context on stable Rust.
+    ///
+    /// This method is a legacy alias for [`from_raw`](Self::from_raw).
+    #[inline]
+    pub const fn const_new(raw_mutex: R, val: T) -> Mutex<R, T> {
+        Self::from_raw(raw_mutex, val)
     }
 }
 
@@ -345,7 +349,7 @@ impl<R: RawMutex, T: ?Sized> Mutex<R, T> {
 }
 
 impl<R: RawMutexFair, T: ?Sized> Mutex<R, T> {
-    /// Forcibly unlocks the mutex using a fair unlock procotol.
+    /// Forcibly unlocks the mutex using a fair unlock protocol.
     ///
     /// This is useful when combined with `mem::forget` to hold a lock without
     /// the need to maintain a `MutexGuard` object alive, for example when

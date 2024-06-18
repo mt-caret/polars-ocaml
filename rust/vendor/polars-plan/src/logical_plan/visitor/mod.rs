@@ -1,7 +1,9 @@
 //! Defines different visitor patterns and for any tree.
 
-use polars_arrow::error::PolarsResult;
+use arrow::legacy::error::PolarsResult;
 mod expr;
+#[cfg(feature = "cse")]
+mod hash;
 mod lp;
 mod visitors;
 

@@ -1,9 +1,13 @@
+#![allow(
+    clippy::incompatible_msrv, // https://github.com/rust-lang/rust-clippy/issues/12257
+)]
+
 use super::*;
-use once_cell::sync::OnceCell;
+use std::sync::OnceLock;
 
 macro_rules! range {
     ($text:expr) => {{
-        static CHARS: OnceCell<Vec<char>> = OnceCell::new();
+        static CHARS: OnceLock<Vec<char>> = OnceLock::new();
         let chars = CHARS.get_or_init(|| $text.chars().collect());
         Range::new(chars, ..)
     }};

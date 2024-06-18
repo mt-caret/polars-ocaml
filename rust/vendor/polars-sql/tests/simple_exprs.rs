@@ -13,7 +13,7 @@ fn assert_sql_to_polars(df: &DataFrame, sql: &str, f: impl FnOnce(LazyFrame) -> 
     context.register("df", df.clone().lazy());
     let df_sql = context.execute(sql).unwrap().collect().unwrap();
     let df_pl = f(df.clone().lazy()).collect().unwrap();
-    assert!(df_sql.frame_equal(&df_pl));
+    assert!(df_sql.equals(&df_pl));
 }
 
 #[test]
@@ -53,48 +53,79 @@ fn test_nested_expr() -> PolarsResult<()> {
     assert_eq!(df_sql, df_pl);
     Ok(())
 }
+
 #[test]
-fn test_groupby_simple() -> PolarsResult<()> {
+fn test_group_by_simple() -> PolarsResult<()> {
     let df = create_sample_df()?;
     let mut context = SQLContext::new();
     context.register("df", df.clone().lazy());
     let df_sql = context
         .execute(
             r#"
-        SELECT a, sum(b) as b , sum(a + b) as c, count(a) as total_count
+        SELECT
+          a          AS "aa",
+          SUM(b)     AS "bb",
+          SUM(a + b) AS "cc",
+          COUNT(a)   AS "total_count"
         FROM df
         GROUP BY a
         LIMIT 100
     "#,
         )?
-        .sort(
-            "a",
-            SortOptions {
-                descending: false,
-                nulls_last: false,
-                ..Default::default()
-            },
-        )
+        .sort(["aa"], Default::default())
         .collect()?;
+
     let df_pl = df
         .lazy()
-        .groupby(&[col("a")])
+        .group_by(&[col("a").alias("aa")])
         .agg(&[
-            col("b").sum().alias("b"),
-            (col("a") + col("b")).sum().alias("c"),
+            col("b").sum().alias("bb"),
+            (col("a") + col("b")).sum().alias("cc"),
             col("a").count().alias("total_count"),
         ])
         .limit(100)
-        .sort(
-            "a",
-            SortOptions {
-                descending: false,
-                nulls_last: false,
-                ..Default::default()
-            },
-        )
+        .sort(["aa"], Default::default())
         .collect()?;
     assert_eq!(df_sql, df_pl);
+    Ok(())
+}
+
+#[test]
+fn test_group_by_expression_key() -> PolarsResult<()> {
+    let df = df! {
+        "a" => &["xx", "yy", "xx", "yy", "xx", "zz"],
+        "b" => &[1, 2, 3, 4, 5, 6],
+        "c" => &[99, 99, 66, 66, 66, 66],
+    }
+    .unwrap();
+
+    let mut context = SQLContext::new();
+    context.register("df", df.clone().lazy());
+
+    // check how we handle grouping by a key that gets used in select transform
+    let df_sql = context
+        .execute(
+            r#"
+            SELECT
+                CASE WHEN a = 'zz' THEN 'xx' ELSE a END AS grp,
+                SUM(b) AS sum_b,
+                SUM(c) AS sum_c,
+            FROM df
+            GROUP BY a
+            ORDER BY sum_c
+        "#,
+        )?
+        .sort(["sum_c"], Default::default())
+        .collect()?;
+
+    let df_expected = df! {
+        "grp" => ["xx", "yy", "xx"],
+        "sum_b" => [6, 6, 9],
+        "sum_c" => [66, 165, 231],
+    }
+    .unwrap();
+
+    assert_eq!(df_sql, df_expected);
     Ok(())
 }
 
@@ -105,7 +136,8 @@ fn test_cast_exprs() {
     context.register("df", df.clone().lazy());
     let sql = r#"
         SELECT
-            cast(a as FLOAT) as floats,
+            cast(a as FLOAT) as f64,
+            cast(a as FLOAT(24)) as f32,
             cast(a as INT) as ints,
             cast(a as BIGINT) as bigints,
             cast(a as STRING) as strings,
@@ -115,15 +147,16 @@ fn test_cast_exprs() {
     let df_pl = df
         .lazy()
         .select(&[
-            col("a").cast(DataType::Float32).alias("floats"),
+            col("a").cast(DataType::Float64).alias("f64"),
+            col("a").cast(DataType::Float32).alias("f32"),
             col("a").cast(DataType::Int32).alias("ints"),
             col("a").cast(DataType::Int64).alias("bigints"),
-            col("a").cast(DataType::Utf8).alias("strings"),
+            col("a").cast(DataType::String).alias("strings"),
             col("a").cast(DataType::Binary).alias("binary"),
         ])
         .collect()
         .unwrap();
-    assert!(df_sql.frame_equal(&df_pl));
+    assert!(df_sql.equals(&df_pl));
 }
 
 #[test]
@@ -151,7 +184,38 @@ fn test_literal_exprs() {
         ])
         .collect()
         .unwrap();
-    assert!(df_sql.frame_equal_missing(&df_pl));
+    assert!(df_sql.equals_missing(&df_pl));
+}
+
+#[test]
+fn test_implicit_date_string() {
+    let df = df! {
+        "idx" => &[Some(0), Some(1), Some(2), Some(3)],
+        "dt" => &[Some("1955-10-01"), None, Some("2007-07-05"), Some("2077-06-11")],
+    }
+    .unwrap()
+    .lazy()
+    .select(vec![col("idx"), col("dt").cast(DataType::Date)])
+    .collect()
+    .unwrap();
+
+    let mut context = SQLContext::new();
+    context.register("frame", df.clone().lazy());
+    for sql in [
+        "SELECT idx, dt FROM frame WHERE dt >= '2007-07-05'",
+        "SELECT idx, dt FROM frame WHERE dt::date >= '2007-07-05'",
+        "SELECT idx, dt FROM frame WHERE dt::datetime >= '2007-07-05 00:00:00'",
+        "SELECT idx, dt FROM frame WHERE dt::timestamp >= '2007-07-05 00:00:00'",
+    ] {
+        let df_sql = context.execute(sql).unwrap().collect().unwrap();
+        let df_pl = df
+            .clone()
+            .lazy()
+            .filter(col("idx").gt_eq(lit(2)))
+            .collect()
+            .unwrap();
+        assert!(df_sql.equals(&df_pl));
+    }
 }
 
 #[test]
@@ -170,7 +234,7 @@ fn test_prefixed_column_names() {
         .select(&[col("a").alias("a"), col("b").alias("b")])
         .collect()
         .unwrap();
-    assert!(df_sql.frame_equal(&df_pl));
+    assert!(df_sql.equals(&df_pl));
 }
 
 #[test]
@@ -189,7 +253,7 @@ fn test_prefixed_column_names_2() {
         .select(&[col("a").alias("a"), col("b").alias("b")])
         .collect()
         .unwrap();
-    assert!(df_sql.frame_equal(&df_pl));
+    assert!(df_sql.equals(&df_pl));
 }
 
 #[test]
@@ -219,7 +283,7 @@ fn test_null_exprs() {
         ])
         .collect()
         .unwrap();
-    assert!(df_sql.frame_equal(&df_pl));
+    assert!(df_sql.equals(&df_pl));
 }
 
 #[test]
@@ -245,11 +309,11 @@ fn test_null_exprs_in_where() {
         .collect()
         .unwrap();
 
-    assert!(df_sql.frame_equal_missing(&df_pl));
+    assert!(df_sql.equals_missing(&df_pl));
 }
 
 #[test]
-fn binary_functions() {
+fn test_binary_functions() {
     let df = create_sample_df().unwrap();
     let mut context = SQLContext::new();
     context.register("df", df.clone().lazy());
@@ -291,7 +355,7 @@ fn binary_functions() {
         col("a").and(col("b")).alias("and"),
         col("a").or(col("b")).alias("or"),
         col("a").xor(col("b")).alias("xor"),
-        (col("a").cast(DataType::Utf8) + col("b").cast(DataType::Utf8)).alias("concat"),
+        (col("a").cast(DataType::String) + col("b").cast(DataType::String)).alias("concat"),
     ]);
     let df_pl = df_pl.collect().unwrap();
     assert_eq!(df_sql, df_pl);
@@ -337,11 +401,11 @@ fn test_agg_functions() {
         ])
         .collect()
         .unwrap();
-    assert!(df_sql.frame_equal(&df_pl));
+    assert!(df_sql.equals(&df_pl));
 }
 
 #[test]
-fn create_table() {
+fn test_create_table() {
     let df = create_sample_df().unwrap();
     let mut context = SQLContext::new();
     context.register("df", df.clone().lazy());
@@ -354,7 +418,7 @@ fn create_table() {
         "Response" => ["Create Table"]
     }
     .unwrap();
-    assert!(df_sql.frame_equal(&create_tbl_res));
+    assert!(df_sql.equals(&create_tbl_res));
     let df_2 = context
         .execute(r#"SELECT a FROM df2"#)
         .unwrap()
@@ -362,7 +426,7 @@ fn create_table() {
         .unwrap();
     let expected = df.lazy().select(&[col("a")]).collect().unwrap();
 
-    assert!(df_2.frame_equal(&expected));
+    assert!(df_2.equals(&expected));
 }
 
 #[test]
@@ -381,7 +445,7 @@ fn test_unary_minus_0() {
         .filter(col("value").lt(lit(-1)))
         .collect()
         .unwrap();
-    assert!(df_sql.frame_equal(&df_pl));
+    assert!(df_sql.equals(&df_pl));
 }
 
 #[test]
@@ -397,7 +461,7 @@ fn test_unary_minus_1() {
     let df_sql = context.execute(sql).unwrap().collect().unwrap();
     let neg_value = lit(0) - col("value");
     let df_pl = df.lazy().filter(neg_value.lt(lit(1))).collect().unwrap();
-    assert!(df_sql.frame_equal(&df_pl));
+    assert!(df_sql.equals(&df_pl));
 }
 
 #[test]
@@ -415,7 +479,7 @@ fn test_arr_agg() {
         (
             "SELECT ARRAY_AGG(a ORDER BY a) AS a FROM df",
             vec![col("a")
-                .sort_by(vec![col("a")], vec![false])
+                .sort_by(vec![col("a")], SortMultipleOptions::default())
                 .implode()
                 .alias("a")],
         ),
@@ -430,7 +494,7 @@ fn test_arr_agg() {
         (
             "SELECT ARRAY_AGG(a ORDER BY b LIMIT 2) FROM df",
             vec![col("a")
-                .sort_by(vec![col("b")], vec![false])
+                .sort_by(vec![col("b")], SortMultipleOptions::default())
                 .head(Some(2))
                 .implode()],
         ),
@@ -448,22 +512,22 @@ fn test_ctes() -> PolarsResult<()> {
     let mut context = SQLContext::new();
     context.register("df", df.lazy());
 
-    let sql = r#"
-    with df0 as (
-        SELECT * FROM df
-    )
-    select * from df0 "#;
-    assert!(context.execute(sql).is_ok());
+    // note: confirm correct behaviour of quoted/unquoted CTE identifiers
+    let sql0 = r#"WITH "df0" AS (SELECT * FROM "df") SELECT * FROM df0 "#;
+    assert!(context.execute(sql0).is_ok());
 
-    let sql = r#"select * from df0"#;
-    assert!(context.execute(sql).is_err());
+    let sql1 = r#"WITH df0 AS (SELECT * FROM df) SELECT * FROM "df0" "#;
+    assert!(context.execute(sql1).is_ok());
+
+    let sql2 = r#"SELECT * FROM df0"#;
+    assert!(context.execute(sql2).is_err());
 
     Ok(())
 }
 
 #[test]
 #[cfg(feature = "ipc")]
-fn test_groupby_2() -> PolarsResult<()> {
+fn test_group_by_2() -> PolarsResult<()> {
     let mut context = SQLContext::new();
     let sql = r#"
     CREATE TABLE foods AS
@@ -486,7 +550,7 @@ fn test_groupby_2() -> PolarsResult<()> {
     let df_sql = df_sql.collect()?;
     let expected = LazyFrame::scan_ipc("../../examples/datasets/foods1.ipc", Default::default())?
         .select(&[col("*")])
-        .groupby(vec![col("category")])
+        .group_by(vec![col("category")])
         .agg(vec![
             col("category").count().alias("count"),
             col("calories").max(),
@@ -494,13 +558,11 @@ fn test_groupby_2() -> PolarsResult<()> {
         ])
         .sort_by_exprs(
             vec![col("count"), col("category")],
-            vec![false, true],
-            false,
-            false,
+            SortMultipleOptions::default().with_order_descendings([false, true]),
         )
         .limit(2);
     let expected = expected.collect()?;
-    assert!(df_sql.frame_equal(&expected));
+    assert!(df_sql.equals(&expected));
     Ok(())
 }
 
@@ -525,7 +587,7 @@ fn test_case_expr() {
         .otherwise(lit("no match"))
         .alias("sign");
     let df_pl = df.lazy().select(&[case_expr]).collect().unwrap();
-    assert!(df_sql.frame_equal(&df_pl));
+    assert!(df_sql.equals(&df_pl));
 }
 
 #[test]
@@ -549,7 +611,7 @@ fn test_case_expr_with_expression() {
         .otherwise(lit("No?"))
         .alias("parity");
     let df_pl = df.lazy().select(&[case_expr]).collect().unwrap();
-    assert!(df_sql.frame_equal(&df_pl));
+    assert!(df_sql.equals(&df_pl));
 }
 
 #[test]
@@ -558,7 +620,7 @@ fn test_sql_expr() {
     let expr = sql_expr("MIN(a)").unwrap();
     let actual = df.clone().lazy().select(&[expr]).collect().unwrap();
     let expected = df.lazy().select(&[col("a").min()]).collect().unwrap();
-    assert!(actual.frame_equal(&expected));
+    assert!(actual.equals(&expected));
 }
 
 #[test]

@@ -425,7 +425,10 @@ impl<'a> DerefMut for MaybeUninitSlice<'a> {
 /// See [`Socket::set_tcp_keepalive`].
 #[derive(Debug, Clone)]
 pub struct TcpKeepalive {
-    #[cfg_attr(any(target_os = "openbsd", target_os = "vita"), allow(dead_code))]
+    #[cfg_attr(
+        any(target_os = "openbsd", target_os = "haiku", target_os = "vita"),
+        allow(dead_code)
+    )]
     time: Option<Duration>,
     #[cfg(not(any(
         target_os = "openbsd",
@@ -434,6 +437,7 @@ pub struct TcpKeepalive {
         target_os = "nto",
         target_os = "espidf",
         target_os = "vita",
+        target_os = "haiku",
     )))]
     interval: Option<Duration>,
     #[cfg(not(any(
@@ -444,6 +448,7 @@ pub struct TcpKeepalive {
         target_os = "nto",
         target_os = "espidf",
         target_os = "vita",
+        target_os = "haiku",
     )))]
     retries: Option<u32>,
 }
@@ -460,6 +465,7 @@ impl TcpKeepalive {
                 target_os = "nto",
                 target_os = "espidf",
                 target_os = "vita",
+                target_os = "haiku",
             )))]
             interval: None,
             #[cfg(not(any(
@@ -470,6 +476,7 @@ impl TcpKeepalive {
                 target_os = "nto",
                 target_os = "espidf",
                 target_os = "vita",
+                target_os = "haiku",
             )))]
             retries: None,
         }
@@ -711,6 +718,15 @@ impl<'addr, 'bufs, 'control> MsgHdrMut<'addr, 'bufs, 'control> {
     /// Returns the flags of the message.
     pub fn flags(&self) -> RecvFlags {
         sys::msghdr_flags(&self.inner)
+    }
+
+    /// Gets the length of the control buffer.
+    ///
+    /// Can be used to determine how much, if any, of the control buffer was filled by `recvmsg`.
+    ///
+    /// Corresponds to `msg_controllen` on Unix and `Control.len` on Windows.
+    pub fn control_len(&self) -> usize {
+        sys::msghdr_control_len(&self.inner)
     }
 }
 

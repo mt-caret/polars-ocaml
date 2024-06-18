@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "visitor")]
 use sqlparser_derive::{Visit, VisitMut};
 
-use crate::ast::ObjectName;
+use crate::ast::{display_comma_separated, ObjectName, StructField};
 
 use super::value::escape_single_quote_string;
 
@@ -71,6 +71,10 @@ pub enum DataType {
     /// [standard]: https://jakewheat.github.io/sql-overview/sql-2016-foundation-grammar.html#binary-large-object-string-type
     /// [Oracle]: https://docs.oracle.com/javadb/10.8.3.0/ref/rrefblob.html
     Blob(Option<u64>),
+    /// Variable-length binary data with optional length.
+    ///
+    /// [bigquery]: https://cloud.google.com/bigquery/docs/reference/standard-sql/data-types#bytes_type
+    Bytes(Option<u64>),
     /// Numeric type with optional precision and scale e.g. NUMERIC(10,2), [standard][1]
     ///
     /// [1]: https://jakewheat.github.io/sql-overview/sql-2016-foundation-grammar.html#exact-numeric-type
@@ -97,6 +101,14 @@ pub enum DataType {
     TinyInt(Option<u64>),
     /// Unsigned tiny integer with optional display width e.g. TINYINT UNSIGNED or TINYINT(3) UNSIGNED
     UnsignedTinyInt(Option<u64>),
+    /// Int2 as alias for SmallInt in [postgresql]
+    /// Note: Int2 mean 2 bytes in postgres (not 2 bits)
+    /// Int2 with optional display width e.g. INT2 or INT2(5)
+    ///
+    /// [postgresql]: https://www.postgresql.org/docs/15/datatype.html
+    Int2(Option<u64>),
+    /// Unsigned Int2 with optional display width e.g. INT2 Unsigned or INT2(5) Unsigned
+    UnsignedInt2(Option<u64>),
     /// Small integer with optional display width e.g. SMALLINT or SMALLINT(5)
     SmallInt(Option<u64>),
     /// Unsigned small integer with optional display width e.g. SMALLINT UNSIGNED or SMALLINT(5) UNSIGNED
@@ -109,20 +121,52 @@ pub enum DataType {
     ///
     /// [1]: https://dev.mysql.com/doc/refman/8.0/en/integer-types.html
     UnsignedMediumInt(Option<u64>),
-    /// Integer with optional display width e.g. INT or INT(11)
+    /// Int with optional display width e.g. INT or INT(11)
     Int(Option<u64>),
+    /// Int4 as alias for Integer in [postgresql]
+    /// Note: Int4 mean 4 bytes in postgres (not 4 bits)
+    /// Int4 with optional display width e.g. Int4 or Int4(11)
+    ///
+    /// [postgresql]: https://www.postgresql.org/docs/15/datatype.html
+    Int4(Option<u64>),
+    /// Integer type in [bigquery]
+    ///
+    /// [bigquery]: https://cloud.google.com/bigquery/docs/reference/standard-sql/data-types#integer_types
+    Int64,
     /// Integer with optional display width e.g. INTEGER or INTEGER(11)
     Integer(Option<u64>),
-    /// Unsigned integer with optional display width e.g. INT UNSIGNED or INT(11) UNSIGNED
+    /// Unsigned int with optional display width e.g. INT UNSIGNED or INT(11) UNSIGNED
     UnsignedInt(Option<u64>),
+    /// Unsigned int4 with optional display width e.g. INT4 UNSIGNED or INT4(11) UNSIGNED
+    UnsignedInt4(Option<u64>),
     /// Unsigned integer with optional display width e.g. INTGER UNSIGNED or INTEGER(11) UNSIGNED
     UnsignedInteger(Option<u64>),
     /// Big integer with optional display width e.g. BIGINT or BIGINT(20)
     BigInt(Option<u64>),
     /// Unsigned big integer with optional display width e.g. BIGINT UNSIGNED or BIGINT(20) UNSIGNED
     UnsignedBigInt(Option<u64>),
+    /// Int8 as alias for Bigint in [postgresql]
+    /// Note: Int8 mean 8 bytes in postgres (not 8 bits)
+    /// Int8 with optional display width e.g. INT8 or INT8(11)
+    ///
+    /// [postgresql]: https://www.postgresql.org/docs/15/datatype.html
+    Int8(Option<u64>),
+    /// Unsigned Int8 with optional display width e.g. INT8 UNSIGNED or INT8(11) UNSIGNED
+    UnsignedInt8(Option<u64>),
+    /// Float4 as alias for Real in [postgresql]
+    ///
+    /// [postgresql]: https://www.postgresql.org/docs/15/datatype.html
+    Float4,
+    /// Floating point in [bigquery]
+    ///
+    /// [bigquery]: https://cloud.google.com/bigquery/docs/reference/standard-sql/data-types#floating_point_types
+    Float64,
     /// Floating point e.g. REAL
     Real,
+    /// Float8 as alias for Double in [postgresql]
+    ///
+    /// [postgresql]: https://www.postgresql.org/docs/15/datatype.html
+    Float8,
     /// Double
     Double,
     /// Double PRECISION e.g. [standard], [postgresql]
@@ -130,6 +174,10 @@ pub enum DataType {
     /// [standard]: https://jakewheat.github.io/sql-overview/sql-2016-foundation-grammar.html#approximate-numeric-type
     /// [postgresql]: https://www.postgresql.org/docs/current/datatype-numeric.html
     DoublePrecision,
+    /// Bool as alias for Boolean in [postgresql]
+    ///
+    /// [postgresql]: https://www.postgresql.org/docs/15/datatype.html
+    Bool,
     /// Boolean
     Boolean,
     /// Date
@@ -154,18 +202,23 @@ pub enum DataType {
     Regclass,
     /// Text
     Text,
-    /// String
-    String,
+    /// String with optional length.
+    String(Option<u64>),
     /// Bytea
     Bytea,
     /// Custom type such as enums
     Custom(ObjectName, Vec<String>),
     /// Arrays
-    Array(Option<Box<DataType>>),
+    Array(ArrayElemTypeDef),
     /// Enums
     Enum(Vec<String>),
     /// Set
     Set(Vec<String>),
+    /// Struct
+    ///
+    /// [hive]: https://docs.cloudera.com/cdw-runtime/cloud/impala-sql-reference/topics/impala-struct.html
+    /// [bigquery]: https://cloud.google.com/bigquery/docs/reference/standard-sql/data-types#struct_type
+    Struct(Vec<StructField>),
 }
 
 impl fmt::Display for DataType {
@@ -195,6 +248,7 @@ impl fmt::Display for DataType {
                 format_type_with_optional_length(f, "VARBINARY", size, false)
             }
             DataType::Blob(size) => format_type_with_optional_length(f, "BLOB", size, false),
+            DataType::Bytes(size) => format_type_with_optional_length(f, "BYTES", size, false),
             DataType::Numeric(info) => {
                 write!(f, "NUMERIC{info}")
             }
@@ -213,6 +267,12 @@ impl fmt::Display for DataType {
             DataType::UnsignedTinyInt(zerofill) => {
                 format_type_with_optional_length(f, "TINYINT", zerofill, true)
             }
+            DataType::Int2(zerofill) => {
+                format_type_with_optional_length(f, "INT2", zerofill, false)
+            }
+            DataType::UnsignedInt2(zerofill) => {
+                format_type_with_optional_length(f, "INT2", zerofill, true)
+            }
             DataType::SmallInt(zerofill) => {
                 format_type_with_optional_length(f, "SMALLINT", zerofill, false)
             }
@@ -229,6 +289,15 @@ impl fmt::Display for DataType {
             DataType::UnsignedInt(zerofill) => {
                 format_type_with_optional_length(f, "INT", zerofill, true)
             }
+            DataType::Int4(zerofill) => {
+                format_type_with_optional_length(f, "INT4", zerofill, false)
+            }
+            DataType::Int64 => {
+                write!(f, "INT64")
+            }
+            DataType::UnsignedInt4(zerofill) => {
+                format_type_with_optional_length(f, "INT4", zerofill, true)
+            }
             DataType::Integer(zerofill) => {
                 format_type_with_optional_length(f, "INTEGER", zerofill, false)
             }
@@ -241,9 +310,19 @@ impl fmt::Display for DataType {
             DataType::UnsignedBigInt(zerofill) => {
                 format_type_with_optional_length(f, "BIGINT", zerofill, true)
             }
+            DataType::Int8(zerofill) => {
+                format_type_with_optional_length(f, "INT8", zerofill, false)
+            }
+            DataType::UnsignedInt8(zerofill) => {
+                format_type_with_optional_length(f, "INT8", zerofill, true)
+            }
             DataType::Real => write!(f, "REAL"),
+            DataType::Float4 => write!(f, "FLOAT4"),
+            DataType::Float64 => write!(f, "FLOAT64"),
             DataType::Double => write!(f, "DOUBLE"),
+            DataType::Float8 => write!(f, "FLOAT8"),
             DataType::DoublePrecision => write!(f, "DOUBLE PRECISION"),
+            DataType::Bool => write!(f, "BOOL"),
             DataType::Boolean => write!(f, "BOOLEAN"),
             DataType::Date => write!(f, "DATE"),
             DataType::Time(precision, timezone_info) => {
@@ -259,15 +338,13 @@ impl fmt::Display for DataType {
             DataType::JSON => write!(f, "JSON"),
             DataType::Regclass => write!(f, "REGCLASS"),
             DataType::Text => write!(f, "TEXT"),
-            DataType::String => write!(f, "STRING"),
+            DataType::String(size) => format_type_with_optional_length(f, "STRING", size, false),
             DataType::Bytea => write!(f, "BYTEA"),
-            DataType::Array(ty) => {
-                if let Some(t) = &ty {
-                    write!(f, "{t}[]")
-                } else {
-                    write!(f, "ARRAY")
-                }
-            }
+            DataType::Array(ty) => match ty {
+                ArrayElemTypeDef::None => write!(f, "ARRAY"),
+                ArrayElemTypeDef::SquareBracket(t) => write!(f, "{t}[]"),
+                ArrayElemTypeDef::AngleBracket(t) => write!(f, "ARRAY<{t}>"),
+            },
             DataType::Custom(ty, modifiers) => {
                 if modifiers.is_empty() {
                     write!(f, "{ty}")
@@ -294,6 +371,13 @@ impl fmt::Display for DataType {
                     write!(f, "'{}'", escape_single_quote_string(v))?;
                 }
                 write!(f, ")")
+            }
+            DataType::Struct(fields) => {
+                if !fields.is_empty() {
+                    write!(f, "STRUCT<{}>", display_comma_separated(fields))
+                } else {
+                    write!(f, "STRUCT")
+                }
             }
         }
     }
@@ -475,4 +559,20 @@ impl fmt::Display for CharLengthUnits {
             }
         }
     }
+}
+
+/// Represents the data type of the elements in an array (if any) as well as
+/// the syntax used to declare the array.
+///
+/// For example: Bigquery/Hive use `ARRAY<INT>` whereas snowflake uses ARRAY.
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub enum ArrayElemTypeDef {
+    /// `ARRAY`
+    None,
+    /// `ARRAY<INT>`
+    AngleBracket(Box<DataType>),
+    /// `[]INT`
+    SquareBracket(Box<DataType>),
 }

@@ -1,4 +1,3 @@
-use polars_core::error::PolarsResult;
 use polars_core::prelude::*;
 use polars_pipe::pipeline::swap_join_order;
 use polars_plan::prelude::*;
@@ -11,72 +10,96 @@ use crate::physical_plan::streaming::tree::*;
 // and start a new one.
 type CurrentIdx = usize;
 
-fn process_non_streamable_node(
-    current_idx: &mut CurrentIdx,
-    state: &mut Branch,
-    stack: &mut Vec<(Node, Branch, CurrentIdx)>,
-    scratch: &mut Vec<Node>,
-    pipeline_trees: &mut Vec<Vec<Branch>>,
-    lp: &ALogicalPlan,
-    insert_file_sink: &mut u32,
-) {
-    if state.streamable {
-        *current_idx += 1;
-        // create a completely new streaming pipeline
-        // maybe we can stream a subsection of the plan
-        pipeline_trees.push(vec![]);
+// Frame in the stack of logical plans to process while inserting streaming nodes
+struct StackFrame {
+    node: Node, // LogicalPlan node
+    state: Branch,
+    current_idx: CurrentIdx,
+    insert_sink: bool,
+}
+
+impl StackFrame {
+    fn root(node: Node) -> StackFrame {
+        StackFrame {
+            node,
+            state: Branch::default(),
+            current_idx: 0,
+            insert_sink: false,
+        }
     }
-    state.streamable = false;
-    lp.copy_inputs(scratch);
-    while let Some(input) = scratch.pop() {
-        *insert_file_sink += 1;
-        stack.push((input, Branch::default(), *current_idx))
+
+    fn new(node: Node, state: Branch, current_idx: CurrentIdx) -> StackFrame {
+        StackFrame {
+            node,
+            state,
+            current_idx,
+            insert_sink: false,
+        }
+    }
+
+    // Create a new streaming subtree below a non-streaming node
+    fn new_subtree(node: Node, current_idx: CurrentIdx) -> StackFrame {
+        StackFrame {
+            node,
+            state: Branch::default(),
+            current_idx,
+            insert_sink: true,
+        }
     }
 }
 
-fn insert_file_sink(mut root: Node, lp_arena: &mut Arena<ALogicalPlan>) -> Node {
+fn process_non_streamable_node(
+    current_idx: &mut CurrentIdx,
+    state: &mut Branch,
+    stack: &mut Vec<StackFrame>,
+    scratch: &mut Vec<Node>,
+    pipeline_trees: &mut Vec<Vec<Branch>>,
+    lp: &IR,
+) {
+    lp.copy_inputs(scratch);
+    while let Some(input) = scratch.pop() {
+        if state.streamable {
+            *current_idx += 1;
+            // create a completely new streaming pipeline
+            // maybe we can stream a subsection of the plan
+            pipeline_trees.push(vec![]);
+        }
+        stack.push(StackFrame::new_subtree(input, *current_idx));
+    }
+    state.streamable = false;
+}
+
+fn insert_file_sink(mut root: Node, lp_arena: &mut Arena<IR>) -> Node {
     // The pipelines need a final sink, we insert that here.
     // this allows us to split at joins/unions and share a sink
-    if !matches!(lp_arena.get(root), ALogicalPlan::FileSink { .. }) {
-        root = lp_arena.add(ALogicalPlan::FileSink {
+    if !matches!(lp_arena.get(root), IR::Sink { .. }) {
+        root = lp_arena.add(IR::Sink {
             input: root,
-            payload: FileSinkOptions {
-                path: Default::default(),
-                file_type: FileType::Memory,
-            },
+            payload: SinkType::Memory,
         })
     }
     root
 }
 
-fn insert_slice(
-    root: Node,
-    offset: i64,
-    len: IdxSize,
-    lp_arena: &mut Arena<ALogicalPlan>,
-    state: &mut Branch,
-) {
-    let node = lp_arena.add(ALogicalPlan::Slice {
-        input: root,
-        offset,
-        len: len as IdxSize,
-    });
-    state.operators_sinks.push(PipelineNode::Sink(node));
-}
-
 pub(crate) fn insert_streaming_nodes(
     root: Node,
-    lp_arena: &mut Arena<ALogicalPlan>,
+    lp_arena: &mut Arena<IR>,
     expr_arena: &mut Arena<AExpr>,
     scratch: &mut Vec<Node>,
     fmt: bool,
     // whether the full plan needs to be translated
     // to streaming
     allow_partial: bool,
+    row_estimate: bool,
 ) -> PolarsResult<bool> {
-    // this is needed to determine which side of the joins should be
-    // traversed first
-    set_estimated_row_counts(root, lp_arena, expr_arena, 0);
+    scratch.clear();
+
+    // This is needed to determine which side of the joins should be
+    // traversed first. As we want to keep the smallest table in the build phase as that keeps most
+    // data in memory.
+    if row_estimate {
+        set_estimated_row_counts(root, lp_arena, expr_arena, 0, scratch);
+    }
 
     scratch.clear();
 
@@ -84,7 +107,7 @@ pub(crate) fn insert_streaming_nodes(
     // this allows us to split at joins/unions and share a sink
     let root = insert_file_sink(root, lp_arena);
 
-    // We use mutation to communicate when we need to insert a file sink.
+    // We use a bool flag in the stack to communicate when we need to insert a file sink.
     // This happens for instance when we
     //
     //     ________*non-streamable part of query
@@ -92,13 +115,10 @@ pub(crate) fn insert_streaming_nodes(
     //     ________*streamable below this line so we must insert
     //    /\        a file sink here so the pipeline can be built
     //     /\
-    //
-    // when this is positive we should insert a file sink
-    let mut insert_file_sink_ptr: u32 = 0;
 
     let mut stack = Vec::with_capacity(16);
 
-    stack.push((root, Branch::default(), 0 as CurrentIdx));
+    stack.push(StackFrame::root(root));
 
     // A state holds a full pipeline until the breaker
     //  1/\
@@ -128,52 +148,66 @@ pub(crate) fn insert_streaming_nodes(
     // keep the counter global so that the order will match traversal order
     let mut execution_id = 0;
 
-    use ALogicalPlan::*;
-    while let Some((mut root, mut state, mut current_idx)) = stack.pop() {
-        if insert_file_sink_ptr > 0 {
+    use IR::*;
+    while let Some(StackFrame {
+        node: mut root,
+        mut state,
+        mut current_idx,
+        insert_sink,
+    }) = stack.pop()
+    {
+        if insert_sink {
             root = insert_file_sink(root, lp_arena);
         }
-        insert_file_sink_ptr = insert_file_sink_ptr.saturating_sub(1);
         state.execution_id = execution_id;
         execution_id += 1;
         match lp_arena.get(root) {
-            Selection { input, predicate }
-                if is_streamable(*predicate, expr_arena, Context::Default) =>
+            Filter { input, predicate }
+                if is_streamable(predicate.node(), expr_arena, Context::Default) =>
             {
                 state.streamable = true;
                 state.operators_sinks.push(PipelineNode::Operator(root));
-                stack.push((*input, state, current_idx))
+                stack.push(StackFrame::new(*input, state, current_idx))
             },
             HStack { input, exprs, .. } if all_streamable(exprs, expr_arena, Context::Default) => {
                 state.streamable = true;
                 state.operators_sinks.push(PipelineNode::Operator(root));
-                stack.push((*input, state, current_idx))
+                stack.push(StackFrame::new(*input, state, current_idx))
             },
             Slice { input, offset, .. } if *offset >= 0 => {
                 state.streamable = true;
                 state.operators_sinks.push(PipelineNode::Sink(root));
-                stack.push((*input, state, current_idx))
+                stack.push(StackFrame::new(*input, state, current_idx))
             },
-            FileSink { input, .. } => {
+            Sink { input, .. } => {
                 state.streamable = true;
                 state.operators_sinks.push(PipelineNode::Sink(root));
-                stack.push((*input, state, current_idx))
+                stack.push(StackFrame::new(*input, state, current_idx))
             },
             Sort {
                 input,
                 by_column,
-                args,
-            } if is_streamable_sort(args) && all_column(by_column, expr_arena) => {
+                slice,
+                sort_options,
+            } if is_streamable_sort(slice, sort_options) && all_column(by_column, expr_arena) => {
                 state.streamable = true;
                 state.operators_sinks.push(PipelineNode::Sink(root));
-                stack.push((*input, state, current_idx))
+                stack.push(StackFrame::new(*input, state, current_idx))
             },
-            Projection { input, expr, .. }
-                if all_streamable(expr, expr_arena, Context::Default) =>
-            {
+            Select { input, expr, .. } if all_streamable(expr, expr_arena, Context::Default) => {
                 state.streamable = true;
                 state.operators_sinks.push(PipelineNode::Operator(root));
-                stack.push((*input, state, current_idx))
+                stack.push(StackFrame::new(*input, state, current_idx))
+            },
+            SimpleProjection { input, .. } => {
+                state.streamable = true;
+                state.operators_sinks.push(PipelineNode::Operator(root));
+                stack.push(StackFrame::new(*input, state, current_idx))
+            },
+            Reduce { input, .. } => {
+                state.streamable = true;
+                state.operators_sinks.push(PipelineNode::Sink(root));
+                stack.push(StackFrame::new(*input, state, current_idx))
             },
             // Rechunks are ignored
             MapFunction {
@@ -181,14 +215,14 @@ pub(crate) fn insert_streaming_nodes(
                 function: FunctionNode::Rechunk,
             } => {
                 state.streamable = true;
-                stack.push((*input, state, current_idx))
+                stack.push(StackFrame::new(*input, state, current_idx))
             },
             // Streamable functions will be converted
             lp @ MapFunction { input, function } => {
                 if function.is_streamable() {
                     state.streamable = true;
                     state.operators_sinks.push(PipelineNode::Operator(root));
-                    stack.push((*input, state, current_idx))
+                    stack.push(StackFrame::new(*input, state, current_idx))
                 } else {
                     process_non_streamable_node(
                         &mut current_idx,
@@ -197,24 +231,11 @@ pub(crate) fn insert_streaming_nodes(
                         scratch,
                         &mut pipeline_trees,
                         lp,
-                        &mut insert_file_sink_ptr,
                     )
                 }
             },
-            Scan {
-                file_options: options,
-                scan_type,
-                ..
-            } if scan_type.streamable() => {
+            Scan { scan_type, .. } if scan_type.streamable() => {
                 if state.streamable {
-                    #[cfg(feature = "csv")]
-                    if matches!(scan_type, FileScan::Csv { .. }) {
-                        // the batched csv reader doesn't stop exactly at n_rows
-                        if let Some(n_rows) = options.n_rows {
-                            insert_slice(root, 0, n_rows as IdxSize, lp_arena, &mut state);
-                        }
-                    }
-
                     state.sources.push(root);
                     pipeline_trees[current_idx].push(state)
                 }
@@ -248,18 +269,18 @@ pub(crate) fn insert_streaming_nodes(
                 };
                 let mut state_left = state.split();
 
-                // rhs is second, so that is first on the stack
+                // Rhs is second, so that is first on the stack.
                 let mut state_right = state;
                 state_right.join_count = 0;
                 state_right
                     .operators_sinks
                     .push(PipelineNode::RhsJoin(root));
 
-                // we want to traverse lhs last, so push it first on the stack
-                // rhs is a new pipeline
+                // We want to traverse lhs last, so push it first on the stack
+                // rhs is a new pipeline.
                 state_left.operators_sinks.push(PipelineNode::Sink(root));
-                stack.push((input_left, state_left, current_idx));
-                stack.push((input_right, state_right, current_idx));
+                stack.push(StackFrame::new(input_left, state_left, current_idx));
+                stack.push(StackFrame::new(input_right, state_right, current_idx));
             },
             // add globbing patterns
             #[cfg(any(feature = "csv", feature = "parquet"))]
@@ -277,38 +298,7 @@ pub(crate) fn insert_streaming_nodes(
                 state.sources.push(root);
                 pipeline_trees[current_idx].push(state);
             },
-            Union {
-                options:
-                    UnionOptions {
-                        slice: Some((offset, len)),
-                        ..
-                    },
-                ..
-            } if *offset >= 0 => {
-                insert_slice(root, *offset, *len as IdxSize, lp_arena, &mut state);
-                state.streamable = true;
-                let Union { inputs, .. } = lp_arena.get(root) else {
-                    unreachable!()
-                };
-                for (i, input) in inputs.iter().enumerate() {
-                    let mut state = if i == 0 {
-                        // note the clone!
-                        let mut state = state.clone();
-                        state.join_count += inputs.len() as u32 - 1;
-                        state
-                    } else {
-                        let mut state = state.split_from_sink();
-                        state.join_count = 0;
-                        state
-                    };
-                    state.operators_sinks.push(PipelineNode::Union(root));
-                    stack.push((*input, state, current_idx));
-                }
-            },
-            Union {
-                inputs,
-                options: UnionOptions { slice: None, .. },
-            } => {
+            Union { inputs, .. } => {
                 {
                     state.streamable = true;
                     for (i, input) in inputs.iter().enumerate() {
@@ -323,7 +313,7 @@ pub(crate) fn insert_streaming_nodes(
                             state
                         };
                         state.operators_sinks.push(PipelineNode::Union(root));
-                        stack.push((*input, state, current_idx));
+                        stack.push(StackFrame::new(*input, state, current_idx));
                     }
                 }
             },
@@ -333,16 +323,16 @@ pub(crate) fn insert_streaming_nodes(
             {
                 state.streamable = true;
                 state.operators_sinks.push(PipelineNode::Sink(root));
-                stack.push((*input, state, current_idx))
+                stack.push(StackFrame::new(*input, state, current_idx))
             },
             #[allow(unused_variables)]
-            lp @ Aggregate {
+            lp @ GroupBy {
                 input,
                 keys,
                 aggs,
                 maintain_order: false,
                 apply: None,
-                schema,
+                schema: output_schema,
                 options,
                 ..
             } => {
@@ -355,9 +345,18 @@ pub(crate) fn insert_streaming_nodes(
                 fn allowed_dtype(dt: &DataType, string_cache: bool) -> bool {
                     match dt {
                         #[cfg(feature = "object")]
-                        DataType::Object(_) => false,
+                        DataType::Object(_, _) => false,
                         #[cfg(feature = "dtype-categorical")]
-                        DataType::Categorical(_) => string_cache,
+                        DataType::Categorical(_, _) => string_cache,
+                        DataType::List(inner) => allowed_dtype(inner, string_cache),
+                        #[cfg(feature = "dtype-struct")]
+                        DataType::Struct(fields) => fields
+                            .iter()
+                            .all(|fld| allowed_dtype(fld.data_type(), string_cache)),
+                        // We need to be able to sink to disk or produce the aggregate return dtype.
+                        DataType::Unknown(_) => false,
+                        #[cfg(feature = "dtype-decimal")]
+                        DataType::Decimal(_, _) => false,
                         _ => true,
                     }
                 }
@@ -365,7 +364,7 @@ pub(crate) fn insert_streaming_nodes(
                 #[allow(unused_mut)]
                 let mut can_stream = true;
 
-                #[cfg(feature = "dynamic_groupby")]
+                #[cfg(feature = "dynamic_group_by")]
                 {
                     if options.rolling.is_some() || options.dynamic.is_some() {
                         can_stream = false
@@ -373,9 +372,9 @@ pub(crate) fn insert_streaming_nodes(
                 }
 
                 let valid_agg = || {
-                    aggs.iter().all(|node| {
+                    aggs.iter().all(|e| {
                         polars_pipe::pipeline::can_convert_to_hash_agg(
-                            *node,
+                            e.node(),
                             expr_arena,
                             &input_schema,
                         )
@@ -383,18 +382,16 @@ pub(crate) fn insert_streaming_nodes(
                 };
 
                 let valid_key = || {
-                    keys.iter().all(|node| {
-                        expr_arena
-                            .get(*node)
-                            .get_type(schema, Context::Default, expr_arena)
-                            // ensure we don't groupby list
+                    keys.iter().all(|e| {
+                        output_schema
+                            .get(e.output_name())
                             .map(|dt| !matches!(dt, DataType::List(_)))
                             .unwrap_or(false)
                     })
                 };
 
                 let valid_types = || {
-                    schema
+                    output_schema
                         .iter_dtypes()
                         .all(|dt| allowed_dtype(dt, string_cache))
                 };
@@ -402,7 +399,7 @@ pub(crate) fn insert_streaming_nodes(
                 if can_stream && valid_agg() && valid_key() && valid_types() {
                     state.streamable = true;
                     state.operators_sinks.push(PipelineNode::Sink(root));
-                    stack.push((*input, state, current_idx))
+                    stack.push(StackFrame::new(*input, state, current_idx))
                 } else if allow_partial {
                     process_non_streamable_node(
                         &mut current_idx,
@@ -411,7 +408,6 @@ pub(crate) fn insert_streaming_nodes(
                         scratch,
                         &mut pipeline_trees,
                         lp,
-                        &mut insert_file_sink_ptr,
                     )
                 } else {
                     return Ok(false);
@@ -426,7 +422,6 @@ pub(crate) fn insert_streaming_nodes(
                         scratch,
                         &mut pipeline_trees,
                         lp,
-                        &mut insert_file_sink_ptr,
                     )
                 } else {
                     return Ok(false);

@@ -13,7 +13,7 @@ impl OptimizationRule for SlicePushDown {
         &mut self,
         expr_arena: &mut Arena<AExpr>,
         expr_node: Node,
-        _lp_arena: &Arena<ALogicalPlan>,
+        _lp_arena: &Arena<IR>,
         _lp_node: Node,
     ) -> PolarsResult<Option<AExpr>> {
         if let AExpr::Slice {
@@ -71,24 +71,47 @@ impl OptimizationRule for SlicePushDown {
                     })
                 },
                 m @ AnonymousFunction { options, .. }
-                    if matches!(options.collect_groups, ApplyOptions::ApplyFlat) =>
+                    if matches!(options.collect_groups, ApplyOptions::ElementWise) =>
                 {
                     if let AnonymousFunction {
-                        input,
+                        mut input,
                         function,
                         output_type,
                         options,
                     } = m.clone()
                     {
-                        let input = input
-                            .iter()
-                            .map(|n| pushdown(*n, offset, length, expr_arena))
-                            .collect();
+                        input.iter_mut().for_each(|e| {
+                            let n = pushdown(e.node(), offset, length, expr_arena);
+                            e.set_node(n);
+                        });
 
                         Some(AnonymousFunction {
                             input,
                             function,
                             output_type,
+                            options,
+                        })
+                    } else {
+                        unreachable!()
+                    }
+                },
+                m @ Function { options, .. }
+                    if matches!(options.collect_groups, ApplyOptions::ElementWise) =>
+                {
+                    if let Function {
+                        mut input,
+                        function,
+                        options,
+                    } = m.clone()
+                    {
+                        input.iter_mut().for_each(|e| {
+                            let n = pushdown(e.node(), offset, length, expr_arena);
+                            e.set_node(n);
+                        });
+
+                        Some(Function {
+                            input,
+                            function,
                             options,
                         })
                     } else {

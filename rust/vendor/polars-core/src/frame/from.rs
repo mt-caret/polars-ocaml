@@ -1,5 +1,3 @@
-use arrow::array::StructArray;
-
 use crate::prelude::*;
 
 impl TryFrom<StructArray> for DataFrame {
@@ -9,15 +7,22 @@ impl TryFrom<StructArray> for DataFrame {
         let (fld, arrs, nulls) = arr.into_data();
         polars_ensure!(
             nulls.is_none(),
-            ComputeError: "cannot deserialize struct with nulls into a dataframe"
+            ComputeError: "cannot deserialize struct with nulls into a DataFrame"
         );
         let columns = fld
             .iter()
             .zip(arrs)
             .map(|(fld, arr)| {
-                // Safety
+                // SAFETY:
                 // reported data type is correct
-                unsafe { Series::try_from_arrow_unchecked(&fld.name, vec![arr], fld.data_type()) }
+                unsafe {
+                    Series::_try_from_arrow_unchecked_with_md(
+                        &fld.name,
+                        vec![arr],
+                        fld.data_type(),
+                        Some(&fld.metadata),
+                    )
+                }
             })
             .collect::<PolarsResult<Vec<_>>>()?;
         DataFrame::new(columns)
@@ -30,6 +35,17 @@ impl From<&Schema> for DataFrame {
             .iter()
             .map(|(name, dtype)| Series::new_empty(name, dtype))
             .collect();
-        DataFrame::new_no_checks(cols)
+        unsafe { DataFrame::new_no_checks(cols) }
+    }
+}
+
+impl From<&ArrowSchema> for DataFrame {
+    fn from(schema: &ArrowSchema) -> Self {
+        let cols = schema
+            .fields
+            .iter()
+            .map(|fld| Series::new_empty(fld.name.as_str(), &(fld.data_type().into())))
+            .collect();
+        unsafe { DataFrame::new_no_checks(cols) }
     }
 }

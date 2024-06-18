@@ -12,35 +12,51 @@
 [package]
 edition = "2021"
 name = "polars-time"
-version = "0.32.1"
+version = "0.40.0"
 authors = ["Ritchie Vink <ritchie46@gmail.com>"]
+build = false
+autobins = false
+autoexamples = false
+autotests = false
+autobenches = false
 description = "Time related code for the Polars DataFrame library"
 homepage = "https://www.pola.rs/"
 readme = "README.md"
 license = "MIT"
 repository = "https://github.com/pola-rs/polars"
 
+[lib]
+name = "polars_time"
+path = "src/lib.rs"
+
 [dependencies.arrow]
-version = "0.17.4"
+version = "0.40.0"
 features = [
     "compute_aggregate",
     "compute_arithmetics",
+    "compute_bitwise",
     "compute_boolean",
     "compute_boolean_kleene",
     "compute_cast",
     "compute_comparison",
-    "compute_concatenate",
-    "compute_filter",
-    "compute_if_then_else",
+    "compute",
+    "temporal",
 ]
 default-features = false
-package = "arrow2"
+package = "polars-arrow"
 
 [dependencies.atoi]
 version = "2"
 
+[dependencies.bytemuck]
+version = "1.11"
+features = [
+    "derive",
+    "extern_crate_alloc",
+]
+
 [dependencies.chrono]
-version = "0.4"
+version = "0.4.31"
 features = ["std"]
 default-features = false
 
@@ -54,15 +70,8 @@ version = "0.1"
 [dependencies.once_cell]
 version = "1"
 
-[dependencies.polars-arrow]
-version = "0.32.1"
-features = [
-    "compute",
-    "temporal",
-]
-
 [dependencies.polars-core]
-version = "0.32.1"
+version = "0.40.0"
 features = [
     "dtype-datetime",
     "dtype-duration",
@@ -71,46 +80,63 @@ features = [
 ]
 default-features = false
 
+[dependencies.polars-error]
+version = "0.40.0"
+default-features = false
+
 [dependencies.polars-ops]
-version = "0.32.1"
+version = "0.40.0"
+default-features = false
 
 [dependencies.polars-utils]
-version = "0.32.1"
+version = "0.40.0"
+default-features = false
 
 [dependencies.regex]
-version = "1.7.1"
+version = "1.9"
 
 [dependencies.serde]
-version = "1.0.160"
+version = "1.0.188"
 features = ["derive"]
 optional = true
 
 [dependencies.smartstring]
 version = "1"
 
+[dev-dependencies.polars-ops]
+version = "0.40.0"
+features = ["abs"]
+default-features = false
+
 [features]
 default = []
 dtype-date = [
     "polars-core/dtype-date",
-    "polars-core/temporal",
+    "temporal",
 ]
 dtype-datetime = [
-    "polars-core/dtype-date",
-    "polars-core/temporal",
+    "polars-core/dtype-datetime",
+    "temporal",
 ]
 dtype-duration = [
     "polars-core/dtype-duration",
-    "polars-core/temporal",
+    "temporal",
 ]
 dtype-time = [
     "polars-core/dtype-time",
-    "polars-core/temporal",
+    "temporal",
 ]
 fmt = ["polars-core/fmt"]
-rolling_window = [
-    "polars-core/rolling_window",
+rolling_window = ["polars-core/rolling_window"]
+rolling_window_by = [
+    "polars-core/rolling_window_by",
     "dtype-duration",
 ]
+serde = [
+    "dep:serde",
+    "smartstring/serde",
+]
+temporal = ["polars-core/temporal"]
 test = [
     "dtype-date",
     "dtype-datetime",
@@ -120,6 +146,6 @@ timezones = [
     "chrono-tz",
     "dtype-datetime",
     "polars-core/timezones",
-    "polars-arrow/timezones",
+    "arrow/timezones",
     "polars-ops/timezones",
 ]

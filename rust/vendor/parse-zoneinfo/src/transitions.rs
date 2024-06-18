@@ -101,7 +101,7 @@
 //! The logic in this file is based off of `zic.c`, which comes with the
 //! zoneinfo files and is in the public domain.
 
-use table::{RuleInfo, Saving, Table, ZoneInfo};
+use crate::table::{RuleInfo, Saving, Table, ZoneInfo};
 
 /// A set of timespans, separated by the instances at which the timespans
 /// change over. There will always be one more timespan than transitions.
@@ -197,10 +197,10 @@ impl TableTransitions for Table {
                 }
 
                 Saving::Multiple(ref rules) => {
-                    let rules = &self.rulesets[&*rules];
+                    let rules = &self.rulesets[rules];
                     builder.add_multiple_saving(
                         zone_info,
-                        &*rules,
+                        rules,
                         &mut dst_offset,
                         use_until,
                         utc_offset,
@@ -262,21 +262,22 @@ impl FixedTimespanSetBuilder {
             let timespan = FixedTimespan {
                 utc_offset: timespan.offset,
                 dst_offset: *dst_offset,
-                name: start_zone_id.clone().unwrap_or_else(String::new),
+                name: start_zone_id.clone().unwrap_or_default(),
             };
 
             self.rest.push((time, timespan));
             *insert_start_transition = false;
         } else {
             self.first = Some(FixedTimespan {
-                utc_offset: utc_offset,
+                utc_offset,
                 dst_offset: *dst_offset,
-                name: start_zone_id.clone().unwrap_or_else(String::new),
+                name: start_zone_id.clone().unwrap_or_default(),
             });
         }
     }
 
     #[allow(unused_results)]
+    #[allow(clippy::too_many_arguments)]
     fn add_multiple_saving(
         &mut self,
         timespan: &ZoneInfo,
@@ -334,9 +335,9 @@ impl FixedTimespanSetBuilder {
 
                 if *insert_start_transition {
                     if earliest_at < self.start_time.unwrap() {
-                        replace(start_utc_offset, timespan.offset);
-                        replace(start_dst_offset, *dst_offset);
-                        replace(
+                        let _ = replace(start_utc_offset, timespan.offset);
+                        let _ = replace(start_dst_offset, *dst_offset);
+                        let _ = replace(
                             start_zone_id,
                             Some(
                                 timespan
@@ -350,7 +351,7 @@ impl FixedTimespanSetBuilder {
                     if start_zone_id.is_none()
                         && *start_utc_offset + *start_dst_offset == timespan.offset + *dst_offset
                     {
-                        replace(
+                        let _ = replace(
                             start_zone_id,
                             Some(
                                 timespan
@@ -391,7 +392,7 @@ impl FixedTimespanSetBuilder {
         };
 
         let mut zoneset = FixedTimespanSet {
-            first: first,
+            first,
             rest: self.rest,
         };
         optimise(&mut zoneset);

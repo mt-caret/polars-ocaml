@@ -28,7 +28,11 @@ use core::fmt::Debug;
 
 use crate::dialect::*;
 use crate::parser::{Parser, ParserError};
+use crate::tokenizer::Tokenizer;
 use crate::{ast::*, parser::ParserOptions};
+
+#[cfg(test)]
+use pretty_assertions::assert_eq;
 
 /// Tests use the methods on this struct to invoke the parser on one or
 /// multiple dialects.
@@ -82,8 +86,13 @@ impl TestedDialects {
     /// the result is the same for all tested dialects.
     pub fn parse_sql_statements(&self, sql: &str) -> Result<Vec<Statement>, ParserError> {
         self.one_of_identical_results(|dialect| {
+            let mut tokenizer = Tokenizer::new(dialect, sql);
+            if let Some(options) = &self.options {
+                tokenizer = tokenizer.with_unescape(options.unescape);
+            }
+            let tokens = tokenizer.tokenize()?;
             self.new_parser(dialect)
-                .try_with_sql(sql)?
+                .with_tokens(tokens)
                 .parse_statements()
         })
         // To fail the `ensure_multiple_dialects_are_tested` test:
@@ -102,7 +111,7 @@ impl TestedDialects {
     /// 2. re-serializing the result of parsing `sql` produces the same
     /// `canonical` sql string
     pub fn one_statement_parses_to(&self, sql: &str, canonical: &str) -> Statement {
-        let mut statements = self.parse_sql_statements(sql).unwrap();
+        let mut statements = self.parse_sql_statements(sql).expect(sql);
         assert_eq!(statements.len(), 1);
 
         if !canonical.is_empty() && sql != canonical {
@@ -148,6 +157,24 @@ impl TestedDialects {
     /// string (is not modified after a serialization round-trip).
     pub fn verified_only_select(&self, query: &str) -> Select {
         match *self.verified_query(query).body {
+            SetExpr::Select(s) => *s,
+            _ => panic!("Expected SetExpr::Select"),
+        }
+    }
+
+    /// Ensures that `sql` parses as a single [`Select`], and that additionally:
+    ///
+    /// 1. parsing `sql` results in the same [`Statement`] as parsing
+    /// `canonical`.
+    ///
+    /// 2. re-serializing the result of parsing `sql` produces the same
+    /// `canonical` sql string
+    pub fn verified_only_select_with_canonical(&self, query: &str, canonical: &str) -> Select {
+        let q = match self.one_statement_parses_to(query, canonical) {
+            Statement::Query(query) => *query,
+            _ => panic!("Expected Query"),
+        };
+        match *q.body {
             SetExpr::Select(s) => *s,
             _ => panic!("Expected SetExpr::Select"),
         }
@@ -203,6 +230,26 @@ pub fn expr_from_projection(item: &SelectItem) -> &Expr {
     }
 }
 
+pub fn alter_table_op_with_name(stmt: Statement, expected_name: &str) -> AlterTableOperation {
+    match stmt {
+        Statement::AlterTable {
+            name,
+            if_exists,
+            only: is_only,
+            operations,
+        } => {
+            assert_eq!(name.to_string(), expected_name);
+            assert!(!if_exists);
+            assert!(!is_only);
+            only(operations)
+        }
+        _ => panic!("Expected ALTER TABLE statement"),
+    }
+}
+pub fn alter_table_op(stmt: Statement) -> AlterTableOperation {
+    alter_table_op_with_name(stmt, "tab")
+}
+
 /// Creates a `Value::Number`, panic'ing if n is not a number
 pub fn number(n: &str) -> Value {
     Value::Number(n.parse().unwrap(), false)
@@ -221,6 +268,8 @@ pub fn table(name: impl Into<String>) -> TableFactor {
         alias: None,
         args: None,
         with_hints: vec![],
+        version: None,
+        partitions: vec![],
     }
 }
 

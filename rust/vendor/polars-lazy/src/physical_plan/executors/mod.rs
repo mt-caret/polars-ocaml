@@ -2,12 +2,14 @@ mod cache;
 mod executor;
 mod ext_context;
 mod filter;
-mod groupby;
-mod groupby_dynamic;
-mod groupby_partitioned;
-mod groupby_rolling;
+mod group_by;
+mod group_by_dynamic;
+mod group_by_partitioned;
+pub(super) mod group_by_rolling;
+mod hconcat;
 mod join;
 mod projection;
+mod projection_simple;
 mod projection_utils;
 #[cfg(feature = "python")]
 mod python_scan;
@@ -31,14 +33,16 @@ use rayon::prelude::*;
 pub(super) use self::cache::*;
 pub(super) use self::ext_context::*;
 pub(super) use self::filter::*;
-pub(super) use self::groupby::*;
-#[cfg(feature = "dynamic_groupby")]
-pub(super) use self::groupby_dynamic::*;
-pub(super) use self::groupby_partitioned::*;
-#[cfg(feature = "dynamic_groupby")]
-pub(super) use self::groupby_rolling::*;
+pub(super) use self::group_by::*;
+#[cfg(feature = "dynamic_group_by")]
+pub(super) use self::group_by_dynamic::*;
+pub(super) use self::group_by_partitioned::*;
+#[cfg(feature = "dynamic_group_by")]
+pub(super) use self::group_by_rolling::GroupByRollingExec;
+pub(super) use self::hconcat::*;
 pub(super) use self::join::*;
 pub(super) use self::projection::*;
+pub(super) use self::projection_simple::*;
 #[cfg(feature = "python")]
 pub(super) use self::python_scan::*;
 pub(super) use self::scan::*;

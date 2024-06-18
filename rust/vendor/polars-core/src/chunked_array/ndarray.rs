@@ -19,7 +19,7 @@ where
     T: PolarsNumericType,
 {
     /// If data is aligned in a single chunk and has no Null values a zero copy view is returned
-    /// as an `ndarray`
+    /// as an [ndarray]
     pub fn to_ndarray(&self) -> PolarsResult<ArrayView1<T::Native>> {
         let slice = self.cont_slice()?;
         Ok(aview1(slice))
@@ -27,7 +27,7 @@ where
 }
 
 impl ListChunked {
-    /// If all nested `Series` have the same length, a 2 dimensional `ndarray::Array` is returned.
+    /// If all nested [`Series`] have the same length, a 2 dimensional [`ndarray::Array`] is returned.
     pub fn to_ndarray<N>(&self) -> PolarsResult<Array2<N::Native>>
     where
         N: PolarsNumericType,
@@ -68,15 +68,15 @@ impl ListChunked {
         }
 
         debug_assert_eq!(row_idx, self.len());
-        // Safety:
+        // SAFETY:
         // We have assigned to every row and element of the array
         unsafe { Ok(ndarray.assume_init()) }
     }
 }
 
 impl DataFrame {
-    /// Create a 2D `ndarray::Array` from this `DataFrame`. This requires all columns in the
-    /// `DataFrame` to be non-null and numeric. They will be casted to the same data type
+    /// Create a 2D [`ndarray::Array`] from this [`DataFrame`]. This requires all columns in the
+    /// [`DataFrame`] to be non-null and numeric. They will be casted to the same data type
     /// (if they aren't already).
     ///
     /// For floating point data we implicitly convert `None` to `NaN` without failure.
@@ -100,49 +100,39 @@ impl DataFrame {
     where
         N: PolarsNumericType,
     {
-        let columns = POOL.install(|| {
-            self.get_columns()
-                .par_iter()
-                .map(|s| {
-                    let s = s.cast(&N::get_dtype())?;
-                    let s = match s.dtype() {
-                        DataType::Float32 => {
-                            let ca = s.f32().unwrap();
-                            ca.none_to_nan().into_series()
-                        },
-                        DataType::Float64 => {
-                            let ca = s.f64().unwrap();
-                            ca.none_to_nan().into_series()
-                        },
-                        _ => s,
-                    };
-                    Ok(s.rechunk())
-                })
-                .collect::<PolarsResult<Vec<_>>>()
-        })?;
-
         let shape = self.shape();
         let height = self.height();
         let mut membuf = Vec::with_capacity(shape.0 * shape.1);
         let ptr = membuf.as_ptr() as usize;
 
+        let columns = self.get_columns();
         POOL.install(|| {
-            columns
-                .par_iter()
-                .enumerate()
-                .map(|(col_idx, s)| {
-                    polars_ensure!(
-                        s.null_count() == 0,
-                        ComputeError: "creation of ndarray with null values is not supported"
-                    );
+            columns.par_iter().enumerate().try_for_each(|(col_idx, s)| {
+                polars_ensure!(
+                    s.null_count() == 0,
+                    ComputeError: "creation of ndarray with null values is not supported"
+                );
 
-                    // this is an Arc clone if already of type N
-                    let s = s.cast(&N::get_dtype())?;
-                    let ca = s.unpack::<N>()?;
-                    let vals = ca.cont_slice().unwrap();
+                let s = s.cast(&N::get_dtype())?;
+                let s = match s.dtype() {
+                    DataType::Float32 => {
+                        let ca = s.f32().unwrap();
+                        ca.none_to_nan().into_series()
+                    },
+                    DataType::Float64 => {
+                        let ca = s.f64().unwrap();
+                        ca.none_to_nan().into_series()
+                    },
+                    _ => s,
+                };
+                let ca = s.unpack::<N>()?;
+
+                let mut chunk_offset = 0;
+                for arr in ca.downcast_iter() {
+                    let vals = arr.values();
 
                     // Depending on the desired order, we add items to the buffer.
-                    // Safety:
+                    // SAFETY:
                     // We get parallel access to the vector by offsetting index access accordingly.
                     // For C-order, we only operate on every num-col-th element, starting from the
                     // column index. For Fortran-order we only operate on n contiguous elements,
@@ -150,27 +140,30 @@ impl DataFrame {
                     match ordering {
                         IndexOrder::C => unsafe {
                             let num_cols = columns.len();
-                            let mut offset = (ptr as *mut N::Native).add(col_idx);
+                            let mut offset = (ptr as *mut N::Native).add(col_idx + chunk_offset);
                             for v in vals.iter() {
                                 *offset = *v;
                                 offset = offset.add(num_cols);
                             }
                         },
                         IndexOrder::Fortran => unsafe {
-                            let offset_ptr = (ptr as *mut N::Native).add(col_idx * height);
-                            // Safety:
+                            let offset_ptr =
+                                (ptr as *mut N::Native).add(col_idx * height + chunk_offset);
+                            // SAFETY:
                             // this is uninitialized memory, so we must never read from this data
                             // copy_from_slice does not read
                             let buf = std::slice::from_raw_parts_mut(offset_ptr, height);
                             buf.copy_from_slice(vals)
                         },
                     }
-                    Ok(())
-                })
-                .collect::<PolarsResult<Vec<_>>>()
+                    chunk_offset += vals.len();
+                }
+
+                Ok(())
+            })
         })?;
 
-        // Safety:
+        // SAFETY:
         // we have written all data, so we can now safely set length
         unsafe {
             membuf.set_len(shape.0 * shape.1);

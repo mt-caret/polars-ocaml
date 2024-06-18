@@ -9,19 +9,19 @@
 //! Shutting down the runtime involves the following steps:
 //!
 //!  1. The Shared::close method is called. This closes the inject queue and
-//!     OwnedTasks instance and wakes up all worker threads.
+//!     `OwnedTasks` instance and wakes up all worker threads.
 //!
 //!  2. Each worker thread observes the close signal next time it runs
 //!     Core::maintenance by checking whether the inject queue is closed.
-//!     The Core::is_shutdown flag is set to true.
+//!     The `Core::is_shutdown` flag is set to true.
 //!
 //!  3. The worker thread calls `pre_shutdown` in parallel. Here, the worker
-//!     will keep removing tasks from OwnedTasks until it is empty. No new
-//!     tasks can be pushed to the OwnedTasks during or after this step as it
+//!     will keep removing tasks from `OwnedTasks` until it is empty. No new
+//!     tasks can be pushed to the `OwnedTasks` during or after this step as it
 //!     was closed in step 1.
 //!
 //!  5. The workers call Shared::shutdown to enter the single-threaded phase of
-//!     shutdown. These calls will push their core to Shared::shutdown_cores,
+//!     shutdown. These calls will push their core to `Shared::shutdown_cores`,
 //!     and the last thread to push its core will finish the shutdown procedure.
 //!
 //!  6. The local run queue of each core is emptied, then the inject queue is
@@ -35,22 +35,22 @@
 //!
 //! When spawning tasks during shutdown, there are two cases:
 //!
-//!  * The spawner observes the OwnedTasks being open, and the inject queue is
+//!  * The spawner observes the `OwnedTasks` being open, and the inject queue is
 //!    closed.
-//!  * The spawner observes the OwnedTasks being closed and doesn't check the
+//!  * The spawner observes the `OwnedTasks` being closed and doesn't check the
 //!    inject queue.
 //!
-//! The first case can only happen if the OwnedTasks::bind call happens before
+//! The first case can only happen if the `OwnedTasks::bind` call happens before
 //! or during step 1 of shutdown. In this case, the runtime will clean up the
 //! task in step 3 of shutdown.
 //!
 //! In the latter case, the task was not spawned and the task is immediately
 //! cancelled by the spawner.
 //!
-//! The correctness of shutdown requires both the inject queue and OwnedTasks
+//! The correctness of shutdown requires both the inject queue and `OwnedTasks`
 //! collection to have a closed bit. With a close bit on only the inject queue,
 //! spawning could run in to a situation where a task is successfully bound long
-//! after the runtime has shut down. With a close bit on only the OwnedTasks,
+//! after the runtime has shut down. With a close bit on only the `OwnedTasks`,
 //! the first spawning situation could result in the notification being pushed
 //! to the inject queue after step 6 of shutdown, which would leave a task in
 //! the inject queue indefinitely. This would be a ref-count cycle and a memory
@@ -74,7 +74,7 @@ use std::cell::RefCell;
 use std::task::Waker;
 use std::time::Duration;
 
-cfg_metrics! {
+cfg_unstable_metrics! {
     mod metrics;
 }
 
@@ -184,7 +184,7 @@ pub(crate) struct Shared {
     /// Only held to trigger some code on drop. This is used to get internal
     /// runtime metrics that can be useful when doing performance
     /// investigations. This does nothing (empty struct, no drop impl) unless
-    /// the `tokio_internal_mt_counters` cfg flag is set.
+    /// the `tokio_internal_mt_counters` `cfg` flag is set.
     _counters: Counters,
 }
 
@@ -234,7 +234,7 @@ type Task = task::Task<Arc<Handle>>;
 type Notified = task::Notified<Arc<Handle>>;
 
 /// Value picked out of thin-air. Running the LIFO slot a handful of times
-/// seemms sufficient to benefit from locality. More than 3 times probably is
+/// seems sufficient to benefit from locality. More than 3 times probably is
 /// overweighing. The value can be tuned in the future with data that shows
 /// improvements.
 const MAX_LIFO_POLLS_PER_TICK: usize = 3;
@@ -395,10 +395,18 @@ where
         let cx = maybe_cx.expect("no .is_some() == false cases above should lead here");
 
         // Get the worker core. If none is set, then blocking is fine!
-        let core = match cx.core.borrow_mut().take() {
+        let mut core = match cx.core.borrow_mut().take() {
             Some(core) => core,
             None => return Ok(()),
         };
+
+        // If we heavily call `spawn_blocking`, there might be no available thread to
+        // run this core. Except for the task in the lifo_slot, all tasks can be
+        // stolen, so we move the task out of the lifo_slot to the run_queue.
+        if let Some(task) = core.lifo_slot.take() {
+            core.run_queue
+                .push_back_or_overflow(task, &*cx.worker.handle, &mut core.stats);
+        }
 
         // We are taking the core from the context and sending it to another
         // thread.
@@ -450,6 +458,7 @@ impl Launch {
 }
 
 fn run(worker: Arc<Worker>) {
+    #[allow(dead_code)]
     struct AbortOnPanic;
 
     impl Drop for AbortOnPanic {
@@ -677,7 +686,7 @@ impl Context {
     /// Also important to notice that, before parking, the worker thread will try to take
     /// ownership of the Driver (IO/Time) and dispatch any events that might have fired.
     /// Whenever a worker thread executes the Driver loop, all waken tasks are scheduled
-    /// in its own local queue until the queue saturates (ntasks > LOCAL_QUEUE_CAPACITY).
+    /// in its own local queue until the queue saturates (ntasks > `LOCAL_QUEUE_CAPACITY`).
     /// When the local queue is saturated, the overflow tasks are added to the injection queue
     /// from where other workers can pick them up.
     /// Also, we rely on the workstealing algorithm to spread the tasks amongst workers
@@ -740,6 +749,11 @@ impl Context {
 
     pub(crate) fn defer(&self, waker: &Waker) {
         self.defer.defer(waker);
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn get_worker_index(&self) -> usize {
+        self.worker.index
     }
 }
 
@@ -984,8 +998,6 @@ impl Core {
         let next = self
             .stats
             .tuned_global_queue_interval(&worker.handle.shared.config);
-
-        debug_assert!(next > 1);
 
         // Smooth out jitter
         if abs_diff(self.global_queue_interval, next) > 2 {

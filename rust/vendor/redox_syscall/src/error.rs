@@ -1,6 +1,6 @@
 use core::{fmt, result};
 
-#[derive(Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub struct Error {
     pub errno: i32,
 }
@@ -9,7 +9,7 @@ pub type Result<T, E = Error> = result::Result<T, E>;
 
 impl Error {
     pub fn new(errno: i32) -> Error {
-        Error { errno: errno }
+        Error { errno }
     }
 
     pub fn mux(result: Result<usize>) -> usize {
@@ -42,6 +42,15 @@ impl fmt::Debug for Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> result::Result<(), fmt::Error> {
         f.write_str(self.text())
+    }
+}
+#[cfg(feature = "std")]
+impl std::error::Error for Error {}
+
+#[cfg(feature = "std")]
+impl From<Error> for std::io::Error {
+    fn from(value: Error) -> Self {
+        std::io::Error::from_raw_os_error(value.errno)
     }
 }
 
