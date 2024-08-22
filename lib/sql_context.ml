@@ -15,11 +15,18 @@ let execute_with_data_frames_exn ~names_and_data_frames ~query =
   execute_with_data_frames ~names_and_data_frames ~query |> Utils.string_result_ok_exn
 ;;
 
-external vstack_and_execute
+external vstack_and_collect
   :  names_and_data_frames:(string * Data_frame.t list) list
   -> query:string
   -> (Data_frame.t, string) result
+  = "rust_sql_context_vstack_and_collect"
+
+external vstack_and_execute
+  :  names_and_data_frames:(string * Data_frame.t list) list
+  -> query:string
+  -> (Lazy_frame.t, string) result
   = "rust_sql_context_vstack_and_execute"
+
 
 let create tables =
   let t = create () in

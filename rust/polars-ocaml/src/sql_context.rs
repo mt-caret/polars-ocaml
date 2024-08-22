@@ -71,7 +71,7 @@ fn rust_sql_context_execute_with_data_frames(
 fn sql_context_vstack_and_execute(
     query: String,
     names_and_data_frames: Vec<(String, Vec<Abstract<crate::data_frame::PolarsDataFrame>>)>,
-) -> Result<DataFrame, String> {
+) -> Result<LazyFrame, String> {
     let mut sql_context = SQLContext::new();
     for (name, data_frames) in names_and_data_frames {
         let data_frame = match data_frames
@@ -90,12 +90,31 @@ fn sql_context_vstack_and_execute(
 
     sql_context
         .execute(&query)
-        .and_then(|query_result| query_result.collect())
         .map_err(|err| err.to_string())
 }
 
 #[ocaml_interop_export]
 fn rust_sql_context_vstack_and_execute(
+    cr: &mut &mut OCamlRuntime,
+    names_and_data_frames: OCamlRef<
+        OCamlList<(
+            String,
+            OCamlList<DynBox<crate::data_frame::PolarsDataFrame>>,
+        )>,
+    >,
+    query: OCamlRef<String>,
+) -> OCaml<Result<DynBox<LazyFrame>, String>> {
+    let names_and_data_frames: Vec<(String, Vec<Abstract<crate::data_frame::PolarsDataFrame>>)> =
+        names_and_data_frames.to_rust(cr);
+    let query: String = query.to_rust(cr);
+
+    sql_context_vstack_and_execute(query, names_and_data_frames)
+        .map(|df| Abstract(df))
+        .to_ocaml(cr)
+}
+
+#[ocaml_interop_export]
+fn rust_sql_context_vstack_and_collect(
     cr: &mut &mut OCamlRuntime,
     names_and_data_frames: OCamlRef<
         OCamlList<(
@@ -110,6 +129,7 @@ fn rust_sql_context_vstack_and_execute(
     let query: String = query.to_rust(cr);
 
     sql_context_vstack_and_execute(query, names_and_data_frames)
+        .and_then(|lazy_frame| lazy_frame.collect().map_err(|err| err.to_string()))
         .map(|df| Abstract(Rc::new(RefCell::new(df))))
         .to_ocaml(cr)
 }

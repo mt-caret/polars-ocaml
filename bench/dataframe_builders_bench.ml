@@ -231,11 +231,11 @@ let interleave_vstack_and_update n =
         ~chunk_index:0
         ~indices_and_values:[ 0, Some 1000 ]
       |> Result.ok_or_failwith;
-      (* Step 4: vstack and execute *)
+      (* Step 4: vstack and collect *)
       if len % 123 = 0
       then (
         let count =
-          Sql_context.vstack_and_execute
+          Sql_context.vstack_and_collect
             ~names_and_data_frames:[ "data", [ df; !df2 ] ]
             ~query:"select count(*) as count from data"
           |> Result.ok_or_failwith
