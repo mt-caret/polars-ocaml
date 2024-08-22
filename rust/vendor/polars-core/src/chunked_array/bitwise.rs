@@ -1,12 +1,11 @@
 use std::ops::{BitAnd, BitOr, BitXor, Not};
 
 use arrow::compute;
-use polars_arrow::compute::bitwise;
-use polars_arrow::utils::combine_validities_and;
+use arrow::compute::bitwise;
+use arrow::compute::utils::combine_validities_and;
 
-use super::arithmetic::arithmetic_helper;
 use super::*;
-use crate::utils::align_chunks_binary;
+use crate::chunked_array::arity::apply_binary_kernel_broadcast;
 
 impl<T> BitAnd for &ChunkedArray<T>
 where
@@ -16,7 +15,13 @@ where
     type Output = ChunkedArray<T>;
 
     fn bitand(self, rhs: Self) -> Self::Output {
-        arithmetic_helper(self, rhs, bitwise::bitand, |a, b| a.bitand(b))
+        apply_binary_kernel_broadcast(
+            self,
+            rhs,
+            bitwise::and,
+            |l, r| bitwise::and_scalar(r, &l),
+            |l, r| bitwise::and_scalar(l, &r),
+        )
     }
 }
 
@@ -28,7 +33,13 @@ where
     type Output = ChunkedArray<T>;
 
     fn bitor(self, rhs: Self) -> Self::Output {
-        arithmetic_helper(self, rhs, bitwise::bitor, |a, b| a.bitor(b))
+        apply_binary_kernel_broadcast(
+            self,
+            rhs,
+            bitwise::or,
+            |l, r| bitwise::or_scalar(r, &l),
+            |l, r| bitwise::or_scalar(l, &r),
+        )
     }
 }
 
@@ -40,7 +51,13 @@ where
     type Output = ChunkedArray<T>;
 
     fn bitxor(self, rhs: Self) -> Self::Output {
-        arithmetic_helper(self, rhs, bitwise::bitxor, |a, b| a.bitxor(b))
+        apply_binary_kernel_broadcast(
+            self,
+            rhs,
+            bitwise::xor,
+            |l, r| bitwise::xor_scalar(r, &l),
+            |l, r| bitwise::xor_scalar(l, &r),
+        )
     }
 }
 
@@ -73,12 +90,7 @@ impl BitOr for &BooleanChunked {
             _ => {},
         }
 
-        let (lhs, rhs) = align_chunks_binary(self, rhs);
-        let chunks = lhs
-            .downcast_iter()
-            .zip(rhs.downcast_iter())
-            .map(|(lhs, rhs)| compute::boolean_kleene::or(lhs, rhs));
-        BooleanChunked::from_chunk_iter(self.name(), chunks)
+        arity::binary(self, rhs, compute::boolean_kleene::or)
     }
 }
 
@@ -123,16 +135,11 @@ impl BitXor for &BooleanChunked {
             _ => {},
         }
 
-        let (l, r) = align_chunks_binary(self, rhs);
-        let chunks = l
-            .downcast_iter()
-            .zip(r.downcast_iter())
-            .map(|(l_arr, r_arr)| {
-                let validity = combine_validities_and(l_arr.validity(), r_arr.validity());
-                let values = l_arr.values() ^ r_arr.values();
-                BooleanArray::from_data_default(values, validity)
-            });
-        ChunkedArray::from_chunk_iter(self.name(), chunks)
+        arity::binary(self, rhs, |l_arr, r_arr| {
+            let validity = combine_validities_and(l_arr.validity(), r_arr.validity());
+            let values = l_arr.values() ^ r_arr.values();
+            BooleanArray::from_data_default(values, validity)
+        })
     }
 }
 
@@ -154,7 +161,7 @@ impl BitAnd for &BooleanChunked {
             (1, 1) => {},
             (1, _) => {
                 return match self.get(0) {
-                    Some(true) => rhs.clone(),
+                    Some(true) => rhs.clone().with_name(self.name()),
                     Some(false) => BooleanChunked::full(self.name(), false, rhs.len()),
                     None => &self.new_from_index(0, rhs.len()) & rhs,
                 };
@@ -169,12 +176,7 @@ impl BitAnd for &BooleanChunked {
             _ => {},
         }
 
-        let (lhs, rhs) = align_chunks_binary(self, rhs);
-        let chunks = lhs
-            .downcast_iter()
-            .zip(rhs.downcast_iter())
-            .map(|(lhs, rhs)| compute::boolean_kleene::and(lhs, rhs));
-        BooleanChunked::from_chunk_iter(self.name(), chunks)
+        arity::binary(self, rhs, compute::boolean_kleene::and)
     }
 }
 

@@ -18,11 +18,11 @@ fn iss_8419() {
             col("Country"),
             col("Sales"),
             col("Sales")
-                .sort(true)
-                .cumsum(false)
+                .sort(SortOptions::default().with_order_descending(true))
+                .cum_sum(false)
                 .alias("SalesCumulative"),
         ])
-        .sort("SalesCumulative", SortOptions::default())
+        .sort(["SalesCumulative"], Default::default())
         .collect()
         .unwrap();
     let mut ctx = SQLContext::new();
@@ -41,5 +41,5 @@ fn iss_8419() {
     "#;
     let df = ctx.execute(query).unwrap().collect().unwrap();
 
-    assert!(df.frame_equal(&expected))
+    assert!(df.equals(&expected))
 }

@@ -12,41 +12,62 @@
 [package]
 edition = "2021"
 name = "polars-ops"
-version = "0.32.1"
+version = "0.40.0"
 authors = ["Ritchie Vink <ritchie46@gmail.com>"]
+build = "build.rs"
+autobins = false
+autoexamples = false
+autotests = false
+autobenches = false
 description = "More operations on Polars data structures"
 homepage = "https://www.pola.rs/"
 readme = "README.md"
 license = "MIT"
 repository = "https://github.com/pola-rs/polars"
 
+[lib]
+name = "polars_ops"
+path = "src/lib.rs"
+
+[dependencies.ahash]
+version = ">=0.8.5"
+
+[dependencies.aho-corasick]
+version = "1.1"
+optional = true
+
 [dependencies.argminmax]
-version = "0.6.1"
+version = "0.6.2"
 features = ["float"]
 default-features = false
 
 [dependencies.arrow]
-version = "0.17.4"
+version = "0.40.0"
 features = [
     "compute_aggregate",
     "compute_arithmetics",
+    "compute_bitwise",
     "compute_boolean",
     "compute_boolean_kleene",
     "compute_cast",
     "compute_comparison",
-    "compute_concatenate",
-    "compute_filter",
-    "compute_if_then_else",
 ]
 default-features = false
-package = "arrow2"
+package = "polars-arrow"
 
 [dependencies.base64]
-version = "0.21"
+version = "0.22.0"
 optional = true
 
+[dependencies.bytemuck]
+version = "1.11"
+features = [
+    "derive",
+    "extern_crate_alloc",
+]
+
 [dependencies.chrono]
-version = "0.4"
+version = "0.4.31"
 features = ["std"]
 optional = true
 default-features = false
@@ -56,10 +77,18 @@ version = "0.8.1"
 optional = true
 
 [dependencies.either]
-version = "1.8"
+version = "1.11"
+
+[dependencies.hashbrown]
+version = "0.14"
+features = [
+    "rayon",
+    "ahash",
+    "serde",
+]
 
 [dependencies.hex]
-version = "0.4"
+version = "0.4.3"
 optional = true
 
 [dependencies.indexmap]
@@ -67,32 +96,61 @@ version = "2"
 features = ["std"]
 
 [dependencies.jsonpath_lib]
-version = "0.3"
+version = "0.0.1"
 optional = true
+package = "jsonpath_lib_polars_vendor"
 
 [dependencies.memchr]
-version = "2"
+version = "2.6"
 
-[dependencies.polars-arrow]
-version = "0.32.1"
+[dependencies.num-traits]
+version = "0.2"
+
+[dependencies.polars-compute]
+version = "0.40.0"
 default-features = false
 
 [dependencies.polars-core]
-version = "0.32.1"
-features = []
+version = "0.40.0"
+features = [
+    "algorithm_group_by",
+    "zip_with",
+]
+default-features = false
+
+[dependencies.polars-error]
+version = "0.40.0"
 default-features = false
 
 [dependencies.polars-json]
-version = "0.32.1"
+version = "0.40.0"
 optional = true
 default-features = false
 
 [dependencies.polars-utils]
-version = "0.32.1"
+version = "0.40.0"
 default-features = false
 
+[dependencies.rand]
+version = "0.8"
+features = [
+    "small_rng",
+    "std",
+]
+optional = true
+
+[dependencies.rand_distr]
+version = "0.4"
+optional = true
+
+[dependencies.rayon]
+version = "1.9"
+
+[dependencies.regex]
+version = "1.9"
+
 [dependencies.serde]
-version = "1.0.160"
+version = "1.0.188"
 features = ["derive"]
 optional = true
 
@@ -103,24 +161,45 @@ optional = true
 [dependencies.smartstring]
 version = "1"
 
+[dependencies.unicode-reverse]
+version = "1.0.8"
+optional = true
+
+[dev-dependencies.rand]
+version = "0.8"
+features = ["small_rng"]
+
 [build-dependencies.version_check]
 version = "0.9.4"
 
 [features]
+abs = []
 approx_unique = []
-asof_join = ["polars-core/asof_join"]
+array_any_all = ["dtype-array"]
+array_count = ["dtype-array"]
+array_to_struct = [
+    "polars-core/dtype-array",
+    "polars-core/dtype-struct",
+]
+asof_join = []
 big_idx = ["polars-core/bigidx"]
 binary_encoding = [
     "base64",
     "hex",
 ]
-chunked_ids = ["polars-core/chunked_ids"]
-cross_join = ["polars-core/cross_join"]
+business = [
+    "dtype-date",
+    "chrono",
+]
+chunked_ids = []
+cov = []
+cross_join = []
+cum_agg = []
 cutqcut = [
     "dtype-categorical",
     "dtype-struct",
 ]
-diff = ["polars-core/diff"]
+diff = []
 dtype-array = ["polars-core/dtype-array"]
 dtype-categorical = ["polars-core/dtype-categorical"]
 dtype-date = [
@@ -148,6 +227,8 @@ dtype-time = [
 ]
 dtype-u16 = ["polars-core/dtype-u16"]
 dtype-u8 = ["polars-core/dtype-u8"]
+ewma = []
+ewma_by = []
 extract_groups = [
     "dtype-struct",
     "polars-core/regex",
@@ -157,39 +238,66 @@ extract_jsonpath = [
     "jsonpath_lib",
     "polars-json",
 ]
+find_many = ["aho-corasick"]
 fused = []
+gather = []
 hash = []
+hist = [
+    "dtype-categorical",
+    "dtype-struct",
+]
 interpolate = []
-is_first = []
+is_between = []
+is_first_distinct = []
+is_in = ["polars-core/reinterpret"]
+is_last_distinct = []
 is_unique = []
 list_any_all = []
 list_count = []
+list_drop_nulls = []
+list_gather = []
+list_sample = []
 list_sets = []
-list_take = []
 list_to_struct = ["polars-core/dtype-struct"]
 log = []
 merge_sorted = []
-moment = ["polars-core/moment"]
+mode = []
+moment = []
 nightly = ["polars-utils/nightly"]
 object = ["polars-core/object"]
+pct_change = ["diff"]
+peaks = []
 performant = [
     "polars-core/performant",
     "fused",
 ]
 pivot = ["polars-core/reinterpret"]
 propagate_nans = []
+random = [
+    "rand",
+    "rand_distr",
+]
+rank = ["rand"]
+reinterpret = ["polars-core/reinterpret"]
+repeat_by = []
+replace = ["is_in"]
 rle = ["dtype-struct"]
 rolling_window = ["polars-core/rolling_window"]
+rolling_window_by = ["polars-core/rolling_window_by"]
 round_series = []
 search_sorted = []
-semi_anti_join = ["polars-core/semi_anti_join"]
+semi_anti_join = []
 simd = ["argminmax/nightly_simd"]
 string_encoding = [
     "base64",
     "hex",
 ]
-string_from_radix = ["polars-core/strings"]
-string_justify = ["polars-core/strings"]
+string_pad = ["polars-core/strings"]
+string_reverse = [
+    "polars-core/strings",
+    "unicode-reverse",
+]
+string_to_integer = ["polars-core/strings"]
 strings = ["polars-core/strings"]
 timezones = [
     "chrono-tz",
@@ -197,3 +305,4 @@ timezones = [
 ]
 to_dummies = []
 top_k = []
+unique_counts = []

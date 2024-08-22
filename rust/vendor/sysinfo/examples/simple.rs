@@ -6,42 +6,39 @@
 
 use std::io::{self, BufRead, Write};
 use std::str::FromStr;
-use sysinfo::Signal::*;
-use sysinfo::{
-    CpuExt, NetworkExt, NetworksExt, Pid, ProcessExt, Signal, System, SystemExt, UserExt,
-};
+use sysinfo::{Components, Disks, Networks, Pid, Signal, System, Users};
 
 const signals: &[Signal] = &[
-    Hangup,
-    Interrupt,
-    Quit,
-    Illegal,
-    Trap,
-    Abort,
-    Bus,
-    FloatingPointException,
-    Kill,
-    User1,
-    Segv,
-    User2,
-    Pipe,
-    Alarm,
-    Term,
-    Child,
-    Continue,
-    Stop,
-    TSTP,
-    TTIN,
-    TTOU,
-    Urgent,
-    XCPU,
-    XFSZ,
-    VirtualAlarm,
-    Profiling,
-    Winch,
-    IO,
-    Power,
-    Sys,
+    Signal::Hangup,
+    Signal::Interrupt,
+    Signal::Quit,
+    Signal::Illegal,
+    Signal::Trap,
+    Signal::Abort,
+    Signal::Bus,
+    Signal::FloatingPointException,
+    Signal::Kill,
+    Signal::User1,
+    Signal::Segv,
+    Signal::User2,
+    Signal::Pipe,
+    Signal::Alarm,
+    Signal::Term,
+    Signal::Child,
+    Signal::Continue,
+    Signal::Stop,
+    Signal::TSTP,
+    Signal::TTIN,
+    Signal::TTOU,
+    Signal::Urgent,
+    Signal::XCPU,
+    Signal::XFSZ,
+    Signal::VirtualAlarm,
+    Signal::Profiling,
+    Signal::Winch,
+    Signal::IO,
+    Signal::Power,
+    Signal::Sys,
 ];
 
 fn print_help() {
@@ -61,15 +58,23 @@ fn print_help() {
     );
     writeln!(
         &mut io::stdout(),
-        "refresh_disks      : reloads only disks information"
+        "refresh_components : reloads components information"
     );
     writeln!(
         &mut io::stdout(),
-        "refresh_users      : reloads only users information"
+        "refresh_cpu        : reloads CPU information"
     );
     writeln!(
         &mut io::stdout(),
-        "refresh_networks   : reloads only networks information"
+        "refresh_disks      : reloads disks information"
+    );
+    writeln!(
+        &mut io::stdout(),
+        "refresh_users      : reloads users information"
+    );
+    writeln!(
+        &mut io::stdout(),
+        "refresh_networks   : reloads networks information"
     );
     writeln!(
         &mut io::stdout(),
@@ -141,22 +146,39 @@ fn print_help() {
     writeln!(&mut io::stdout(), "quit               : Exit the program");
 }
 
-fn interpret_input(input: &str, sys: &mut System) -> bool {
+fn interpret_input(
+    input: &str,
+    sys: &mut System,
+    networks: &mut Networks,
+    disks: &mut Disks,
+    components: &mut Components,
+    users: &mut Users,
+) -> bool {
     match input.trim() {
         "help" => print_help(),
         "refresh_disks" => {
             writeln!(&mut io::stdout(), "Refreshing disk list...");
-            sys.refresh_disks_list();
+            disks.refresh_list();
             writeln!(&mut io::stdout(), "Done.");
         }
         "refresh_users" => {
             writeln!(&mut io::stdout(), "Refreshing user list...");
-            sys.refresh_users_list();
+            users.refresh_list();
             writeln!(&mut io::stdout(), "Done.");
         }
         "refresh_networks" => {
             writeln!(&mut io::stdout(), "Refreshing network list...");
-            sys.refresh_networks_list();
+            networks.refresh_list();
+            writeln!(&mut io::stdout(), "Done.");
+        }
+        "refresh_components" => {
+            writeln!(&mut io::stdout(), "Refreshing component list...");
+            components.refresh_list();
+            writeln!(&mut io::stdout(), "Done.");
+        }
+        "refresh_cpu" => {
+            writeln!(&mut io::stdout(), "Refreshing CPUs...");
+            sys.refresh_cpu();
             writeln!(&mut io::stdout(), "Done.");
         }
         "signals" => {
@@ -179,11 +201,11 @@ fn interpret_input(input: &str, sys: &mut System) -> bool {
             );
             writeln!(
                 &mut io::stdout(),
-                "total process usage: {}%",
+                "total CPU usage: {}%",
                 sys.global_cpu_info().cpu_usage()
             );
-            for proc_ in sys.cpus() {
-                writeln!(&mut io::stdout(), "{proc_:?}");
+            for cpu in sys.cpus() {
+                writeln!(&mut io::stdout(), "{cpu:?}");
             }
         }
         "memory" => {
@@ -226,11 +248,14 @@ fn interpret_input(input: &str, sys: &mut System) -> bool {
             }
         }
         "frequency" => {
-            writeln!(
-                &mut io::stdout(),
-                "{} MHz",
-                sys.global_cpu_info().frequency()
-            );
+            for cpu in sys.cpus() {
+                writeln!(
+                    &mut io::stdout(),
+                    "[{}] {} MHz",
+                    cpu.name(),
+                    cpu.frequency(),
+                );
+            }
         }
         "vendor_id" => {
             writeln!(
@@ -243,7 +268,7 @@ fn interpret_input(input: &str, sys: &mut System) -> bool {
             writeln!(&mut io::stdout(), "brand: {}", sys.cpus()[0].brand());
         }
         "load_avg" => {
-            let load_avg = sys.load_average();
+            let load_avg = System::load_average();
             writeln!(&mut io::stdout(), "one minute     : {}%", load_avg.one);
             writeln!(&mut io::stdout(), "five minutes   : {}%", load_avg.five);
             writeln!(&mut io::stdout(), "fifteen minutes: {}%", load_avg.fifteen);
@@ -271,12 +296,12 @@ fn interpret_input(input: &str, sys: &mut System) -> bool {
             }
         }
         "temperature" => {
-            for component in sys.components() {
+            for component in components.iter() {
                 writeln!(&mut io::stdout(), "{component:?}");
             }
         }
         "network" => {
-            for (interface_name, data) in sys.networks().iter() {
+            for (interface_name, data) in networks.iter() {
                 writeln!(
                     &mut io::stdout(),
                     "{}:\n  ether {}\n  input data  (new / total): {} / {} B\n  output data (new / total): {} / {} B",
@@ -336,12 +361,12 @@ fn interpret_input(input: &str, sys: &mut System) -> bool {
             }
         }
         "disks" => {
-            for disk in sys.disks() {
+            for disk in disks {
                 writeln!(&mut io::stdout(), "{disk:?}");
             }
         }
         "users" => {
-            for user in sys.users() {
+            for user in users {
                 writeln!(
                     &mut io::stdout(),
                     "{:?} => {:?}",
@@ -351,11 +376,11 @@ fn interpret_input(input: &str, sys: &mut System) -> bool {
             }
         }
         "boot_time" => {
-            writeln!(&mut io::stdout(), "{} seconds", sys.boot_time());
+            writeln!(&mut io::stdout(), "{} seconds", System::boot_time());
         }
         "uptime" => {
-            let up = sys.uptime();
-            let mut uptime = sys.uptime();
+            let up = System::uptime();
+            let mut uptime = up;
             let days = uptime / 86400;
             uptime -= days * 86400;
             let hours = uptime / 3600;
@@ -410,13 +435,11 @@ fn interpret_input(input: &str, sys: &mut System) -> bool {
                  System OS version:        {}\n\
                  System OS (long) version: {}\n\
                  System host name:         {}",
-                sys.name().unwrap_or_else(|| "<unknown>".to_owned()),
-                sys.kernel_version()
-                    .unwrap_or_else(|| "<unknown>".to_owned()),
-                sys.os_version().unwrap_or_else(|| "<unknown>".to_owned()),
-                sys.long_os_version()
-                    .unwrap_or_else(|| "<unknown>".to_owned()),
-                sys.host_name().unwrap_or_else(|| "<unknown>".to_owned()),
+                System::name().unwrap_or_else(|| "<unknown>".to_owned()),
+                System::kernel_version().unwrap_or_else(|| "<unknown>".to_owned()),
+                System::os_version().unwrap_or_else(|| "<unknown>".to_owned()),
+                System::long_os_version().unwrap_or_else(|| "<unknown>".to_owned()),
+                System::host_name().unwrap_or_else(|| "<unknown>".to_owned()),
             );
         }
         e => {
@@ -431,8 +454,13 @@ fn interpret_input(input: &str, sys: &mut System) -> bool {
 }
 
 fn main() {
-    println!("Getting processes' information...");
-    let mut t = System::new_all();
+    println!("Getting system information...");
+    let mut system = System::new_all();
+    let mut networks = Networks::new_with_refreshed_list();
+    let mut disks = Disks::new_with_refreshed_list();
+    let mut components = Components::new_with_refreshed_list();
+    let mut users = Users::new_with_refreshed_list();
+
     println!("Done.");
     let t_stin = io::stdin();
     let mut stin = t_stin.lock();
@@ -454,6 +482,13 @@ fn main() {
         if (&input as &str).ends_with('\n') {
             input.pop();
         }
-        done = interpret_input(input.as_ref(), &mut t);
+        done = interpret_input(
+            input.as_ref(),
+            &mut system,
+            &mut networks,
+            &mut disks,
+            &mut components,
+            &mut users,
+        );
     }
 }

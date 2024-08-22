@@ -1,6 +1,7 @@
 use super::*;
 
 #[test]
+#[cfg(feature = "parquet")]
 fn test_multiple_roots() -> PolarsResult<()> {
     let mut expr_arena = Arena::with_capacity(16);
     let mut lp_arena = Arena::with_capacity(8);
@@ -18,13 +19,13 @@ fn test_multiple_roots() -> PolarsResult<()> {
     // and that we don't have any filter node
     assert!(!(&lp_arena)
         .iter(root)
-        .any(|(_, lp)| matches!(lp, ALogicalPlan::Selection { .. })));
+        .any(|(_, lp)| matches!(lp, IR::Filter { .. })));
 
     Ok(())
 }
 
 #[test]
-#[cfg(all(feature = "is_in", feature = "strings"))]
+#[cfg(all(feature = "is_in", feature = "strings", feature = "dtype-categorical"))]
 fn test_issue_2472() -> PolarsResult<()> {
     let df = df![
         "group" => ["54360-2001-0-20020312-4-1"
@@ -39,12 +40,12 @@ fn test_issue_2472() -> PolarsResult<()> {
     ]?;
     let base = df
         .lazy()
-        .with_column(col("group").cast(DataType::Categorical(None)));
+        .with_column(col("group").cast(DataType::Categorical(None, Default::default())));
 
     let extract = col("group")
-        .cast(DataType::Utf8)
+        .cast(DataType::String)
         .str()
-        .extract(r"(\d+-){4}(\w+)-", 2)
+        .extract(lit(r"(\d+-){4}(\w+)-"), 2)
         .cast(DataType::Int32)
         .alias("age");
     let predicate = col("age").is_in(lit(Series::new("", [2i32])));
@@ -186,15 +187,15 @@ fn test_filter_nulls_created_by_join() -> PolarsResult<()> {
         "bar" => [1],
         "flag" => &[None, Some(true)][0..1]
     ]?;
-    assert!(out.frame_equal_missing(&expected));
+    assert!(out.equals_missing(&expected));
 
     let out = a
         .lazy()
         .join(b, [col("key")], [col("key")], JoinType::Left.into())
-        .filter(col("flag").eq(lit(NULL)))
+        .filter(col("flag").is_null())
         .with_predicate_pushdown(false)
         .collect()?;
-    assert!(out.frame_equal_missing(&expected));
+    assert!(out.equals_missing(&expected));
 
     Ok(())
 }
@@ -216,7 +217,7 @@ fn test_filter_null_creation_by_cast() -> PolarsResult<()> {
         "int" => [3],
         "empty" => &[None, Some(1i32)][..1]
     ]?;
-    assert!(out.frame_equal_missing(&expected));
+    assert!(out.equals_missing(&expected));
 
     Ok(())
 }
@@ -266,5 +267,69 @@ fn test_predicate_on_join_suffix_4788() -> PolarsResult<()> {
     ]?;
     assert_eq!(q.collect()?, expected);
 
+    Ok(())
+}
+
+#[test]
+fn test_push_join_col_predicates_to_both_sides_7247() -> PolarsResult<()> {
+    let df1 = df! {
+        "a" => ["a1", "a2"],
+        "b" => ["b1", "b2"],
+    }?;
+    let df2 = df! {
+        "a" => ["a1", "a1", "a2"],
+        "b2" => ["b1", "b1", "b2"],
+        "c" => ["a1", "c", "a2"]
+    }?;
+    let df = df1.lazy().join(
+        df2.lazy(),
+        [col("a"), col("b")],
+        [col("a"), col("b2")],
+        JoinArgs::new(JoinType::Inner),
+    );
+    let q = df
+        .filter(col("a").eq(lit("a1")))
+        .filter(col("a").eq(col("c")));
+
+    predicate_at_all_scans(q.clone());
+
+    let out = q.collect()?;
+    let expected = df![
+        "a" => ["a1"],
+        "b" => ["b1"],
+        "c" => ["a1"],
+    ]?;
+    assert_eq!(out, expected);
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "semi_anti_join")]
+fn test_push_join_col_predicates_to_both_sides_semi_12565() -> PolarsResult<()> {
+    let df1 = df! {
+        "a" => ["a1", "a2"],
+        "b" => ["b1", "b2"],
+    }?;
+    let df2 = df! {
+        "a" => ["a1", "a1", "a2"],
+        "b2" => ["b1", "b1", "b2"],
+        "c" => ["a1", "c", "a2"]
+    }?;
+    let df = df1.lazy().join(
+        df2.lazy(),
+        [col("a"), col("b")],
+        [col("a"), col("b2")],
+        JoinArgs::new(JoinType::Semi),
+    );
+    let q = df.filter(col("a").eq(lit("a1")));
+
+    predicate_at_all_scans(q.clone());
+
+    let out = q.collect()?;
+    let expected = df![
+        "a" => ["a1"],
+        "b" => ["b1"],
+    ]?;
+    assert_eq!(out, expected);
     Ok(())
 }

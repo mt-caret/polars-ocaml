@@ -11,9 +11,9 @@
 
 [package]
 edition = "2021"
-rust-version = "1.61"
+rust-version = "1.64"
 name = "value-trait"
-version = "0.6.1"
+version = "0.8.1"
 authors = ["Heinz N. Gies <heinz@licenser.net>"]
 description = "Traits to deal with JSONesque values"
 documentation = "https://docs.rs/value-trait"
@@ -34,7 +34,7 @@ version = "0.2"
 optional = true
 
 [dependencies.hashbrown]
-version = "0.13"
+version = "0.14"
 optional = true
 
 [dependencies.itoa]
@@ -45,10 +45,12 @@ version = "1"
 
 [features]
 128bit = []
-allow-non-simd = []
 c-abi = ["abi_stable"]
 custom-types = []
 default = [
     "custom-types",
     "halfbrown",
+    "runtime-detection",
 ]
+portable = []
+runtime-detection = []

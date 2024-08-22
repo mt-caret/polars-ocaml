@@ -1,18 +1,12 @@
 // Take a look at the license at the top of the repository in the LICENSE file.
 
-use crate::{
-    CpuRefreshKind, LoadAvg, Networks, Pid, ProcessExt, ProcessRefreshKind, RefreshKind, SystemExt,
-    User,
-};
-use winapi::um::winreg::HKEY_LOCAL_MACHINE;
+use crate::{Cpu, CpuRefreshKind, LoadAvg, MemoryRefreshKind, Pid, ProcessRefreshKind};
 
-use crate::sys::component::{self, Component};
 use crate::sys::cpu::*;
-use crate::sys::disk::{get_disks, Disk};
-use crate::sys::process::{get_start_time, update_memory, Process};
+use crate::sys::process::get_start_time;
 use crate::sys::tools::*;
-use crate::sys::users::get_users;
 use crate::sys::utils::{get_now, get_reg_string_value, get_reg_value_u32};
+use crate::{Process, ProcessInner};
 
 use crate::utils::into_iter;
 
@@ -20,52 +14,27 @@ use std::cell::UnsafeCell;
 use std::collections::HashMap;
 use std::mem::{size_of, zeroed};
 use std::ptr;
-use std::time::{Duration, SystemTime};
+use std::time::SystemTime;
 
-use ntapi::ntexapi::{
-    NtQuerySystemInformation, SystemProcessInformation, SYSTEM_PROCESS_INFORMATION,
-};
-use winapi::ctypes::wchar_t;
-use winapi::shared::minwindef::{FALSE, TRUE};
-use winapi::shared::ntstatus::{STATUS_INFO_LENGTH_MISMATCH, STATUS_SUCCESS};
-use winapi::um::minwinbase::STILL_ACTIVE;
-use winapi::um::processthreadsapi::GetExitCodeProcess;
-use winapi::um::psapi::{GetPerformanceInfo, PERFORMANCE_INFORMATION};
-use winapi::um::sysinfoapi::{
+use ntapi::ntexapi::SYSTEM_PROCESS_INFORMATION;
+use windows::core::PWSTR;
+use windows::Wdk::System::SystemInformation::{NtQuerySystemInformation, SystemProcessInformation};
+use windows::Win32::Foundation::{HANDLE, STATUS_INFO_LENGTH_MISMATCH, STILL_ACTIVE};
+use windows::Win32::System::ProcessStatus::{K32GetPerformanceInfo, PERFORMANCE_INFORMATION};
+use windows::Win32::System::Registry::HKEY_LOCAL_MACHINE;
+use windows::Win32::System::SystemInformation;
+use windows::Win32::System::SystemInformation::{
     ComputerNamePhysicalDnsHostname, GetComputerNameExW, GetTickCount64, GlobalMemoryStatusEx,
-    MEMORYSTATUSEX,
+    MEMORYSTATUSEX, SYSTEM_INFO,
 };
-use winapi::um::winnt::HANDLE;
+use windows::Win32::System::Threading::GetExitCodeProcess;
 
-declare_signals! {
-    (),
-    Signal::Kill => (),
-    _ => None,
-}
+const WINDOWS_ELEVEN_BUILD_NUMBER: u32 = 22000;
 
-#[doc = include_str!("../../md_doc/system.md")]
-pub struct System {
-    process_list: HashMap<Pid, Process>,
-    mem_total: u64,
-    mem_available: u64,
-    swap_total: u64,
-    swap_used: u64,
-    cpus: CpusWrapper,
-    components: Vec<Component>,
-    disks: Vec<Disk>,
-    query: Option<Query>,
-    networks: Networks,
-    boot_time: u64,
-    users: Vec<User>,
-}
-
-static WINDOWS_ELEVEN_BUILD_NUMBER: u32 = 22000;
-
-impl System {
-    fn is_windows_eleven(&self) -> bool {
+impl SystemInner {
+    fn is_windows_eleven() -> bool {
         WINDOWS_ELEVEN_BUILD_NUMBER
-            <= self
-                .kernel_version()
+            <= Self::kernel_version()
                 .unwrap_or_default()
                 .parse()
                 .unwrap_or(0)
@@ -89,32 +58,30 @@ unsafe fn boot_time() -> u64 {
     }
 }
 
-impl SystemExt for System {
-    const IS_SUPPORTED: bool = true;
-    const SUPPORTED_SIGNALS: &'static [Signal] = supported_signals();
-    const MINIMUM_CPU_UPDATE_INTERVAL: Duration = Duration::from_millis(200);
+pub(crate) struct SystemInner {
+    process_list: HashMap<Pid, Process>,
+    mem_total: u64,
+    mem_available: u64,
+    swap_total: u64,
+    swap_used: u64,
+    cpus: CpusWrapper,
+    query: Option<Query>,
+}
 
-    #[allow(non_snake_case)]
-    fn new_with_specifics(refreshes: RefreshKind) -> System {
-        let mut s = System {
+impl SystemInner {
+    pub(crate) fn new() -> Self {
+        Self {
             process_list: HashMap::with_capacity(500),
             mem_total: 0,
             mem_available: 0,
             swap_total: 0,
             swap_used: 0,
             cpus: CpusWrapper::new(),
-            components: Vec::new(),
-            disks: Vec::with_capacity(2),
             query: None,
-            networks: Networks::new(),
-            boot_time: unsafe { boot_time() },
-            users: Vec::new(),
-        };
-        s.refresh_specifics(refreshes);
-        s
+        }
     }
 
-    fn refresh_cpu_specifics(&mut self, refresh_kind: CpuRefreshKind) {
+    pub(crate) fn refresh_cpu_specifics(&mut self, refresh_kind: CpuRefreshKind) {
         if self.query.is_none() {
             self.query = Query::new();
             if let Some(ref mut query) = self.query {
@@ -147,6 +114,7 @@ impl SystemExt for System {
             if let Some(total_idle_time) = total_idle_time {
                 self.cpus
                     .global_cpu_mut()
+                    .inner
                     .set_cpu_usage(100.0 - total_idle_time);
             }
             for p in self.cpus.iter_mut(refresh_kind) {
@@ -159,7 +127,7 @@ impl SystemExt for System {
                     );
                 }
                 if let Some(idle_time) = idle_time {
-                    p.set_cpu_usage(100.0 - idle_time);
+                    p.inner.set_cpu_usage(100.0 - idle_time);
                 }
             }
             if refresh_kind.frequency() {
@@ -168,39 +136,43 @@ impl SystemExt for System {
         }
     }
 
-    fn refresh_memory(&mut self) {
+    pub(crate) fn refresh_memory_specifics(&mut self, refresh_kind: MemoryRefreshKind) {
         unsafe {
-            let mut mem_info: MEMORYSTATUSEX = zeroed();
-            mem_info.dwLength = size_of::<MEMORYSTATUSEX>() as u32;
-            GlobalMemoryStatusEx(&mut mem_info);
-            self.mem_total = mem_info.ullTotalPhys as _;
-            self.mem_available = mem_info.ullAvailPhys as _;
-            let mut perf_info: PERFORMANCE_INFORMATION = zeroed();
-            if GetPerformanceInfo(&mut perf_info, size_of::<PERFORMANCE_INFORMATION>() as u32)
-                == TRUE
-            {
-                let swap_total = perf_info.PageSize.saturating_mul(
-                    perf_info
-                        .CommitLimit
-                        .saturating_sub(perf_info.PhysicalTotal),
-                );
-                let swap_used = perf_info.PageSize.saturating_mul(
-                    perf_info
-                        .CommitTotal
-                        .saturating_sub(perf_info.PhysicalTotal),
-                );
-                self.swap_total = swap_total as _;
-                self.swap_used = swap_used as _;
+            if refresh_kind.ram() {
+                let mut mem_info: MEMORYSTATUSEX = zeroed();
+                mem_info.dwLength = size_of::<MEMORYSTATUSEX>() as _;
+                let _err = GlobalMemoryStatusEx(&mut mem_info);
+                self.mem_total = mem_info.ullTotalPhys as _;
+                self.mem_available = mem_info.ullAvailPhys as _;
+            }
+            if refresh_kind.swap() {
+                let mut perf_info: PERFORMANCE_INFORMATION = zeroed();
+                if K32GetPerformanceInfo(&mut perf_info, size_of::<PERFORMANCE_INFORMATION>() as _)
+                    .as_bool()
+                {
+                    let page_size = perf_info.PageSize as u64;
+                    let physical_total = perf_info.PhysicalTotal as u64;
+                    let commit_limit = perf_info.CommitLimit as u64;
+                    let commit_total = perf_info.CommitTotal as u64;
+                    self.swap_total =
+                        page_size.saturating_mul(commit_limit.saturating_sub(physical_total));
+                    self.swap_used =
+                        page_size.saturating_mul(commit_total.saturating_sub(physical_total));
+                }
             }
         }
     }
 
-    fn refresh_components_list(&mut self) {
-        self.components = component::get_components();
+    pub(crate) fn cgroup_limits(&self) -> Option<crate::CGroupLimits> {
+        None
     }
 
     #[allow(clippy::map_entry)]
-    fn refresh_process_specifics(&mut self, pid: Pid, refresh_kind: ProcessRefreshKind) -> bool {
+    pub(crate) fn refresh_process_specifics(
+        &mut self,
+        pid: Pid,
+        refresh_kind: ProcessRefreshKind,
+    ) -> bool {
         let now = get_now();
         let nb_cpus = self.cpus.len() as u64;
 
@@ -210,10 +182,10 @@ impl SystemExt for System {
             }
             // We need to re-make the process because the PID owner changed.
         }
-        if let Some(mut p) = Process::new_from_pid(pid, now, refresh_kind) {
-            p.update(refresh_kind, nb_cpus, now);
+        if let Some(mut p) = ProcessInner::new_from_pid(pid, now) {
+            p.update(refresh_kind, nb_cpus, now, true);
             p.updated = false;
-            self.process_list.insert(pid, p);
+            self.process_list.insert(pid, Process { inner: p });
             true
         } else {
             false
@@ -221,249 +193,235 @@ impl SystemExt for System {
     }
 
     #[allow(clippy::cast_ptr_alignment)]
-    fn refresh_processes_specifics(&mut self, refresh_kind: ProcessRefreshKind) {
+    pub(crate) fn refresh_processes_specifics(
+        &mut self,
+        filter: Option<&[Pid]>,
+        refresh_kind: ProcessRefreshKind,
+    ) {
         // Windows 10 notebook requires at least 512KiB of memory to make it in one go
         let mut buffer_size = 512 * 1024;
         let mut process_information: Vec<u8> = Vec::with_capacity(buffer_size);
 
-        loop {
-            let mut cb_needed = 0;
-            // reserve(n) ensures the Vec has capacity for n elements on top of len
-            // so we should reserve buffer_size - len. len will always be zero at this point
-            // this is a no-op on the first call as buffer_size == capacity
-            process_information.reserve(buffer_size);
+        unsafe {
+            loop {
+                let mut cb_needed = 0;
+                // reserve(n) ensures the Vec has capacity for n elements on top of len
+                // so we should reserve buffer_size - len. len will always be zero at this point
+                // this is a no-op on the first call as buffer_size == capacity
+                process_information.reserve(buffer_size);
 
-            unsafe {
-                let ntstatus = NtQuerySystemInformation(
+                match NtQuerySystemInformation(
                     SystemProcessInformation,
                     process_information.as_mut_ptr() as *mut _,
                     buffer_size as _,
                     &mut cb_needed,
-                );
-
-                if ntstatus == STATUS_SUCCESS {
-                    break;
-                } else if ntstatus == STATUS_INFO_LENGTH_MISMATCH {
-                    // GetNewBufferSize
-                    if cb_needed == 0 {
-                        buffer_size *= 2;
+                )
+                .ok()
+                {
+                    Ok(()) => break,
+                    Err(err) if err.code() == STATUS_INFO_LENGTH_MISMATCH.to_hresult() => {
+                        // GetNewBufferSize
+                        if cb_needed == 0 {
+                            buffer_size *= 2;
+                            continue;
+                        }
+                        // allocating a few more kilo bytes just in case there are some new process
+                        // kicked in since new call to NtQuerySystemInformation
+                        buffer_size = (cb_needed + (1024 * 10)) as usize;
                         continue;
                     }
-                    // allocating a few more kilo bytes just in case there are some new process
-                    // kicked in since new call to NtQuerySystemInformation
-                    buffer_size = (cb_needed + (1024 * 10)) as usize;
-                    continue;
-                } else {
-                    sysinfo_debug!(
-                        "Couldn't get process infos: NtQuerySystemInformation returned {}",
-                        ntstatus
-                    );
-                    return;
+                    Err(_err) => {
+                        sysinfo_debug!(
+                            "Couldn't get process infos: NtQuerySystemInformation returned {}",
+                            _err,
+                        );
+                        return;
+                    }
                 }
             }
-        }
 
-        // If we reach this point NtQuerySystemInformation succeeded
-        // and the buffer contents are initialized
-        unsafe {
-            process_information.set_len(buffer_size);
-        }
+            #[inline(always)]
+            fn real_filter(e: Pid, filter: &[Pid]) -> bool {
+                filter.contains(&e)
+            }
 
-        // Parse the data block to get process information
-        let mut process_ids = Vec::with_capacity(500);
-        let mut process_information_offset = 0;
-        loop {
-            let p = unsafe {
-                process_information
-                    .as_ptr()
-                    .offset(process_information_offset)
-                    as *const SYSTEM_PROCESS_INFORMATION
+            #[inline(always)]
+            fn empty_filter(_e: Pid, _filter: &[Pid]) -> bool {
+                true
+            }
+
+            #[allow(clippy::type_complexity)]
+            let (filter, filter_callback): (
+                &[Pid],
+                &(dyn Fn(Pid, &[Pid]) -> bool + Sync + Send),
+            ) = if let Some(filter) = filter {
+                (filter, &real_filter)
+            } else {
+                (&[], &empty_filter)
             };
 
-            process_ids.push(Wrap(p));
+            // If we reach this point NtQuerySystemInformation succeeded
+            // and the buffer contents are initialized
+            process_information.set_len(buffer_size);
 
-            // read_unaligned is necessary to avoid
-            // misaligned pointer dereference: address must be a multiple of 0x8 but is 0x...
-            // under x86_64 wine (and possibly other systems)
-            let pi = unsafe { ptr::read_unaligned(p) };
+            // Parse the data block to get process information
+            let mut process_ids = Vec::with_capacity(500);
+            let mut process_information_offset = 0;
+            loop {
+                let p = process_information
+                    .as_ptr()
+                    .offset(process_information_offset)
+                    as *const SYSTEM_PROCESS_INFORMATION;
 
-            if pi.NextEntryOffset == 0 {
-                break;
-            }
+                // read_unaligned is necessary to avoid
+                // misaligned pointer dereference: address must be a multiple of 0x8 but is 0x...
+                // under x86_64 wine (and possibly other systems)
+                let pi = ptr::read_unaligned(p);
 
-            process_information_offset += pi.NextEntryOffset as isize;
-        }
-        let process_list = Wrap(UnsafeCell::new(&mut self.process_list));
-        let nb_cpus = if refresh_kind.cpu() {
-            self.cpus.len() as u64
-        } else {
-            0
-        };
-
-        let now = get_now();
-
-        #[cfg(feature = "multithread")]
-        use rayon::iter::ParallelIterator;
-
-        // TODO: instead of using parallel iterator only here, would be better to be
-        //       able to run it over `process_information` directly!
-        let processes = into_iter(process_ids)
-            .filter_map(|pi| {
-                // as above, read_unaligned is necessary
-                let pi = unsafe { ptr::read_unaligned(pi.0) };
-                let pid = Pid(pi.UniqueProcessId as _);
-                if let Some(proc_) = unsafe { (*process_list.0.get()).get_mut(&pid) } {
-                    if proc_
-                        .get_start_time()
-                        .map(|start| start == proc_.start_time())
-                        .unwrap_or(true)
-                    {
-                        proc_.memory = pi.WorkingSetSize as _;
-                        proc_.virtual_memory = pi.VirtualSize as _;
-                        proc_.update(refresh_kind, nb_cpus, now);
-                        return None;
-                    }
-                    // If the PID owner changed, we need to recompute the whole process.
-                    sysinfo_debug!("owner changed for PID {}", proc_.pid());
+                if filter_callback(Pid(pi.UniqueProcessId as _), filter) {
+                    process_ids.push(Wrap(p));
                 }
-                let name = get_process_name(&pi, pid);
-                let mut p = Process::new_full(
-                    pid,
-                    if pi.InheritedFromUniqueProcessId as usize != 0 {
+
+                if pi.NextEntryOffset == 0 {
+                    break;
+                }
+
+                process_information_offset += pi.NextEntryOffset as isize;
+            }
+            let process_list = Wrap(UnsafeCell::new(&mut self.process_list));
+            let nb_cpus = if refresh_kind.cpu() {
+                self.cpus.len() as u64
+            } else {
+                0
+            };
+
+            let now = get_now();
+
+            #[cfg(feature = "multithread")]
+            use rayon::iter::ParallelIterator;
+
+            // TODO: instead of using parallel iterator only here, would be better to be
+            //       able to run it over `process_information` directly!
+            let processes = into_iter(process_ids)
+                .filter_map(|pi| {
+                    // as above, read_unaligned is necessary
+                    let pi = ptr::read_unaligned(pi.0);
+                    let pid = Pid(pi.UniqueProcessId as _);
+                    let ppid: usize = pi.InheritedFromUniqueProcessId as _;
+                    let parent = if ppid != 0 {
                         Some(Pid(pi.InheritedFromUniqueProcessId as _))
                     } else {
                         None
-                    },
-                    pi.WorkingSetSize as _,
-                    pi.VirtualSize as _,
-                    name,
-                    now,
-                    refresh_kind,
-                );
-                p.update(refresh_kind, nb_cpus, now);
-                Some(p)
-            })
-            .collect::<Vec<_>>();
-        for p in processes.into_iter() {
-            self.process_list.insert(p.pid(), p);
+                    };
+                    if let Some(proc_) = (*process_list.0.get()).get_mut(&pid) {
+                        let proc_ = &mut proc_.inner;
+                        if proc_
+                            .get_start_time()
+                            .map(|start| start == proc_.start_time())
+                            .unwrap_or(true)
+                        {
+                            if refresh_kind.memory() {
+                                proc_.memory = pi.WorkingSetSize as _;
+                                proc_.virtual_memory = pi.VirtualSize as _;
+                            }
+                            proc_.update(refresh_kind, nb_cpus, now, false);
+                            // Update the parent in case it changed.
+                            proc_.parent = parent;
+                            return None;
+                        }
+                        // If the PID owner changed, we need to recompute the whole process.
+                        sysinfo_debug!("owner changed for PID {}", proc_.pid());
+                    }
+                    let name = get_process_name(&pi, pid);
+                    let (memory, virtual_memory) = if refresh_kind.memory() {
+                        (pi.WorkingSetSize as _, pi.VirtualSize as _)
+                    } else {
+                        (0, 0)
+                    };
+                    let mut p =
+                        ProcessInner::new_full(pid, parent, memory, virtual_memory, name, now);
+                    p.update(refresh_kind.without_memory(), nb_cpus, now, false);
+                    Some(Process { inner: p })
+                })
+                .collect::<Vec<_>>();
+            for p in processes.into_iter() {
+                self.process_list.insert(p.pid(), p);
+            }
+            self.process_list.retain(|_, v| {
+                let x = v.inner.updated;
+                v.inner.updated = false;
+                x
+            });
         }
-        self.process_list.retain(|_, v| {
-            let x = v.updated;
-            v.updated = false;
-            x
-        });
     }
 
-    fn refresh_disks_list(&mut self) {
-        self.disks = unsafe { get_disks() };
-    }
-
-    fn refresh_users_list(&mut self) {
-        self.users = unsafe { get_users() };
-    }
-
-    fn processes(&self) -> &HashMap<Pid, Process> {
+    pub(crate) fn processes(&self) -> &HashMap<Pid, Process> {
         &self.process_list
     }
 
-    fn process(&self, pid: Pid) -> Option<&Process> {
+    pub(crate) fn process(&self, pid: Pid) -> Option<&Process> {
         self.process_list.get(&pid)
     }
 
-    fn global_cpu_info(&self) -> &Cpu {
+    pub(crate) fn global_cpu_info(&self) -> &Cpu {
         self.cpus.global_cpu()
     }
 
-    fn cpus(&self) -> &[Cpu] {
+    pub(crate) fn cpus(&self) -> &[Cpu] {
         self.cpus.cpus()
     }
 
-    fn physical_core_count(&self) -> Option<usize> {
+    pub(crate) fn physical_core_count(&self) -> Option<usize> {
         get_physical_core_count()
     }
 
-    fn total_memory(&self) -> u64 {
+    pub(crate) fn total_memory(&self) -> u64 {
         self.mem_total
     }
 
-    fn free_memory(&self) -> u64 {
+    pub(crate) fn free_memory(&self) -> u64 {
         // MEMORYSTATUSEX doesn't report free memory
         self.mem_available
     }
 
-    fn available_memory(&self) -> u64 {
+    pub(crate) fn available_memory(&self) -> u64 {
         self.mem_available
     }
 
-    fn used_memory(&self) -> u64 {
+    pub(crate) fn used_memory(&self) -> u64 {
         self.mem_total - self.mem_available
     }
 
-    fn total_swap(&self) -> u64 {
+    pub(crate) fn total_swap(&self) -> u64 {
         self.swap_total
     }
 
-    fn free_swap(&self) -> u64 {
+    pub(crate) fn free_swap(&self) -> u64 {
         self.swap_total - self.swap_used
     }
 
-    fn used_swap(&self) -> u64 {
+    pub(crate) fn used_swap(&self) -> u64 {
         self.swap_used
     }
 
-    fn components(&self) -> &[Component] {
-        &self.components
-    }
-
-    fn components_mut(&mut self) -> &mut [Component] {
-        &mut self.components
-    }
-
-    fn disks(&self) -> &[Disk] {
-        &self.disks
-    }
-
-    fn disks_mut(&mut self) -> &mut [Disk] {
-        &mut self.disks
-    }
-
-    fn sort_disks_by<F>(&mut self, compare: F)
-    where
-        F: FnMut(&Disk, &Disk) -> std::cmp::Ordering,
-    {
-        self.disks.sort_unstable_by(compare);
-    }
-
-    fn users(&self) -> &[User] {
-        &self.users
-    }
-
-    fn networks(&self) -> &Networks {
-        &self.networks
-    }
-
-    fn networks_mut(&mut self) -> &mut Networks {
-        &mut self.networks
-    }
-
-    fn uptime(&self) -> u64 {
+    pub(crate) fn uptime() -> u64 {
         unsafe { GetTickCount64() / 1_000 }
     }
 
-    fn boot_time(&self) -> u64 {
-        self.boot_time
+    pub(crate) fn boot_time() -> u64 {
+        unsafe { boot_time() }
     }
 
-    fn load_average(&self) -> LoadAvg {
+    pub(crate) fn load_average() -> LoadAvg {
         get_load_average()
     }
 
-    fn name(&self) -> Option<String> {
+    pub(crate) fn name() -> Option<String> {
         Some("Windows".to_owned())
     }
 
-    fn long_os_version(&self) -> Option<String> {
-        if self.is_windows_eleven() {
+    pub(crate) fn long_os_version() -> Option<String> {
+        if Self::is_windows_eleven() {
             return get_reg_string_value(
                 HKEY_LOCAL_MACHINE,
                 "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion",
@@ -478,11 +436,11 @@ impl SystemExt for System {
         )
     }
 
-    fn host_name(&self) -> Option<String> {
+    pub(crate) fn host_name() -> Option<String> {
         get_dns_hostname()
     }
 
-    fn kernel_version(&self) -> Option<String> {
+    pub(crate) fn kernel_version() -> Option<String> {
         get_reg_string_value(
             HKEY_LOCAL_MACHINE,
             "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion",
@@ -490,14 +448,14 @@ impl SystemExt for System {
         )
     }
 
-    fn os_version(&self) -> Option<String> {
+    pub(crate) fn os_version() -> Option<String> {
         let build_number = get_reg_string_value(
             HKEY_LOCAL_MACHINE,
             "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion",
             "CurrentBuildNumber",
         )
         .unwrap_or_default();
-        let major = if self.is_windows_eleven() {
+        let major = if Self::is_windows_eleven() {
             11u32
         } else {
             u32::from_le_bytes(
@@ -512,23 +470,38 @@ impl SystemExt for System {
         Some(format!("{major} ({build_number})"))
     }
 
-    fn distribution_id(&self) -> String {
+    pub(crate) fn distribution_id() -> String {
         std::env::consts::OS.to_owned()
     }
-}
-
-impl Default for System {
-    fn default() -> System {
-        System::new()
+    pub(crate) fn cpu_arch() -> Option<String> {
+        unsafe {
+            // https://docs.microsoft.com/fr-fr/windows/win32/api/sysinfoapi/ns-sysinfoapi-system_info
+            let info = SYSTEM_INFO::default();
+            match info.Anonymous.Anonymous.wProcessorArchitecture {
+                SystemInformation::PROCESSOR_ARCHITECTURE_ALPHA => Some("alpha".to_string()),
+                SystemInformation::PROCESSOR_ARCHITECTURE_ALPHA64 => Some("alpha64".to_string()),
+                SystemInformation::PROCESSOR_ARCHITECTURE_AMD64 => Some("x86_64".to_string()),
+                SystemInformation::PROCESSOR_ARCHITECTURE_ARM => Some("arm".to_string()),
+                SystemInformation::PROCESSOR_ARCHITECTURE_ARM32_ON_WIN64 => Some("arm".to_string()),
+                SystemInformation::PROCESSOR_ARCHITECTURE_ARM64 => Some("arm64".to_string()),
+                SystemInformation::PROCESSOR_ARCHITECTURE_IA32_ON_ARM64
+                | SystemInformation::PROCESSOR_ARCHITECTURE_IA32_ON_WIN64 => {
+                    Some("ia32".to_string())
+                }
+                SystemInformation::PROCESSOR_ARCHITECTURE_IA64 => Some("ia64".to_string()),
+                SystemInformation::PROCESSOR_ARCHITECTURE_INTEL => Some("x86".to_string()),
+                SystemInformation::PROCESSOR_ARCHITECTURE_MIPS => Some("mips".to_string()),
+                SystemInformation::PROCESSOR_ARCHITECTURE_PPC => Some("powerpc".to_string()),
+                _ => None,
+            }
+        }
     }
 }
 
 pub(crate) fn is_proc_running(handle: HANDLE) -> bool {
     let mut exit_code = 0;
-    unsafe {
-        let ret = GetExitCodeProcess(handle, &mut exit_code);
-        !(ret == FALSE || exit_code != STILL_ACTIVE)
-    }
+    unsafe { GetExitCodeProcess(handle, &mut exit_code) }.is_ok()
+        && exit_code == STILL_ACTIVE.0 as u32
 }
 
 /// If it returns `None`, it means that the PID owner changed and that the `Process` must be
@@ -539,6 +512,7 @@ fn refresh_existing_process(
     now: u64,
     refresh_kind: ProcessRefreshKind,
 ) -> Option<bool> {
+    let proc_ = &mut proc_.inner;
     if let Some(handle) = proc_.get_handle() {
         if get_start_time(handle) != proc_.start_time() {
             sysinfo_debug!("owner changed for PID {}", proc_.pid());
@@ -551,8 +525,7 @@ fn refresh_existing_process(
     } else {
         return Some(false);
     }
-    update_memory(proc_);
-    proc_.update(refresh_kind, nb_cpus, now);
+    proc_.update(refresh_kind, nb_cpus, now, false);
     proc_.updated = false;
     Some(true)
 }
@@ -586,9 +559,9 @@ fn get_dns_hostname() -> Option<String> {
     // setting the `lpBuffer` to null will return the buffer size
     // https://docs.microsoft.com/en-us/windows/win32/api/sysinfoapi/nf-sysinfoapi-getcomputernameexw
     unsafe {
-        GetComputerNameExW(
+        let _err = GetComputerNameExW(
             ComputerNamePhysicalDnsHostname,
-            std::ptr::null_mut(),
+            PWSTR::null(),
             &mut buffer_size,
         );
 
@@ -598,9 +571,10 @@ fn get_dns_hostname() -> Option<String> {
         // https://docs.microsoft.com/en-us/windows/win32/api/sysinfoapi/ne-sysinfoapi-computer_name_format
         if GetComputerNameExW(
             ComputerNamePhysicalDnsHostname,
-            buffer.as_mut_ptr() as *mut wchar_t,
+            PWSTR::from_raw(buffer.as_mut_ptr()),
             &mut buffer_size,
-        ) == TRUE
+        )
+        .is_ok()
         {
             if let Some(pos) = buffer.iter().position(|c| *c == 0) {
                 buffer.resize(pos, 0);

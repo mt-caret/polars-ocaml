@@ -26,83 +26,138 @@ use crate::Weekday;
 #[allow(deprecated)]
 use crate::{Date, DateTime};
 
-mod fixed;
+pub(crate) mod fixed;
 pub use self::fixed::FixedOffset;
 
 #[cfg(feature = "clock")]
-mod local;
+pub(crate) mod local;
 #[cfg(feature = "clock")]
 pub use self::local::Local;
 
-mod utc;
+pub(crate) mod utc;
 pub use self::utc::Utc;
 
-/// The conversion result from the local time to the timezone-aware datetime types.
+/// The result of mapping a local time to a concrete instant in a given time zone.
+///
+/// The calculation to go from a local time (wall clock time) to an instant in UTC can end up in
+/// three cases:
+/// * A single, simple result.
+/// * An ambiguous result when the clock is turned backwards during a transition due to for example
+///   DST.
+/// * No result when the clock is turned forwards during a transition due to for example DST.
+///
+/// When the clock is turned backwards it creates a _fold_ in local time, during which the local
+/// time is _ambiguous_. When the clock is turned forwards it creates a _gap_ in local time, during
+/// which the local time is _missing_, or does not exist.
+///
+/// Chrono does not return a default choice or invalid data during time zone transitions, but has
+/// the `MappedLocalTime` type to help deal with the result correctly.
+///
+/// The type of `T` is usually a [`DateTime`] but may also be only an offset.
+pub type MappedLocalTime<T> = LocalResult<T>;
 #[derive(Clone, PartialEq, Debug, Copy, Eq, Hash)]
+
+/// Old name of [`MappedLocalTime`]. See that type for more documentation.
 pub enum LocalResult<T> {
-    /// Given local time representation is invalid.
-    /// This can occur when, for example, the positive timezone transition.
-    None,
-    /// Given local time representation has a single unique result.
+    /// The local time maps to a single unique result.
     Single(T),
-    /// Given local time representation has multiple results and thus ambiguous.
-    /// This can occur when, for example, the negative timezone transition.
-    Ambiguous(T /*min*/, T /*max*/),
+
+    /// The local time is _ambiguous_ because there is a _fold_ in the local time.
+    ///
+    /// This variant contains the two possible results, in the order `(earliest, latest)`.
+    Ambiguous(T, T),
+
+    /// The local time does not exist because there is a _gap_ in the local time.
+    ///
+    /// This variant may also be returned if there was an error while resolving the local time,
+    /// caused by for example missing time zone data files, an error in an OS API, or overflow.
+    None,
 }
 
-impl<T> LocalResult<T> {
-    /// Returns `Some` only when the conversion result is unique, or `None` otherwise.
+impl<T> MappedLocalTime<T> {
+    /// Returns `Some` if the time zone mapping has a single result.
+    ///
+    /// # Errors
+    ///
+    /// Returns `None` if local time falls in a _fold_ or _gap_ in the local time, or if there was
+    /// an error.
     #[must_use]
     pub fn single(self) -> Option<T> {
         match self {
-            LocalResult::Single(t) => Some(t),
+            MappedLocalTime::Single(t) => Some(t),
             _ => None,
         }
     }
 
-    /// Returns `Some` for the earliest possible conversion result, or `None` if none.
+    /// Returns the earliest possible result of a the time zone mapping.
+    ///
+    /// # Errors
+    ///
+    /// Returns `None` if local time falls in a _gap_ in the local time, or if there was an error.
     #[must_use]
     pub fn earliest(self) -> Option<T> {
         match self {
-            LocalResult::Single(t) | LocalResult::Ambiguous(t, _) => Some(t),
+            MappedLocalTime::Single(t) | MappedLocalTime::Ambiguous(t, _) => Some(t),
             _ => None,
         }
     }
 
-    /// Returns `Some` for the latest possible conversion result, or `None` if none.
+    /// Returns the latest possible result of a the time zone mapping.
+    ///
+    /// # Errors
+    ///
+    /// Returns `None` if local time falls in a _gap_ in the local time, or if there was an error.
     #[must_use]
     pub fn latest(self) -> Option<T> {
         match self {
-            LocalResult::Single(t) | LocalResult::Ambiguous(_, t) => Some(t),
+            MappedLocalTime::Single(t) | MappedLocalTime::Ambiguous(_, t) => Some(t),
             _ => None,
         }
     }
 
-    /// Maps a `LocalResult<T>` into `LocalResult<U>` with given function.
+    /// Maps a `MappedLocalTime<T>` into `MappedLocalTime<U>` with given function.
     #[must_use]
-    pub fn map<U, F: FnMut(T) -> U>(self, mut f: F) -> LocalResult<U> {
+    pub fn map<U, F: FnMut(T) -> U>(self, mut f: F) -> MappedLocalTime<U> {
         match self {
-            LocalResult::None => LocalResult::None,
-            LocalResult::Single(v) => LocalResult::Single(f(v)),
-            LocalResult::Ambiguous(min, max) => LocalResult::Ambiguous(f(min), f(max)),
+            MappedLocalTime::None => MappedLocalTime::None,
+            MappedLocalTime::Single(v) => MappedLocalTime::Single(f(v)),
+            MappedLocalTime::Ambiguous(min, max) => MappedLocalTime::Ambiguous(f(min), f(max)),
+        }
+    }
+
+    /// Maps a `MappedLocalTime<T>` into `MappedLocalTime<U>` with given function.
+    ///
+    /// Returns `MappedLocalTime::None` if the function returns `None`.
+    #[must_use]
+    pub(crate) fn and_then<U, F: FnMut(T) -> Option<U>>(self, mut f: F) -> MappedLocalTime<U> {
+        match self {
+            MappedLocalTime::None => MappedLocalTime::None,
+            MappedLocalTime::Single(v) => match f(v) {
+                Some(new) => MappedLocalTime::Single(new),
+                None => MappedLocalTime::None,
+            },
+            MappedLocalTime::Ambiguous(min, max) => match (f(min), f(max)) {
+                (Some(min), Some(max)) => MappedLocalTime::Ambiguous(min, max),
+                _ => MappedLocalTime::None,
+            },
         }
     }
 }
 
 #[allow(deprecated)]
-impl<Tz: TimeZone> LocalResult<Date<Tz>> {
+impl<Tz: TimeZone> MappedLocalTime<Date<Tz>> {
     /// Makes a new `DateTime` from the current date and given `NaiveTime`.
     /// The offset in the current date is preserved.
     ///
     /// Propagates any error. Ambiguous result would be discarded.
     #[inline]
     #[must_use]
-    pub fn and_time(self, time: NaiveTime) -> LocalResult<DateTime<Tz>> {
+    pub fn and_time(self, time: NaiveTime) -> MappedLocalTime<DateTime<Tz>> {
         match self {
-            LocalResult::Single(d) => {
-                d.and_time(time).map_or(LocalResult::None, LocalResult::Single)
+            MappedLocalTime::Single(d) => {
+                d.and_time(time).map_or(MappedLocalTime::None, MappedLocalTime::Single)
             }
-            _ => LocalResult::None,
+            _ => MappedLocalTime::None,
         }
     }
 
@@ -112,12 +167,12 @@ impl<Tz: TimeZone> LocalResult<Date<Tz>> {
     /// Propagates any error. Ambiguous result would be discarded.
     #[inline]
     #[must_use]
-    pub fn and_hms_opt(self, hour: u32, min: u32, sec: u32) -> LocalResult<DateTime<Tz>> {
+    pub fn and_hms_opt(self, hour: u32, min: u32, sec: u32) -> MappedLocalTime<DateTime<Tz>> {
         match self {
-            LocalResult::Single(d) => {
-                d.and_hms_opt(hour, min, sec).map_or(LocalResult::None, LocalResult::Single)
+            MappedLocalTime::Single(d) => {
+                d.and_hms_opt(hour, min, sec).map_or(MappedLocalTime::None, MappedLocalTime::Single)
             }
-            _ => LocalResult::None,
+            _ => MappedLocalTime::None,
         }
     }
 
@@ -134,12 +189,12 @@ impl<Tz: TimeZone> LocalResult<Date<Tz>> {
         min: u32,
         sec: u32,
         milli: u32,
-    ) -> LocalResult<DateTime<Tz>> {
+    ) -> MappedLocalTime<DateTime<Tz>> {
         match self {
-            LocalResult::Single(d) => d
+            MappedLocalTime::Single(d) => d
                 .and_hms_milli_opt(hour, min, sec, milli)
-                .map_or(LocalResult::None, LocalResult::Single),
-            _ => LocalResult::None,
+                .map_or(MappedLocalTime::None, MappedLocalTime::Single),
+            _ => MappedLocalTime::None,
         }
     }
 
@@ -156,12 +211,12 @@ impl<Tz: TimeZone> LocalResult<Date<Tz>> {
         min: u32,
         sec: u32,
         micro: u32,
-    ) -> LocalResult<DateTime<Tz>> {
+    ) -> MappedLocalTime<DateTime<Tz>> {
         match self {
-            LocalResult::Single(d) => d
+            MappedLocalTime::Single(d) => d
                 .and_hms_micro_opt(hour, min, sec, micro)
-                .map_or(LocalResult::None, LocalResult::Single),
-            _ => LocalResult::None,
+                .map_or(MappedLocalTime::None, MappedLocalTime::Single),
+            _ => MappedLocalTime::None,
         }
     }
 
@@ -178,25 +233,34 @@ impl<Tz: TimeZone> LocalResult<Date<Tz>> {
         min: u32,
         sec: u32,
         nano: u32,
-    ) -> LocalResult<DateTime<Tz>> {
+    ) -> MappedLocalTime<DateTime<Tz>> {
         match self {
-            LocalResult::Single(d) => d
+            MappedLocalTime::Single(d) => d
                 .and_hms_nano_opt(hour, min, sec, nano)
-                .map_or(LocalResult::None, LocalResult::Single),
-            _ => LocalResult::None,
+                .map_or(MappedLocalTime::None, MappedLocalTime::Single),
+            _ => MappedLocalTime::None,
         }
     }
 }
 
-impl<T: fmt::Debug> LocalResult<T> {
-    /// Returns the single unique conversion result, or panics accordingly.
+impl<T: fmt::Debug> MappedLocalTime<T> {
+    /// Returns a single unique conversion result or panics.
+    ///
+    /// `unwrap()` is best combined with time zone types where the mapping can never fail like
+    /// [`Utc`] and [`FixedOffset`]. Note that for [`FixedOffset`] there is a rare case where a
+    /// resulting [`DateTime`] can be out of range.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the local time falls within a _fold_ or a _gap_ in the local time, and on any
+    /// error that may have been returned by the type implementing [`TimeZone`].
     #[must_use]
     #[track_caller]
     pub fn unwrap(self) -> T {
         match self {
-            LocalResult::None => panic!("No such local time"),
-            LocalResult::Single(t) => t,
-            LocalResult::Ambiguous(t1, t2) => {
+            MappedLocalTime::None => panic!("No such local time"),
+            MappedLocalTime::Single(t) => t,
+            MappedLocalTime::Ambiguous(t1, t2) => {
                 panic!("Ambiguous local time, ranging from {:?} to {:?}", t1, t2)
             }
         }
@@ -211,8 +275,7 @@ pub trait Offset: Sized + Clone + fmt::Debug {
 
 /// The time zone.
 ///
-/// The methods here are the primarily constructors for [`Date`](../struct.Date.html) and
-/// [`DateTime`](../struct.DateTime.html) types.
+/// The methods here are the primary constructors for the [`DateTime`] type.
 pub trait TimeZone: Sized + Clone {
     /// An associated offset type.
     /// This type is used to store the actual offset in date and time types.
@@ -223,7 +286,7 @@ pub trait TimeZone: Sized + Clone {
     ///
     /// This assumes the proleptic Gregorian calendar, with the year 0 being 1 BCE.
     ///
-    /// Returns `LocalResult::None` on invalid input data.
+    /// Returns `MappedLocalTime::None` on invalid input data.
     fn with_ymd_and_hms(
         &self,
         year: i32,
@@ -232,11 +295,11 @@ pub trait TimeZone: Sized + Clone {
         hour: u32,
         min: u32,
         sec: u32,
-    ) -> LocalResult<DateTime<Self>> {
+    ) -> MappedLocalTime<DateTime<Self>> {
         match NaiveDate::from_ymd_opt(year, month, day).and_then(|d| d.and_hms_opt(hour, min, sec))
         {
             Some(dt) => self.from_local_datetime(&dt),
-            None => LocalResult::None,
+            None => MappedLocalTime::None,
         }
     }
 
@@ -262,10 +325,10 @@ pub trait TimeZone: Sized + Clone {
     /// Returns `None` on the out-of-range date, invalid month and/or day.
     #[deprecated(since = "0.4.23", note = "use `with_ymd_and_hms()` instead")]
     #[allow(deprecated)]
-    fn ymd_opt(&self, year: i32, month: u32, day: u32) -> LocalResult<Date<Self>> {
+    fn ymd_opt(&self, year: i32, month: u32, day: u32) -> MappedLocalTime<Date<Self>> {
         match NaiveDate::from_ymd_opt(year, month, day) {
             Some(d) => self.from_local_date(&d),
-            None => LocalResult::None,
+            None => MappedLocalTime::None,
         }
     }
 
@@ -297,10 +360,10 @@ pub trait TimeZone: Sized + Clone {
         note = "use `from_local_datetime()` with a `NaiveDateTime` instead"
     )]
     #[allow(deprecated)]
-    fn yo_opt(&self, year: i32, ordinal: u32) -> LocalResult<Date<Self>> {
+    fn yo_opt(&self, year: i32, ordinal: u32) -> MappedLocalTime<Date<Self>> {
         match NaiveDate::from_yo_opt(year, ordinal) {
             Some(d) => self.from_local_date(&d),
-            None => LocalResult::None,
+            None => MappedLocalTime::None,
         }
     }
 
@@ -336,10 +399,10 @@ pub trait TimeZone: Sized + Clone {
         note = "use `from_local_datetime()` with a `NaiveDateTime` instead"
     )]
     #[allow(deprecated)]
-    fn isoywd_opt(&self, year: i32, week: u32, weekday: Weekday) -> LocalResult<Date<Self>> {
+    fn isoywd_opt(&self, year: i32, week: u32, weekday: Weekday) -> MappedLocalTime<Date<Self>> {
         match NaiveDate::from_isoywd_opt(year, week, weekday) {
             Some(d) => self.from_local_date(&d),
-            None => LocalResult::None,
+            None => MappedLocalTime::None,
         }
     }
 
@@ -348,7 +411,7 @@ pub trait TimeZone: Sized + Clone {
     /// and the number of nanoseconds since the last whole non-leap second.
     ///
     /// The nanosecond part can exceed 1,000,000,000 in order to represent a
-    /// [leap second](NaiveTime#leap-second-handling), but only when `secs % 60 == 59`.
+    /// [leap second](crate::NaiveTime#leap-second-handling), but only when `secs % 60 == 59`.
     /// (The true "UNIX timestamp" cannot represent a leap second unambiguously.)
     ///
     /// # Panics
@@ -365,25 +428,25 @@ pub trait TimeZone: Sized + Clone {
     /// and the number of nanoseconds since the last whole non-leap second.
     ///
     /// The nanosecond part can exceed 1,000,000,000 in order to represent a
-    /// [leap second](NaiveTime#leap-second-handling), but only when `secs % 60 == 59`.
+    /// [leap second](crate::NaiveTime#leap-second-handling), but only when `secs % 60 == 59`.
     /// (The true "UNIX timestamp" cannot represent a leap second unambiguously.)
     ///
     /// # Errors
     ///
-    /// Returns `LocalResult::None` on out-of-range number of seconds and/or
-    /// invalid nanosecond, otherwise always returns `LocalResult::Single`.
+    /// Returns `MappedLocalTime::None` on out-of-range number of seconds and/or
+    /// invalid nanosecond, otherwise always returns `MappedLocalTime::Single`.
     ///
     /// # Example
     ///
     /// ```
-    /// use chrono::{Utc, TimeZone};
+    /// use chrono::{TimeZone, Utc};
     ///
     /// assert_eq!(Utc.timestamp_opt(1431648000, 0).unwrap().to_string(), "2015-05-15 00:00:00 UTC");
     /// ```
-    fn timestamp_opt(&self, secs: i64, nsecs: u32) -> LocalResult<DateTime<Self>> {
-        match NaiveDateTime::from_timestamp_opt(secs, nsecs) {
-            Some(dt) => LocalResult::Single(self.from_utc_datetime(&dt)),
-            None => LocalResult::None,
+    fn timestamp_opt(&self, secs: i64, nsecs: u32) -> MappedLocalTime<DateTime<Self>> {
+        match DateTime::from_timestamp(secs, nsecs) {
+            Some(dt) => MappedLocalTime::Single(self.from_utc_datetime(&dt.naive_utc())),
+            None => MappedLocalTime::None,
         }
     }
 
@@ -401,61 +464,56 @@ pub trait TimeZone: Sized + Clone {
     /// since January 1, 1970 0:00:00 UTC (aka "UNIX timestamp").
     ///
     ///
-    /// Returns `LocalResult::None` on out-of-range number of milliseconds
+    /// Returns `MappedLocalTime::None` on out-of-range number of milliseconds
     /// and/or invalid nanosecond, otherwise always returns
-    /// `LocalResult::Single`.
+    /// `MappedLocalTime::Single`.
     ///
     /// # Example
     ///
     /// ```
-    /// use chrono::{Utc, TimeZone, LocalResult};
+    /// use chrono::{MappedLocalTime, TimeZone, Utc};
     /// match Utc.timestamp_millis_opt(1431648000) {
-    ///     LocalResult::Single(dt) => assert_eq!(dt.timestamp(), 1431648),
+    ///     MappedLocalTime::Single(dt) => assert_eq!(dt.timestamp(), 1431648),
     ///     _ => panic!("Incorrect timestamp_millis"),
     /// };
     /// ```
-    fn timestamp_millis_opt(&self, millis: i64) -> LocalResult<DateTime<Self>> {
-        match NaiveDateTime::from_timestamp_millis(millis) {
-            Some(dt) => LocalResult::Single(self.from_utc_datetime(&dt)),
-            None => LocalResult::None,
+    fn timestamp_millis_opt(&self, millis: i64) -> MappedLocalTime<DateTime<Self>> {
+        match DateTime::from_timestamp_millis(millis) {
+            Some(dt) => MappedLocalTime::Single(self.from_utc_datetime(&dt.naive_utc())),
+            None => MappedLocalTime::None,
         }
     }
 
     /// Makes a new `DateTime` from the number of non-leap nanoseconds
     /// since January 1, 1970 0:00:00 UTC (aka "UNIX timestamp").
     ///
-    /// Unlike [`timestamp_millis`](#method.timestamp_millis), this never
-    /// panics.
+    /// Unlike [`timestamp_millis_opt`](#method.timestamp_millis_opt), this never fails.
     ///
     /// # Example
     ///
     /// ```
-    /// use chrono::{Utc, TimeZone};
+    /// use chrono::{TimeZone, Utc};
     ///
     /// assert_eq!(Utc.timestamp_nanos(1431648000000000).timestamp(), 1431648);
     /// ```
     fn timestamp_nanos(&self, nanos: i64) -> DateTime<Self> {
-        let (mut secs, mut nanos) = (nanos / 1_000_000_000, nanos % 1_000_000_000);
-        if nanos < 0 {
-            secs -= 1;
-            nanos += 1_000_000_000;
-        }
-        self.timestamp_opt(secs, nanos as u32).unwrap()
+        self.from_utc_datetime(&DateTime::from_timestamp_nanos(nanos).naive_utc())
     }
 
     /// Makes a new `DateTime` from the number of non-leap microseconds
     /// since January 1, 1970 0:00:00 UTC (aka "UNIX timestamp").
     ///
-    /// #Example
+    /// # Example
+    ///
     /// ```
-    /// use chrono::{Utc, TimeZone};
+    /// use chrono::{TimeZone, Utc};
     ///
     /// assert_eq!(Utc.timestamp_micros(1431648000000).unwrap().timestamp(), 1431648);
     /// ```
-    fn timestamp_micros(&self, micros: i64) -> LocalResult<DateTime<Self>> {
-        match NaiveDateTime::from_timestamp_micros(micros) {
-            Some(dt) => LocalResult::Single(self.from_utc_datetime(&dt)),
-            None => LocalResult::None,
+    fn timestamp_micros(&self, micros: i64) -> MappedLocalTime<DateTime<Self>> {
+        match DateTime::from_timestamp_micros(micros) {
+            Some(dt) => MappedLocalTime::Single(self.from_utc_datetime(&dt.naive_utc())),
+            None => MappedLocalTime::None,
         }
     }
 
@@ -470,7 +528,14 @@ pub trait TimeZone: Sized + Clone {
     ///
     /// See also [`DateTime::parse_from_str`] which gives a [`DateTime`] with
     /// parsed [`FixedOffset`].
-    #[deprecated(since = "0.4.29", note = "use `DateTime::parse_from_str` instead")]
+    ///
+    /// See also [`NaiveDateTime::parse_from_str`] which gives a [`NaiveDateTime`] without
+    /// an offset, but can be converted to a [`DateTime`] with [`NaiveDateTime::and_utc`] or
+    /// [`NaiveDateTime::and_local_timezone`].
+    #[deprecated(
+        since = "0.4.29",
+        note = "use `DateTime::parse_from_str` or `NaiveDateTime::parse_from_str` with `and_utc()` or `and_local_timezone()` instead"
+    )]
     fn datetime_from_str(&self, s: &str, fmt: &str) -> ParseResult<DateTime<Self>> {
         let mut parsed = Parsed::new();
         parse(&mut parsed, s, StrftimeItems::new(fmt))?;
@@ -481,16 +546,16 @@ pub trait TimeZone: Sized + Clone {
     fn from_offset(offset: &Self::Offset) -> Self;
 
     /// Creates the offset(s) for given local `NaiveDate` if possible.
-    fn offset_from_local_date(&self, local: &NaiveDate) -> LocalResult<Self::Offset>;
+    fn offset_from_local_date(&self, local: &NaiveDate) -> MappedLocalTime<Self::Offset>;
 
     /// Creates the offset(s) for given local `NaiveDateTime` if possible.
-    fn offset_from_local_datetime(&self, local: &NaiveDateTime) -> LocalResult<Self::Offset>;
+    fn offset_from_local_datetime(&self, local: &NaiveDateTime) -> MappedLocalTime<Self::Offset>;
 
     /// Converts the local `NaiveDate` to the timezone-aware `Date` if possible.
     #[allow(clippy::wrong_self_convention)]
     #[deprecated(since = "0.4.23", note = "use `from_local_datetime()` instead")]
     #[allow(deprecated)]
-    fn from_local_date(&self, local: &NaiveDate) -> LocalResult<Date<Self>> {
+    fn from_local_date(&self, local: &NaiveDate) -> MappedLocalTime<Date<Self>> {
         self.offset_from_local_date(local).map(|offset| {
             // since FixedOffset is within +/- 1 day, the date is never affected
             Date::from_utc(*local, offset)
@@ -499,9 +564,12 @@ pub trait TimeZone: Sized + Clone {
 
     /// Converts the local `NaiveDateTime` to the timezone-aware `DateTime` if possible.
     #[allow(clippy::wrong_self_convention)]
-    fn from_local_datetime(&self, local: &NaiveDateTime) -> LocalResult<DateTime<Self>> {
-        self.offset_from_local_datetime(local)
-            .map(|offset| DateTime::from_naive_utc_and_offset(*local - offset.fix(), offset))
+    fn from_local_datetime(&self, local: &NaiveDateTime) -> MappedLocalTime<DateTime<Self>> {
+        self.offset_from_local_datetime(local).and_then(|off| {
+            local
+                .checked_sub_offset(off.fix())
+                .map(|dt| DateTime::from_naive_utc_and_offset(dt, off))
+        })
     }
 
     /// Creates the offset for given UTC `NaiveDate`. This cannot fail.
@@ -532,6 +600,32 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_fixed_offset_min_max_dates() {
+        for offset_hour in -23..=23 {
+            dbg!(offset_hour);
+            let offset = FixedOffset::east_opt(offset_hour * 60 * 60).unwrap();
+
+            let local_max = offset.from_utc_datetime(&NaiveDateTime::MAX);
+            assert_eq!(local_max.naive_utc(), NaiveDateTime::MAX);
+            let local_min = offset.from_utc_datetime(&NaiveDateTime::MIN);
+            assert_eq!(local_min.naive_utc(), NaiveDateTime::MIN);
+
+            let local_max = offset.from_local_datetime(&NaiveDateTime::MAX);
+            if offset_hour >= 0 {
+                assert_eq!(local_max.unwrap().naive_local(), NaiveDateTime::MAX);
+            } else {
+                assert_eq!(local_max, MappedLocalTime::None);
+            }
+            let local_min = offset.from_local_datetime(&NaiveDateTime::MIN);
+            if offset_hour <= 0 {
+                assert_eq!(local_min.unwrap().naive_local(), NaiveDateTime::MIN);
+            } else {
+                assert_eq!(local_min, MappedLocalTime::None);
+            }
+        }
+    }
+
+    #[test]
     fn test_negative_millis() {
         let dt = Utc.timestamp_millis_opt(-1000).unwrap();
         assert_eq!(dt.to_string(), "1969-12-31 23:59:59 UTC");
@@ -556,7 +650,7 @@ mod tests {
             (-7003, "1969-12-31 23:59:52.997 UTC"),
         ] {
             match Utc.timestamp_millis_opt(*millis) {
-                LocalResult::Single(dt) => {
+                MappedLocalTime::Single(dt) => {
                     assert_eq!(dt.to_string(), *expected);
                 }
                 e => panic!("Got {:?} instead of an okay answer", e),

@@ -1,3 +1,4 @@
+use core::cmp::Ordering;
 use core::num::FpCategory;
 use core::ops::{Add, Div, Neg};
 
@@ -651,6 +652,36 @@ pub trait FloatCore: Num + NumCast + Neg<Output = Self> + PartialOrd + Copy {
         }
     }
 
+    /// A value bounded by a minimum and a maximum
+    ///
+    ///  If input is less than min then this returns min.
+    ///  If input is greater than max then this returns max.
+    ///  Otherwise this returns input.
+    ///
+    /// **Panics** in debug mode if `!(min <= max)`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use num_traits::float::FloatCore;
+    ///
+    /// fn check<T: FloatCore>(val: T, min: T, max: T, expected: T) {
+    ///     assert!(val.clamp(min, max) == expected);
+    /// }
+    ///
+    ///
+    /// check(1.0f32, 0.0, 2.0, 1.0);
+    /// check(1.0f32, 2.0, 3.0, 2.0);
+    /// check(3.0f32, 0.0, 2.0, 2.0);
+    ///
+    /// check(1.0f64, 0.0, 2.0, 1.0);
+    /// check(1.0f64, 2.0, 3.0, 2.0);
+    /// check(3.0f64, 0.0, 2.0, 2.0);
+    /// ```
+    fn clamp(self, min: Self, max: Self) -> Self {
+        crate::clamp(self, min, max)
+    }
+
     /// Returns the reciprocal (multiplicative inverse) of the number.
     ///
     /// # Examples
@@ -789,6 +820,8 @@ impl FloatCore for f32 {
         Self::is_infinite(self) -> bool;
         Self::is_finite(self) -> bool;
         Self::is_normal(self) -> bool;
+        Self::is_subnormal(self) -> bool;
+        Self::clamp(self, min: Self, max: Self) -> Self;
         Self::classify(self) -> FpCategory;
         Self::is_sign_positive(self) -> bool;
         Self::is_sign_negative(self) -> bool;
@@ -797,11 +830,6 @@ impl FloatCore for f32 {
         Self::recip(self) -> Self;
         Self::to_degrees(self) -> Self;
         Self::to_radians(self) -> Self;
-    }
-
-    #[cfg(has_is_subnormal)]
-    forward! {
-        Self::is_subnormal(self) -> bool;
     }
 
     #[cfg(feature = "std")]
@@ -854,6 +882,8 @@ impl FloatCore for f64 {
         Self::is_infinite(self) -> bool;
         Self::is_finite(self) -> bool;
         Self::is_normal(self) -> bool;
+        Self::is_subnormal(self) -> bool;
+        Self::clamp(self, min: Self, max: Self) -> Self;
         Self::classify(self) -> FpCategory;
         Self::is_sign_positive(self) -> bool;
         Self::is_sign_negative(self) -> bool;
@@ -862,11 +892,6 @@ impl FloatCore for f64 {
         Self::recip(self) -> Self;
         Self::to_degrees(self) -> Self;
         Self::to_radians(self) -> Self;
-    }
-
-    #[cfg(has_is_subnormal)]
-    forward! {
-        Self::is_subnormal(self) -> bool;
     }
 
     #[cfg(feature = "std")]
@@ -1504,6 +1529,23 @@ pub trait Float: Num + Copy + NumCast + PartialOrd + Neg<Output = Self> {
     /// ```
     fn min(self, other: Self) -> Self;
 
+    /// Clamps a value between a min and max.
+    ///
+    /// **Panics** in debug mode if `!(min <= max)`.
+    ///
+    /// ```
+    /// use num_traits::Float;
+    ///
+    /// let x = 1.0;
+    /// let y = 2.0;
+    /// let z = 3.0;
+    ///
+    /// assert_eq!(x.clamp(y, z), 2.0);
+    /// ```
+    fn clamp(self, min: Self, max: Self) -> Self {
+        crate::clamp(self, min, max)
+    }
+
     /// The positive difference of two numbers.
     ///
     /// * If `self <= other`: `0:0`
@@ -1900,7 +1942,9 @@ macro_rules! float_impl_std {
                 Self::is_infinite(self) -> bool;
                 Self::is_finite(self) -> bool;
                 Self::is_normal(self) -> bool;
+                Self::is_subnormal(self) -> bool;
                 Self::classify(self) -> FpCategory;
+                Self::clamp(self, min: Self, max: Self) -> Self;
                 Self::floor(self) -> Self;
                 Self::ceil(self) -> Self;
                 Self::round(self) -> Self;
@@ -1943,16 +1987,7 @@ macro_rules! float_impl_std {
                 Self::asinh(self) -> Self;
                 Self::acosh(self) -> Self;
                 Self::atanh(self) -> Self;
-            }
-
-            #[cfg(has_copysign)]
-            forward! {
                 Self::copysign(self, sign: Self) -> Self;
-            }
-
-            #[cfg(has_is_subnormal)]
-            forward! {
-                Self::is_subnormal(self) -> bool;
             }
         }
     };
@@ -1992,6 +2027,8 @@ macro_rules! float_impl_libm {
             Self::is_infinite(self) -> bool;
             Self::is_finite(self) -> bool;
             Self::is_normal(self) -> bool;
+            Self::is_subnormal(self) -> bool;
+            Self::clamp(self, min: Self, max: Self) -> Self;
             Self::classify(self) -> FpCategory;
             Self::is_sign_positive(self) -> bool;
             Self::is_sign_negative(self) -> bool;
@@ -2000,11 +2037,6 @@ macro_rules! float_impl_libm {
             Self::recip(self) -> Self;
             Self::to_degrees(self) -> Self;
             Self::to_radians(self) -> Self;
-        }
-
-        #[cfg(has_is_subnormal)]
-        forward! {
-            Self::is_subnormal(self) -> bool;
         }
 
         forward! {
@@ -2210,6 +2242,89 @@ float_const_impl! {
     SQRT_2,
 }
 
+/// Trait for floating point numbers that provide an implementation
+/// of the `totalOrder` predicate as defined in the IEEE 754 (2008 revision)
+/// floating point standard.
+pub trait TotalOrder {
+    /// Return the ordering between `self` and `other`.
+    ///
+    /// Unlike the standard partial comparison between floating point numbers,
+    /// this comparison always produces an ordering in accordance to
+    /// the `totalOrder` predicate as defined in the IEEE 754 (2008 revision)
+    /// floating point standard. The values are ordered in the following sequence:
+    ///
+    /// - negative quiet NaN
+    /// - negative signaling NaN
+    /// - negative infinity
+    /// - negative numbers
+    /// - negative subnormal numbers
+    /// - negative zero
+    /// - positive zero
+    /// - positive subnormal numbers
+    /// - positive numbers
+    /// - positive infinity
+    /// - positive signaling NaN
+    /// - positive quiet NaN.
+    ///
+    /// The ordering established by this function does not always agree with the
+    /// [`PartialOrd`] and [`PartialEq`] implementations. For example,
+    /// they consider negative and positive zero equal, while `total_cmp`
+    /// doesn't.
+    ///
+    /// The interpretation of the signaling NaN bit follows the definition in
+    /// the IEEE 754 standard, which may not match the interpretation by some of
+    /// the older, non-conformant (e.g. MIPS) hardware implementations.
+    ///
+    /// # Examples
+    /// ```
+    /// use num_traits::float::TotalOrder;
+    /// use std::cmp::Ordering;
+    /// use std::{f32, f64};
+    ///
+    /// fn check_eq<T: TotalOrder>(x: T, y: T) {
+    ///     assert_eq!(x.total_cmp(&y), Ordering::Equal);
+    /// }
+    ///
+    /// check_eq(f64::NAN, f64::NAN);
+    /// check_eq(f32::NAN, f32::NAN);
+    ///
+    /// fn check_lt<T: TotalOrder>(x: T, y: T) {
+    ///     assert_eq!(x.total_cmp(&y), Ordering::Less);
+    /// }
+    ///
+    /// check_lt(-f64::NAN, f64::NAN);
+    /// check_lt(f64::INFINITY, f64::NAN);
+    /// check_lt(-0.0_f64, 0.0_f64);
+    /// ```
+    fn total_cmp(&self, other: &Self) -> Ordering;
+}
+macro_rules! totalorder_impl {
+    ($T:ident, $I:ident, $U:ident, $bits:expr) => {
+        impl TotalOrder for $T {
+            #[inline]
+            #[cfg(has_total_cmp)]
+            fn total_cmp(&self, other: &Self) -> Ordering {
+                // Forward to the core implementation
+                Self::total_cmp(&self, other)
+            }
+            #[inline]
+            #[cfg(not(has_total_cmp))]
+            fn total_cmp(&self, other: &Self) -> Ordering {
+                // Backport the core implementation (since 1.62)
+                let mut left = self.to_bits() as $I;
+                let mut right = other.to_bits() as $I;
+
+                left ^= (((left >> ($bits - 1)) as $U) >> 1) as $I;
+                right ^= (((right >> ($bits - 1)) as $U) >> 1) as $I;
+
+                left.cmp(&right)
+            }
+        }
+    };
+}
+totalorder_impl!(f64, i64, u64, 64);
+totalorder_impl!(f32, i32, u32, 32);
+
 #[cfg(test)]
 mod tests {
     use core::f64::consts;
@@ -2340,5 +2455,59 @@ mod tests {
     fn subnormal() {
         test_subnormal::<f64>();
         test_subnormal::<f32>();
+    }
+
+    #[test]
+    fn total_cmp() {
+        use crate::float::TotalOrder;
+        use core::cmp::Ordering;
+        use core::{f32, f64};
+
+        fn check_eq<T: TotalOrder>(x: T, y: T) {
+            assert_eq!(x.total_cmp(&y), Ordering::Equal);
+        }
+        fn check_lt<T: TotalOrder>(x: T, y: T) {
+            assert_eq!(x.total_cmp(&y), Ordering::Less);
+        }
+        fn check_gt<T: TotalOrder>(x: T, y: T) {
+            assert_eq!(x.total_cmp(&y), Ordering::Greater);
+        }
+
+        check_eq(f64::NAN, f64::NAN);
+        check_eq(f32::NAN, f32::NAN);
+
+        check_lt(-0.0_f64, 0.0_f64);
+        check_lt(-0.0_f32, 0.0_f32);
+
+        // x87 registers don't preserve the exact value of signaling NaN:
+        // https://github.com/rust-lang/rust/issues/115567
+        #[cfg(not(target_arch = "x86"))]
+        {
+            let s_nan = f64::from_bits(0x7ff4000000000000);
+            let q_nan = f64::from_bits(0x7ff8000000000000);
+            check_lt(s_nan, q_nan);
+
+            let neg_s_nan = f64::from_bits(0xfff4000000000000);
+            let neg_q_nan = f64::from_bits(0xfff8000000000000);
+            check_lt(neg_q_nan, neg_s_nan);
+
+            let s_nan = f32::from_bits(0x7fa00000);
+            let q_nan = f32::from_bits(0x7fc00000);
+            check_lt(s_nan, q_nan);
+
+            let neg_s_nan = f32::from_bits(0xffa00000);
+            let neg_q_nan = f32::from_bits(0xffc00000);
+            check_lt(neg_q_nan, neg_s_nan);
+        }
+
+        check_lt(-f64::NAN, f64::NEG_INFINITY);
+        check_gt(1.0_f64, -f64::NAN);
+        check_lt(f64::INFINITY, f64::NAN);
+        check_gt(f64::NAN, 1.0_f64);
+
+        check_lt(-f32::NAN, f32::NEG_INFINITY);
+        check_gt(1.0_f32, -f32::NAN);
+        check_lt(f32::INFINITY, f32::NAN);
+        check_gt(f32::NAN, 1.0_f32);
     }
 }

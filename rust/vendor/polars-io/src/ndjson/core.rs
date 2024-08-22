@@ -1,16 +1,15 @@
 use std::fs::File;
 use std::io::Cursor;
+use std::num::NonZeroUsize;
 use std::path::PathBuf;
 
 pub use arrow::array::StructArray;
-pub use arrow::io::ndjson as arrow_ndjson;
 use num_traits::pow::Pow;
 use polars_core::prelude::*;
 use polars_core::utils::accumulate_dataframes_vertical;
 use polars_core::POOL;
 use rayon::prelude::*;
 
-use crate::csv::utils::*;
 use crate::mmap::{MmapBytesReader, ReaderBytes};
 use crate::ndjson::buffer::*;
 use crate::prelude::*;
@@ -28,7 +27,7 @@ where
     n_rows: Option<usize>,
     n_threads: Option<usize>,
     infer_schema_len: Option<usize>,
-    chunk_size: usize,
+    chunk_size: NonZeroUsize,
     schema: Option<SchemaRef>,
     schema_overwrite: Option<&'a Schema>,
     path: Option<PathBuf>,
@@ -74,7 +73,7 @@ where
         self
     }
     /// Sets the chunk size used by the parser. This influences performance
-    pub fn with_chunk_size(mut self, chunk_size: Option<usize>) -> Self {
+    pub fn with_chunk_size(mut self, chunk_size: Option<NonZeroUsize>) -> Self {
         if let Some(chunk_size) = chunk_size {
             self.chunk_size = chunk_size;
         };
@@ -84,6 +83,12 @@ where
     /// Reduce memory consumption at the expense of performance
     pub fn low_memory(mut self, toggle: bool) -> Self {
         self.low_memory = toggle;
+        self
+    }
+
+    /// Set values as `Null` if parsing fails because of schema mismatches.
+    pub fn with_ignore_errors(mut self, ignore_errors: bool) -> Self {
+        self.ignore_errors = ignore_errors;
         self
     }
 }
@@ -111,7 +116,7 @@ where
             schema: None,
             schema_overwrite: None,
             path: None,
-            chunk_size: 1 << 18,
+            chunk_size: NonZeroUsize::new(1 << 18).unwrap(),
             low_memory: false,
             ignore_errors: false,
         }
@@ -146,7 +151,7 @@ pub(crate) struct CoreJsonReader<'a> {
     schema: SchemaRef,
     n_threads: Option<usize>,
     sample_size: usize,
-    chunk_size: usize,
+    chunk_size: NonZeroUsize,
     low_memory: bool,
     ignore_errors: bool,
 }
@@ -159,7 +164,7 @@ impl<'a> CoreJsonReader<'a> {
         schema_overwrite: Option<&Schema>,
         n_threads: Option<usize>,
         sample_size: usize,
-        chunk_size: usize,
+        chunk_size: NonZeroUsize,
         low_memory: bool,
         infer_schema_len: Option<usize>,
         ignore_errors: bool,
@@ -171,11 +176,7 @@ impl<'a> CoreJsonReader<'a> {
             None => {
                 let bytes: &[u8] = &reader_bytes;
                 let mut cursor = Cursor::new(bytes);
-
-                let data_type = polars_json::ndjson::infer(&mut cursor, infer_schema_len)?;
-                let schema = StructArray::get_fields(&data_type).iter().collect();
-
-                Arc::new(schema)
+                Arc::new(crate::ndjson::infer_schema(&mut cursor, infer_schema_len)?)
             },
         };
         if let Some(overwriting_schema) = schema_overwrite {
@@ -223,7 +224,7 @@ impl<'a> CoreJsonReader<'a> {
 
         let max_proxy = bytes.len() / n_threads / 2;
         let capacity = if self.low_memory {
-            self.chunk_size
+            usize::from(self.chunk_size)
         } else {
             std::cmp::min(rows_per_thread, max_proxy)
         };

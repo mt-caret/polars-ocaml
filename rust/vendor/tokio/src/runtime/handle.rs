@@ -1,6 +1,6 @@
 #[cfg(tokio_unstable)]
 use crate::runtime;
-use crate::runtime::{context, scheduler, RuntimeFlavor};
+use crate::runtime::{context, scheduler, RuntimeFlavor, RuntimeMetrics};
 
 /// Handle to the runtime.
 ///
@@ -355,9 +355,9 @@ impl Handle {
     pub fn runtime_flavor(&self) -> RuntimeFlavor {
         match self.inner {
             scheduler::Handle::CurrentThread(_) => RuntimeFlavor::CurrentThread,
-            #[cfg(all(feature = "rt-multi-thread", not(target_os = "wasi")))]
+            #[cfg(feature = "rt-multi-thread")]
             scheduler::Handle::MultiThread(_) => RuntimeFlavor::MultiThread,
-            #[cfg(all(tokio_unstable, feature = "rt-multi-thread", not(target_os = "wasi")))]
+            #[cfg(all(tokio_unstable, feature = "rt-multi-thread"))]
             scheduler::Handle::MultiThreadAlt(_) => RuntimeFlavor::MultiThreadAlt,
         }
     }
@@ -385,25 +385,19 @@ impl Handle {
         pub fn id(&self) -> runtime::Id {
             let owned_id = match &self.inner {
                 scheduler::Handle::CurrentThread(handle) => handle.owned_id(),
-                #[cfg(all(feature = "rt-multi-thread", not(target_os = "wasi")))]
+                #[cfg(feature = "rt-multi-thread")]
                 scheduler::Handle::MultiThread(handle) => handle.owned_id(),
-                #[cfg(all(tokio_unstable, feature = "rt-multi-thread", not(target_os = "wasi")))]
+                #[cfg(all(tokio_unstable, feature = "rt-multi-thread"))]
                 scheduler::Handle::MultiThreadAlt(handle) => handle.owned_id(),
             };
             owned_id.into()
         }
     }
-}
 
-cfg_metrics! {
-    use crate::runtime::RuntimeMetrics;
-
-    impl Handle {
-        /// Returns a view that lets you get information about how the runtime
-        /// is performing.
-        pub fn metrics(&self) -> RuntimeMetrics {
-            RuntimeMetrics::new(self.clone())
-        }
+    /// Returns a view that lets you get information about how the runtime
+    /// is performing.
+    pub fn metrics(&self) -> RuntimeMetrics {
+        RuntimeMetrics::new(self.clone())
     }
 }
 
@@ -463,7 +457,7 @@ cfg_taskdump! {
         /// ## Debug Info Must Be Available
         ///
         /// To produce task traces, the application must **not** be compiled
-        /// with split debuginfo. On Linux, including debuginfo within the
+        /// with `split debuginfo`. On Linux, including `debuginfo` within the
         /// application binary is the (correct) default. You can further ensure
         /// this behavior with the following directive in your `Cargo.toml`:
         ///
@@ -475,7 +469,7 @@ cfg_taskdump! {
         /// ## Unstable Features
         ///
         /// This functionality is **unstable**, and requires both the
-        /// `tokio_unstable` and `tokio_taskdump` cfg flags to be set.
+        /// `tokio_unstable` and `tokio_taskdump` `cfg` flags to be set.
         ///
         /// You can do this by setting the `RUSTFLAGS` environment variable
         /// before invoking `cargo`; e.g.:
@@ -495,7 +489,7 @@ cfg_taskdump! {
         ///
         /// ## Platform Requirements
         ///
-        /// Task dumps are supported on Linux atop aarch64, x86 and x86_64.
+        /// Task dumps are supported on Linux atop `aarch64`, `x86` and `x86_64`.
         ///
         /// ## Current Thread Runtime Requirements
         ///

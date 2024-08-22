@@ -30,20 +30,29 @@
 //!
 //! // read the buffer into a DataFrame
 //! let df_read = IpcReader::new(buf).finish().unwrap();
-//! assert!(df.frame_equal(&df_read));
+//! assert!(df.equals(&df_read));
 //! ```
 use std::io::{Read, Seek};
-use std::sync::Arc;
+use std::path::PathBuf;
 
+use arrow::datatypes::ArrowSchemaRef;
 use arrow::io::ipc::read;
-use polars_core::frame::ArrowChunk;
+use arrow::record_batch::RecordBatch;
 use polars_core::prelude::*;
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
 
-use super::{finish_reader, ArrowReader, ArrowResult};
 use crate::mmap::MmapBytesReader;
 use crate::predicates::PhysicalIoExpr;
 use crate::prelude::*;
-use crate::RowCount;
+use crate::shared::{finish_reader, ArrowReader};
+use crate::RowIndex;
+
+#[derive(Clone, Debug, PartialEq, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct IpcScanOptions {
+    pub memory_map: bool,
+}
 
 /// Read Arrows IPC format into a DataFrame
 ///
@@ -70,54 +79,40 @@ pub struct IpcReader<R: MmapBytesReader> {
     pub(super) n_rows: Option<usize>,
     pub(super) projection: Option<Vec<usize>>,
     pub(crate) columns: Option<Vec<String>>,
-    pub(super) row_count: Option<RowCount>,
-    memmap: bool,
+    pub(super) row_index: Option<RowIndex>,
+    // Stores the as key semaphore to make sure we don't write to the memory mapped file.
+    pub(super) memory_map: Option<PathBuf>,
     metadata: Option<read::FileMetadata>,
+    schema: Option<ArrowSchemaRef>,
 }
 
 fn check_mmap_err(err: PolarsError) -> PolarsResult<()> {
-    if let PolarsError::ArrowError(ref e) = err {
-        if let arrow::error::Error::NotYetImplemented(s) = e.as_ref() {
-            if s == "mmap can only be done on uncompressed IPC files" {
-                eprintln!(
-                    "Could not mmap compressed IPC file, defaulting to normal read. \
-                    Toggle off 'memory_map' to silence this warning."
-                );
-                return Ok(());
-            }
+    if let PolarsError::ComputeError(s) = &err {
+        if s.as_ref() == "memory_map can only be done on uncompressed IPC files" {
+            eprintln!(
+                "Could not memory_map compressed IPC file, defaulting to normal read. \
+                Toggle off 'memory_map' to silence this warning."
+            );
+            return Ok(());
         }
     }
     Err(err)
 }
 
 impl<R: MmapBytesReader> IpcReader<R> {
-    #[doc(hidden)]
-    /// A very bad estimate of the number of rows
-    /// This estimation will be entirely off if the file is compressed.
-    /// And will be varying off depending on the data types.
-    pub fn _num_rows(&mut self) -> PolarsResult<usize> {
-        let metadata = self.get_metadata()?;
-        let n_cols = metadata.schema.fields.len();
-        // this magic number 10 is computed from the yellow trip dataset
-        Ok((metadata.size as usize) / n_cols / 10)
-    }
     fn get_metadata(&mut self) -> PolarsResult<&read::FileMetadata> {
         if self.metadata.is_none() {
-            self.metadata = Some(read::read_file_metadata(&mut self.reader)?);
+            let metadata = read::read_file_metadata(&mut self.reader)?;
+            self.schema = Some(metadata.schema.clone());
+            self.metadata = Some(metadata);
         }
         Ok(self.metadata.as_ref().unwrap())
     }
 
-    /// Get schema of the Ipc File
-    pub fn schema(&mut self) -> PolarsResult<Schema> {
-        let metadata = self.get_metadata()?;
-        Ok(Schema::from_iter(&metadata.schema.fields))
-    }
-
-    /// Get arrow schema of the Ipc File, this is faster than creating a polars schema.
-    pub fn arrow_schema(&mut self) -> PolarsResult<ArrowSchema> {
-        let metadata = read::read_file_metadata(&mut self.reader)?;
-        Ok(metadata.schema)
+    /// Get arrow schema of the Ipc File.
+    pub fn schema(&mut self) -> PolarsResult<ArrowSchemaRef> {
+        self.get_metadata()?;
+        Ok(self.schema.as_ref().unwrap().clone())
     }
     /// Stop reading when `n` rows are read.
     pub fn with_n_rows(mut self, num_rows: Option<usize>) -> Self {
@@ -131,9 +126,9 @@ impl<R: MmapBytesReader> IpcReader<R> {
         self
     }
 
-    /// Add a `row_count` column.
-    pub fn with_row_count(mut self, row_count: Option<RowCount>) -> Self {
-        self.row_count = row_count;
+    /// Add a row index column.
+    pub fn with_row_index(mut self, row_index: Option<RowIndex>) -> Self {
+        self.row_index = row_index;
         self
     }
 
@@ -145,8 +140,9 @@ impl<R: MmapBytesReader> IpcReader<R> {
     }
 
     /// Set if the file is to be memory_mapped. Only works with uncompressed files.
-    pub fn memory_mapped(mut self, toggle: bool) -> Self {
-        self.memmap = toggle;
+    /// The file name must be passed to register the memory mapped file.
+    pub fn memory_mapped(mut self, path_buf: Option<PathBuf>) -> Self {
+        self.memory_map = path_buf;
         self
     }
 
@@ -157,7 +153,7 @@ impl<R: MmapBytesReader> IpcReader<R> {
         predicate: Option<Arc<dyn PhysicalIoExpr>>,
         verbose: bool,
     ) -> PolarsResult<DataFrame> {
-        if self.memmap && self.reader.to_file().is_some() {
+        if self.memory_map.is_some() && self.reader.to_file().is_some() {
             if verbose {
                 eprintln!("memory map ipc file")
             }
@@ -169,15 +165,22 @@ impl<R: MmapBytesReader> IpcReader<R> {
         let rechunk = self.rechunk;
         let metadata = read::read_file_metadata(&mut self.reader)?;
 
+        // NOTE: For some code paths this already happened. See
+        // https://github.com/pola-rs/polars/pull/14984#discussion_r1520125000
+        // where this was introduced.
+        if let Some(columns) = &self.columns {
+            self.projection = Some(columns_to_projection(columns, &metadata.schema)?);
+        }
+
         let schema = if let Some(projection) = &self.projection {
-            apply_projection(&metadata.schema, projection)
+            Arc::new(apply_projection(&metadata.schema, projection))
         } else {
             metadata.schema.clone()
         };
 
         let reader = read::FileReader::new(self.reader, metadata, self.projection, self.n_rows);
 
-        finish_reader(reader, rechunk, None, predicate, &schema, self.row_count)
+        finish_reader(reader, rechunk, None, predicate, &schema, self.row_index)
     }
 }
 
@@ -185,7 +188,7 @@ impl<R: MmapBytesReader> ArrowReader for read::FileReader<R>
 where
     R: Read + Seek,
 {
-    fn next_record_batch(&mut self) -> ArrowResult<Option<ArrowChunk>> {
+    fn next_record_batch(&mut self) -> PolarsResult<Option<RecordBatch>> {
         self.next().map_or(Ok(None), |v| v.map(Some))
     }
 }
@@ -198,9 +201,10 @@ impl<R: MmapBytesReader> SerReader<R> for IpcReader<R> {
             n_rows: None,
             columns: None,
             projection: None,
-            row_count: None,
-            memmap: true,
+            row_index: None,
+            memory_map: None,
             metadata: None,
+            schema: None,
         }
     }
 
@@ -210,7 +214,7 @@ impl<R: MmapBytesReader> SerReader<R> for IpcReader<R> {
     }
 
     fn finish(mut self) -> PolarsResult<DataFrame> {
-        if self.memmap && self.reader.to_file().is_some() {
+        if self.memory_map.is_some() && self.reader.to_file().is_some() {
             match self.finish_memmapped(None) {
                 Ok(df) => return Ok(df),
                 Err(err) => check_mmap_err(err)?,
@@ -226,13 +230,13 @@ impl<R: MmapBytesReader> SerReader<R> for IpcReader<R> {
         }
 
         let schema = if let Some(projection) = &self.projection {
-            apply_projection(&metadata.schema, projection)
+            Arc::new(apply_projection(&metadata.schema, projection))
         } else {
             metadata.schema.clone()
         };
 
         let ipc_reader =
             read::FileReader::new(self.reader, metadata.clone(), self.projection, self.n_rows);
-        finish_reader(ipc_reader, rechunk, None, None, &schema, self.row_count)
+        finish_reader(ipc_reader, rechunk, None, None, &schema, self.row_index)
     }
 }

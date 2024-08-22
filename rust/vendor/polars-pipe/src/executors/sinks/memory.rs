@@ -41,7 +41,7 @@ impl MemTracker {
     }
 
     /// This shouldn't be called often as this is expensive.
-    fn refresh_memory(&self) {
+    pub fn refresh_memory(&self) {
         self.available_mem
             .store(MEMINFO.free() as usize, Ordering::Relaxed);
     }
@@ -57,9 +57,16 @@ impl MemTracker {
         self.available_mem.load(Ordering::Relaxed)
     }
 
+    pub(super) fn get_available_latest(&self) -> usize {
+        self.refresh_memory();
+        self.fetch_count.store(0, Ordering::Relaxed);
+        self.available_mem.load(Ordering::Relaxed)
+    }
+
     pub(super) fn free_memory_fraction_since_start(&self) -> f64 {
-        // we divide first to reduce the precision loss in floats
-        let available_at_start = (self.available_at_start / TO_MB) as f64;
+        // We divide first to reduce the precision loss in floats.
+        // We also add 1.0 to available_at_start to prevent division by zero.
+        let available_at_start = (self.available_at_start / TO_MB) as f64 + 1.0;
         let available = (self.get_available() / TO_MB) as f64;
         available / available_at_start
     }

@@ -3,10 +3,7 @@ use std::ops::Div;
 use arrow::array::{Array, PrimitiveArray};
 use arrow::bitmap::Bitmap;
 use arrow::types::NativeType;
-use polars_arrow::utils::CustomIterTools;
-use polars_core::datatypes::ListChunked;
 use polars_core::export::num::{NumCast, ToPrimitive};
-use polars_utils::unwrap::UnwrapUncheckedRelease;
 
 use super::*;
 use crate::chunked_array::sum::sum_slice;
@@ -16,18 +13,15 @@ where
     T: NativeType + ToPrimitive,
     S: NumCast + std::iter::Sum,
 {
-    let mut running_offset = offset[0];
-
-    (offset[1..])
-        .iter()
-        .map(|end| {
-            let current_offset = running_offset;
-            running_offset = *end;
-
-            let slice = unsafe { values.get_unchecked(current_offset as usize..*end as usize) };
-            sum_slice(slice)
+    offset
+        .windows(2)
+        .map(|w| {
+            values
+                .get(w[0] as usize..w[1] as usize)
+                .map(sum_slice)
+                .unwrap_or(S::from(0).unwrap())
         })
-        .collect_trusted()
+        .collect()
 }
 
 fn dispatch_sum<T, S>(arr: &dyn Array, offsets: &[i64], validity: Option<&Bitmap>) -> ArrayRef
@@ -70,89 +64,70 @@ pub(super) fn sum_list_numerical(ca: &ListChunked, inner_type: &DataType) -> Ser
     Series::try_from((ca.name(), chunks)).unwrap()
 }
 
-pub(super) fn sum_with_nulls(ca: &ListChunked, inner_dtype: &DataType) -> Series {
+pub(super) fn sum_with_nulls(ca: &ListChunked, inner_dtype: &DataType) -> PolarsResult<Series> {
     use DataType::*;
     // TODO: add fast path for smaller ints?
     let mut out = match inner_dtype {
         Boolean => {
-            let out: IdxCa = ca
-                .amortized_iter()
-                .map(|s| s.and_then(|s| s.as_ref().sum()))
-                .collect();
+            let out: IdxCa =
+                ca.apply_amortized_generic(|s| s.map(|s| s.as_ref().sum::<IdxSize>().unwrap()));
             out.into_series()
         },
         UInt32 => {
-            let out: UInt32Chunked = ca
-                .amortized_iter()
-                .map(|s| s.and_then(|s| s.as_ref().sum()))
-                .collect();
+            let out: UInt32Chunked =
+                ca.apply_amortized_generic(|s| s.map(|s| s.as_ref().sum::<u32>().unwrap()));
             out.into_series()
         },
         UInt64 => {
-            let out: UInt64Chunked = ca
-                .amortized_iter()
-                .map(|s| s.and_then(|s| s.as_ref().sum()))
-                .collect();
+            let out: UInt64Chunked =
+                ca.apply_amortized_generic(|s| s.map(|s| s.as_ref().sum::<u64>().unwrap()));
             out.into_series()
         },
         Int32 => {
-            let out: Int32Chunked = ca
-                .amortized_iter()
-                .map(|s| s.and_then(|s| s.as_ref().sum()))
-                .collect();
+            let out: Int32Chunked =
+                ca.apply_amortized_generic(|s| s.map(|s| s.as_ref().sum::<i32>().unwrap()));
             out.into_series()
         },
         Int64 => {
-            let out: Int64Chunked = ca
-                .amortized_iter()
-                .map(|s| s.and_then(|s| s.as_ref().sum()))
-                .collect();
+            let out: Int64Chunked =
+                ca.apply_amortized_generic(|s| s.map(|s| s.as_ref().sum::<i64>().unwrap()));
             out.into_series()
         },
         Float32 => {
-            let out: Float32Chunked = ca
-                .amortized_iter()
-                .map(|s| s.and_then(|s| s.as_ref().sum()))
-                .collect();
+            let out: Float32Chunked =
+                ca.apply_amortized_generic(|s| s.map(|s| s.as_ref().sum::<f32>().unwrap()));
             out.into_series()
         },
         Float64 => {
-            let out: Float64Chunked = ca
-                .amortized_iter()
-                .map(|s| s.and_then(|s| s.as_ref().sum()))
-                .collect();
+            let out: Float64Chunked =
+                ca.apply_amortized_generic(|s| s.map(|s| s.as_ref().sum::<f64>().unwrap()));
             out.into_series()
         },
         // slowest sum_as_series path
         _ => ca
-            .apply_amortized(|s| s.as_ref().sum_as_series())
+            .try_apply_amortized(|s| s.as_ref().sum_reduce().map(|sc| sc.into_series("")))?
             .explode()
             .unwrap()
             .into_series(),
     };
     out.rename(ca.name());
-    out
+    Ok(out)
 }
 
-fn mean_between_offsets<T, S>(values: &[T], offset: &[i64]) -> Vec<S>
+fn mean_between_offsets<T, S>(values: &[T], offset: &[i64]) -> PrimitiveArray<S>
 where
     T: NativeType + ToPrimitive,
-    S: NumCast + std::iter::Sum + Div<Output = S>,
+    S: NativeType + NumCast + std::iter::Sum + Div<Output = S>,
 {
-    let mut running_offset = offset[0];
-
-    (offset[1..])
-        .iter()
-        .map(|end| {
-            let current_offset = running_offset;
-            running_offset = *end;
-
-            let slice = unsafe { values.get_unchecked(current_offset as usize..*end as usize) };
-            unsafe {
-                sum_slice::<_, S>(slice) / NumCast::from(slice.len()).unwrap_unchecked_release()
-            }
+    offset
+        .windows(2)
+        .map(|w| {
+            values
+                .get(w[0] as usize..w[1] as usize)
+                .filter(|sl| !sl.is_empty())
+                .map(|sl| sum_slice::<_, S>(sl) / NumCast::from(sl.len()).unwrap())
         })
-        .collect_trusted()
+        .collect()
 }
 
 fn dispatch_mean<T, S>(arr: &dyn Array, offsets: &[i64], validity: Option<&Bitmap>) -> ArrayRef
@@ -162,10 +137,15 @@ where
 {
     let values = arr.as_any().downcast_ref::<PrimitiveArray<T>>().unwrap();
     let values = values.values().as_slice();
-    Box::new(PrimitiveArray::from_data_default(
-        mean_between_offsets::<_, S>(values, offsets).into(),
-        validity.cloned(),
-    )) as ArrayRef
+    let mut out = mean_between_offsets::<_, S>(values, offsets);
+    if let Some(validity) = validity {
+        if out.has_validity() {
+            out.apply_validity(|other_validity| validity & &other_validity)
+        } else {
+            out = out.with_validity(Some(validity.clone()));
+        }
+    }
+    Box::new(out)
 }
 
 pub(super) fn mean_list_numerical(ca: &ListChunked, inner_type: &DataType) -> Series {
@@ -198,21 +178,15 @@ pub(super) fn mean_list_numerical(ca: &ListChunked, inner_type: &DataType) -> Se
 pub(super) fn mean_with_nulls(ca: &ListChunked) -> Series {
     return match ca.inner_dtype() {
         DataType::Float32 => {
-            let mut out: Float32Chunked = ca
-                .amortized_iter()
-                .map(|s| s.and_then(|s| s.as_ref().mean().map(|v| v as f32)))
-                .collect();
-
-            out.rename(ca.name());
+            let out: Float32Chunked = ca
+                .apply_amortized_generic(|s| s.and_then(|s| s.as_ref().mean().map(|v| v as f32)))
+                .with_name(ca.name());
             out.into_series()
         },
         _ => {
-            let mut out: Float64Chunked = ca
-                .amortized_iter()
-                .map(|s| s.and_then(|s| s.as_ref().mean()))
-                .collect();
-
-            out.rename(ca.name());
+            let out: Float64Chunked = ca
+                .apply_amortized_generic(|s| s.and_then(|s| s.as_ref().mean()))
+                .with_name(ca.name());
             out.into_series()
         },
     };

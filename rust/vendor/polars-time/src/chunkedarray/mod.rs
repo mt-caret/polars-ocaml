@@ -6,11 +6,13 @@ mod datetime;
 #[cfg(feature = "dtype-duration")]
 mod duration;
 mod kernels;
+#[cfg(any(feature = "rolling_window", feature = "rolling_window_by"))]
 mod rolling_window;
+pub mod string;
 #[cfg(feature = "dtype-time")]
 mod time;
-pub mod utf8;
 
+use arrow::legacy::utils::CustomIterTools;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 #[cfg(feature = "dtype-date")]
 pub use date::DateMethods;
@@ -19,20 +21,16 @@ pub use datetime::DatetimeMethods;
 #[cfg(feature = "dtype-duration")]
 pub use duration::DurationMethods;
 use kernels::*;
-use polars_arrow::utils::CustomIterTools;
 use polars_core::prelude::*;
+#[cfg(any(feature = "rolling_window", feature = "rolling_window_by"))]
 pub use rolling_window::*;
+pub use string::StringMethods;
 #[cfg(feature = "dtype-time")]
 pub use time::TimeMethods;
-pub use utf8::Utf8Methods;
-
-pub fn unix_time() -> NaiveDateTime {
-    NaiveDateTime::from_timestamp_opt(0, 0).unwrap()
-}
 
 // a separate function so that it is not compiled twice
 #[cfg(any(feature = "dtype-date", feature = "dtype-datetime"))]
-pub(crate) fn months_to_quarters(mut ca: UInt32Chunked) -> UInt32Chunked {
+pub(crate) fn months_to_quarters(mut ca: Int8Chunked) -> Int8Chunked {
     ca.apply_mut(|month| (month + 2) / 3);
     ca
 }

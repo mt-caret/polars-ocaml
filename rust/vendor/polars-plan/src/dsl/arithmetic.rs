@@ -1,4 +1,4 @@
-use std::ops::{Add, Div, Mul, Rem, Sub};
+use std::ops::{Add, Div, Mul, Neg, Rem, Sub};
 
 use super::*;
 
@@ -43,6 +43,14 @@ impl Rem for Expr {
     }
 }
 
+impl Neg for Expr {
+    type Output = Expr;
+
+    fn neg(self) -> Self::Output {
+        self.map_private(FunctionExpr::Negate)
+    }
+}
+
 impl Expr {
     /// Floor divide `self` by `rhs`.
     pub fn floor_div(self, rhs: Self) -> Self {
@@ -51,14 +59,12 @@ impl Expr {
 
     /// Raise expression to the power `exponent`
     pub fn pow<E: Into<Expr>>(self, exponent: E) -> Self {
-        Expr::Function {
-            input: vec![self, exponent.into()],
-            function: FunctionExpr::Pow(PowFunction::Generic),
-            options: FunctionOptions {
-                collect_groups: ApplyOptions::ApplyFlat,
-                ..Default::default()
-            },
-        }
+        self.map_many_private(
+            FunctionExpr::Pow(PowFunction::Generic),
+            &[exponent.into()],
+            false,
+            false,
+        )
     }
 
     /// Compute the square root of the given expression
@@ -116,14 +122,7 @@ impl Expr {
     /// Compute the inverse tangent of the given expression, with the angle expressed as the argument of a complex number
     #[cfg(feature = "trigonometry")]
     pub fn arctan2(self, x: Self) -> Self {
-        Expr::Function {
-            input: vec![self, x],
-            function: FunctionExpr::Atan2,
-            options: FunctionOptions {
-                collect_groups: ApplyOptions::ApplyFlat,
-                ..Default::default()
-            },
-        }
+        self.map_many_private(FunctionExpr::Atan2, &[x], false, false)
     }
 
     /// Compute the hyperbolic cosine of the given expression

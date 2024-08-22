@@ -1,5 +1,3 @@
-use std::any::Any;
-
 use super::*;
 use crate::hashing::series_to_hashes;
 use crate::prelude::*;
@@ -32,7 +30,7 @@ impl private::PrivateSeries for SeriesWrap<StructChunked> {
     }
     fn explode_by_offsets(&self, offsets: &[i64]) -> Series {
         self.0
-            .apply_fields(|s| s.explode_by_offsets(offsets))
+            ._apply_fields(|s| s.explode_by_offsets(offsets))
             .into_series()
     }
 
@@ -58,14 +56,16 @@ impl private::PrivateSeries for SeriesWrap<StructChunked> {
         Ok(StructChunked::new_unchecked(self.0.name(), &fields).into_series())
     }
 
+    #[cfg(feature = "algorithm_group_by")]
     unsafe fn agg_list(&self, groups: &GroupsProxy) -> Series {
         self.0.agg_list(groups)
     }
 
+    #[cfg(feature = "algorithm_group_by")]
     fn group_tuples(&self, multithreaded: bool, sorted: bool) -> PolarsResult<GroupsProxy> {
-        let df = DataFrame::new_no_checks(vec![]);
+        let df = DataFrame::empty();
         let gb = df
-            .groupby_with_series(self.0.fields().to_vec(), multithreaded, sorted)
+            .group_by_with_series(self.0.fields().to_vec(), multithreaded, sorted)
             .unwrap();
         Ok(gb.take_groups())
     }
@@ -97,7 +97,7 @@ impl SeriesTrait for SeriesWrap<StructChunked> {
         self.0.name()
     }
 
-    fn chunk_lengths(&self) -> ChunkIdIter {
+    fn chunk_lengths(&self) -> ChunkLenIter {
         let s = self.0.fields().first().unwrap();
         s.chunk_lengths()
     }
@@ -105,6 +105,9 @@ impl SeriesTrait for SeriesWrap<StructChunked> {
     /// Underlying chunks.
     fn chunks(&self) -> &Vec<ArrayRef> {
         self.0.chunks()
+    }
+    unsafe fn chunks_mut(&mut self) -> &mut Vec<ArrayRef> {
+        self.0.chunks_mut()
     }
 
     /// Number of chunks in this Series
@@ -118,7 +121,7 @@ impl SeriesTrait for SeriesWrap<StructChunked> {
     /// When offset is negative the offset is counted from the
     /// end of the array
     fn slice(&self, offset: i64, length: usize) -> Series {
-        let mut out = self.0.apply_fields(|s| s.slice(offset, length));
+        let mut out = self.0._apply_fields(|s| s.slice(offset, length));
         out.update_chunks(0);
         out.into_series()
     }
@@ -173,75 +176,28 @@ impl SeriesTrait for SeriesWrap<StructChunked> {
             .map(|ca| ca.into_series())
     }
 
-    /// Take by index from an iterator. This operation clones the data.
-    fn take_iter(&self, iter: &mut dyn TakeIterator) -> PolarsResult<Series> {
-        self.0
-            .try_apply_fields(|s| {
-                let mut iter = iter.boxed_clone();
-                s.take_iter(&mut *iter)
-            })
-            .map(|ca| ca.into_series())
-    }
-
-    #[cfg(feature = "chunked_ids")]
-    unsafe fn _take_chunked_unchecked(&self, by: &[ChunkId], sorted: IsSorted) -> Series {
-        self.0
-            .apply_fields(|s| s._take_chunked_unchecked(by, sorted))
-            .into_series()
-    }
-
-    #[cfg(feature = "chunked_ids")]
-    unsafe fn _take_opt_chunked_unchecked(&self, by: &[Option<ChunkId>]) -> Series {
-        self.0
-            .apply_fields(|s| s._take_opt_chunked_unchecked(by))
-            .into_series()
-    }
-
-    /// Take by index from an iterator. This operation clones the data.
-    ///
-    /// # Safety
-    ///
-    /// - This doesn't check any bounds.
-    /// - Iterator must be TrustedLen
-    unsafe fn take_iter_unchecked(&self, iter: &mut dyn TakeIterator) -> Series {
-        self.0
-            .apply_fields(|s| {
-                let mut iter = iter.boxed_clone();
-                s.take_iter_unchecked(&mut *iter)
-            })
-            .into_series()
-    }
-
-    /// Take by index if ChunkedArray contains a single chunk.
-    ///
-    /// # Safety
-    /// This doesn't check any bounds.
-    unsafe fn take_unchecked(&self, idx: &IdxCa) -> PolarsResult<Series> {
-        self.0
-            .try_apply_fields(|s| s.take_unchecked(idx))
-            .map(|ca| ca.into_series())
-    }
-
-    /// Take by index from an iterator. This operation clones the data.
-    ///
-    /// # Safety
-    ///
-    /// - This doesn't check any bounds.
-    /// - Iterator must be TrustedLen
-    unsafe fn take_opt_iter_unchecked(&self, iter: &mut dyn TakeIteratorNulls) -> Series {
-        self.0
-            .apply_fields(|s| {
-                let mut iter = iter.boxed_clone();
-                s.take_opt_iter_unchecked(&mut *iter)
-            })
-            .into_series()
-    }
-
-    /// Take by index. This operation is clone.
     fn take(&self, indices: &IdxCa) -> PolarsResult<Series> {
         self.0
             .try_apply_fields(|s| s.take(indices))
             .map(|ca| ca.into_series())
+    }
+
+    unsafe fn take_unchecked(&self, indices: &IdxCa) -> Series {
+        self.0
+            ._apply_fields(|s| s.take_unchecked(indices))
+            .into_series()
+    }
+
+    fn take_slice(&self, indices: &[IdxSize]) -> PolarsResult<Series> {
+        self.0
+            .try_apply_fields(|s| s.take_slice(indices))
+            .map(|ca| ca.into_series())
+    }
+
+    unsafe fn take_slice_unchecked(&self, indices: &[IdxSize]) -> Series {
+        self.0
+            ._apply_fields(|s| s.take_slice_unchecked(indices))
+            .into_series()
     }
 
     /// Get length of series.
@@ -258,7 +214,7 @@ impl SeriesTrait for SeriesWrap<StructChunked> {
 
     fn new_from_index(&self, index: usize, length: usize) -> Series {
         self.0
-            .apply_fields(|s| s.new_from_index(index, length))
+            ._apply_fields(|s| s.new_from_index(index, length))
             .into_series()
     }
 
@@ -280,6 +236,7 @@ impl SeriesTrait for SeriesWrap<StructChunked> {
     }
 
     /// Get unique values in the Series.
+    #[cfg(feature = "algorithm_group_by")]
     fn unique(&self) -> PolarsResult<Series> {
         // this can called in aggregation, so this fast path can be worth a lot
         if self.len() < 2 {
@@ -287,12 +244,13 @@ impl SeriesTrait for SeriesWrap<StructChunked> {
         }
         let main_thread = POOL.current_thread_index().is_none();
         let groups = self.group_tuples(main_thread, false);
-        // safety:
+        // SAFETY:
         // groups are in bounds
         Ok(unsafe { self.0.clone().into_series().agg_first(&groups?) })
     }
 
     /// Get unique values in the Series.
+    #[cfg(feature = "algorithm_group_by")]
     fn n_unique(&self) -> PolarsResult<usize> {
         // this can called in aggregation, so this fast path can be worth a lot
         match self.len() {
@@ -308,14 +266,14 @@ impl SeriesTrait for SeriesWrap<StructChunked> {
     }
 
     /// Get first indexes of unique values.
+    #[cfg(feature = "algorithm_group_by")]
     fn arg_unique(&self) -> PolarsResult<IdxCa> {
         // this can called in aggregation, so this fast path can be worth a lot
         if self.len() == 1 {
             return Ok(IdxCa::new_vec(self.name(), vec![0 as IdxSize]));
         }
-        // TODO! try row encoding
         let main_thread = POOL.current_thread_index().is_none();
-        let groups = self.group_tuples(main_thread, false)?;
+        let groups = self.group_tuples(main_thread, true)?;
         let first = groups.take_group_firsts();
         Ok(IdxCa::from_vec(self.name(), first))
     }
@@ -329,7 +287,7 @@ impl SeriesTrait for SeriesWrap<StructChunked> {
     /// Get a mask of the non-null values.
     fn is_not_null(&self) -> BooleanChunked {
         let is_not_null = self.0.fields().iter().map(|s| s.is_not_null());
-        is_not_null.reduce(|lhs, rhs| lhs.bitand(rhs)).unwrap()
+        is_not_null.reduce(|lhs, rhs| lhs.bitor(rhs)).unwrap()
     }
 
     fn shrink_to_fit(&mut self) {
@@ -339,16 +297,11 @@ impl SeriesTrait for SeriesWrap<StructChunked> {
     }
 
     fn reverse(&self) -> Series {
-        self.0.apply_fields(|s| s.reverse()).into_series()
+        self.0._apply_fields(|s| s.reverse()).into_series()
     }
 
     fn shift(&self, periods: i64) -> Series {
-        self.0.apply_fields(|s| s.shift(periods)).into_series()
-    }
-
-    #[cfg(feature = "is_in")]
-    fn is_in(&self, other: &Series) -> PolarsResult<BooleanChunked> {
-        self.0.is_in(other)
+        self.0._apply_fields(|s| s.shift(periods)).into_series()
     }
 
     fn clone_inner(&self) -> Arc<dyn SeriesTrait> {
@@ -359,7 +312,7 @@ impl SeriesTrait for SeriesWrap<StructChunked> {
         &self.0
     }
 
-    fn sort_with(&self, options: SortOptions) -> Series {
+    fn sort_with(&self, options: SortOptions) -> PolarsResult<Series> {
         let df = self.0.clone().unnest();
 
         let desc = if options.descending {
@@ -367,17 +320,11 @@ impl SeriesTrait for SeriesWrap<StructChunked> {
         } else {
             vec![false; df.width()]
         };
-        let out = df
-            .sort_impl(
-                df.columns.clone(),
-                desc,
-                options.nulls_last,
-                options.maintain_order,
-                None,
-                options.multithreaded,
-            )
-            .unwrap();
-        StructChunked::new_unchecked(self.name(), &out.columns).into_series()
+
+        let multi_options = SortMultipleOptions::from(&options).with_order_descendings(desc);
+
+        let out = df.sort_impl(df.columns.clone(), multi_options, None)?;
+        Ok(StructChunked::new_unchecked(self.name(), &out.columns).into_series())
     }
 
     fn arg_sort(&self, options: SortOptions) -> IdxCa {

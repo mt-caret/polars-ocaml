@@ -1,6 +1,9 @@
-use polars_arrow::prelude::DynArgs;
+use arrow::legacy::prelude::DynArgs;
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct RollingOptionsFixedWindow {
     /// The length of the window.
     pub window_size: usize,
@@ -11,7 +14,20 @@ pub struct RollingOptionsFixedWindow {
     pub weights: Option<Vec<f64>>,
     /// Set the labels at the center of the window.
     pub center: bool,
+    #[cfg_attr(feature = "serde", serde(skip))]
     pub fn_params: DynArgs,
+}
+
+#[cfg(feature = "rolling_window")]
+impl PartialEq for RollingOptionsFixedWindow {
+    fn eq(&self, other: &Self) -> bool {
+        self.window_size == other.window_size
+            && self.min_periods == other.min_periods
+            && self.weights == other.weights
+            && self.center == other.center
+            && self.fn_params.is_none()
+            && other.fn_params.is_none()
+    }
 }
 
 impl Default for RollingOptionsFixedWindow {
@@ -30,13 +46,12 @@ impl Default for RollingOptionsFixedWindow {
 mod inner_mod {
     use std::ops::SubAssign;
 
-    use arrow::array::{Array, PrimitiveArray};
+    use arrow::bitmap::utils::set_bit_unchecked;
     use arrow::bitmap::MutableBitmap;
+    use arrow::legacy::trusted_len::TrustedLenPush;
     use num_traits::pow::Pow;
     use num_traits::{Float, Zero};
-    use polars_arrow::bit_util::unset_bit_raw;
-    use polars_arrow::data_types::IsFloat;
-    use polars_arrow::trusted_len::TrustedLenPush;
+    use polars_utils::float::IsFloat;
 
     use crate::prelude::*;
 
@@ -71,7 +86,7 @@ mod inner_mod {
         Self: IntoSeries,
     {
         /// Apply a rolling custom function. This is pretty slow because of dynamic dispatch.
-        fn rolling_apply(
+        fn rolling_map(
             &self,
             f: &dyn Fn(&Series) -> Series,
             mut options: RollingOptionsFixedWindow,
@@ -83,18 +98,17 @@ mod inner_mod {
                 && !matches!(self.dtype(), DataType::Float64 | DataType::Float32)
             {
                 let s = self.cast(&DataType::Float64)?;
-                return s.rolling_apply(f, options);
+                return s.rolling_map(f, options);
             }
 
             options.window_size = std::cmp::min(self.len(), options.window_size);
 
             let len = self.len();
             let arr = ca.downcast_iter().next().unwrap();
-            let mut series_container =
-                ChunkedArray::<T>::from_slice("", &[T::Native::zero()]).into_series();
-            let array_ptr = series_container.array_ref(0);
-            let ptr = array_ptr.as_ref() as *const dyn Array as *mut dyn Array
-                as *mut PrimitiveArray<T::Native>;
+            let mut ca = ChunkedArray::<T>::from_slice("", &[T::Native::zero()]);
+            let ptr = ca.chunks[0].as_mut() as *mut dyn Array as *mut PrimitiveArray<T::Native>;
+            let mut series_container = ca.into_series();
+
             let mut builder = PrimitiveChunkedBuilder::<T>::new(self.name(), self.len());
 
             if let Some(weights) = options.weights {
@@ -108,20 +122,27 @@ mod inner_mod {
                     if size < options.min_periods {
                         builder.append_null();
                     } else {
-                        // safety:
+                        // SAFETY:
                         // we are in bounds
                         let arr_window = unsafe { arr.slice_typed_unchecked(start, size) };
 
-                        // Safety.
+                        // ensure we still meet window size criteria after removing null values
+                        if size - arr_window.null_count() < options.min_periods {
+                            builder.append_null();
+                            continue;
+                        }
+
+                        // SAFETY.
                         // ptr is not dropped as we are in scope
                         // We are also the only owner of the contents of the Arc
                         // we do this to reduce heap allocs.
                         unsafe {
                             *ptr = arr_window;
                         }
+                        // reset flags as we reuse this container
+                        series_container.clear_settings();
                         // ensure the length is correct
                         series_container._get_inner_mut().compute_len();
-
                         let s = if size == options.window_size {
                             f(&series_container.multiply(&weights_series).unwrap())
                         } else {
@@ -155,20 +176,27 @@ mod inner_mod {
                     if size < options.min_periods {
                         builder.append_null();
                     } else {
-                        // safety:
+                        // SAFETY:
                         // we are in bounds
                         let arr_window = unsafe { arr.slice_typed_unchecked(start, size) };
 
-                        // Safety.
+                        // ensure we still meet window size criteria after removing null values
+                        if size - arr_window.null_count() < options.min_periods {
+                            builder.append_null();
+                            continue;
+                        }
+
+                        // SAFETY.
                         // ptr is not dropped as we are in scope
                         // We are also the only owner of the contents of the Arc
                         // we do this to reduce heap allocs.
                         unsafe {
                             *ptr = arr_window;
                         }
+                        // reset flags as we reuse this container
+                        series_container.clear_settings();
                         // ensure the length is correct
                         series_container._get_inner_mut().compute_len();
-
                         let s = f(&series_container);
                         let out = self.unpack_series_matching_type(&s)?;
                         builder.append_option(out.get(0));
@@ -187,7 +215,7 @@ mod inner_mod {
         T::Native: Float + IsFloat + SubAssign + Pow<T::Native, Output = T::Native>,
     {
         /// Apply a rolling custom function. This is pretty slow because of dynamic dispatch.
-        pub fn rolling_apply_float<F>(&self, window_size: usize, mut f: F) -> PolarsResult<Self>
+        pub fn rolling_map_float<F>(&self, window_size: usize, mut f: F) -> PolarsResult<Self>
         where
             F: FnMut(&mut ChunkedArray<T>) -> Option<T::Native>,
         {
@@ -201,14 +229,13 @@ mod inner_mod {
             // container where we swap the window contents every iteration doing
             // so will save a lot of heap allocations.
             let mut heap_container = ChunkedArray::<T>::from_slice("", &[T::Native::zero()]);
-            let array_ptr = &heap_container.chunks()[0];
-            let ptr = array_ptr.as_ref() as *const dyn Array as *mut dyn Array
+            let ptr = heap_container.chunks[0].as_mut() as *mut dyn Array
                 as *mut PrimitiveArray<T::Native>;
 
             let mut validity = MutableBitmap::with_capacity(ca.len());
             validity.extend_constant(window_size - 1, false);
             validity.extend_constant(ca.len() - (window_size - 1), true);
-            let validity_ptr = validity.as_slice().as_ptr() as *mut u8;
+            let validity_slice = validity.as_mut_slice();
 
             let mut values = Vec::with_capacity(ca.len());
             values.extend(std::iter::repeat(T::Native::default()).take(window_size - 1));
@@ -236,20 +263,17 @@ mod inner_mod {
                         // and the `validity_ptr`.
                         unsafe {
                             values.push_unchecked(T::Native::default());
-                            unset_bit_raw(validity_ptr, offset + window_size - 1);
+                            set_bit_unchecked(validity_slice, offset + window_size - 1, false);
                         }
                     },
                 }
             }
             let arr = PrimitiveArray::new(
-                T::get_dtype().to_arrow(),
+                T::get_dtype().to_arrow(true),
                 values.into(),
                 Some(validity.into()),
             );
-            Ok(Self::from_chunk_iter(self.name(), [arr]))
+            Ok(Self::with_chunk(self.name(), arr))
         }
     }
 }
-
-#[cfg(feature = "rolling_window")]
-pub use inner_mod::*;

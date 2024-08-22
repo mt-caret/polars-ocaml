@@ -12,7 +12,7 @@
 [package]
 edition = "2021"
 name = "sqlparser"
-version = "0.36.1"
+version = "0.39.0"
 authors = ["Andy Grove <andygrove73@gmail.com>"]
 include = [
     "src/**/*.rs",

@@ -1,18 +1,22 @@
 use std::cmp::Ordering;
+use std::fmt::{Display, Formatter};
 use std::ops::Mul;
 
-use chrono::{Datelike, NaiveDate, NaiveDateTime, NaiveTime, Timelike, Weekday};
-use polars_arrow::error::polars_err;
-use polars_arrow::export::arrow::temporal_conversions::{
+#[cfg(feature = "timezones")]
+use arrow::legacy::kernels::{Ambiguous, NonExistent};
+use arrow::legacy::time_zone::Tz;
+use arrow::temporal_conversions::{
     timestamp_ms_to_datetime, timestamp_ns_to_datetime, timestamp_us_to_datetime, MILLISECONDS,
+    NANOSECONDS,
 };
-use polars_arrow::time_zone::Tz;
+use chrono::{Datelike, NaiveDate, NaiveDateTime, NaiveTime, Timelike};
+use polars_core::datatypes::DataType;
 use polars_core::export::arrow::temporal_conversions::MICROSECONDS;
 use polars_core::prelude::{
     datetime_to_timestamp_ms, datetime_to_timestamp_ns, datetime_to_timestamp_us, polars_bail,
     PolarsResult,
 };
-use polars_core::utils::arrow::temporal_conversions::NANOSECONDS;
+use polars_error::polars_ensure;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
@@ -20,8 +24,8 @@ use super::calendar::{
     NS_DAY, NS_HOUR, NS_MICROSECOND, NS_MILLISECOND, NS_MINUTE, NS_SECOND, NS_WEEK,
 };
 #[cfg(feature = "timezones")]
-use crate::utils::{localize_datetime, unlocalize_datetime};
-use crate::windows::calendar::{is_leap_year, last_day_of_month};
+use crate::utils::{localize_datetime_opt, try_localize_datetime, unlocalize_datetime};
+use crate::windows::calendar::{is_leap_year, DAYS_PER_MONTH};
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -30,7 +34,7 @@ pub struct Duration {
     months: i64,
     // the number of weeks for the duration
     weeks: i64,
-    // the number of nanoseconds for the duration
+    // the number of days for the duration
     days: i64,
     // the number of nanoseconds for the duration
     nsecs: i64,
@@ -38,9 +42,6 @@ pub struct Duration {
     pub(crate) negative: bool,
     // indicates if an integer string was passed. e.g. "2i"
     pub parsed_int: bool,
-    // indicates if an offset to a non-existent date (e.g. 2022-02-29)
-    // should saturate (to 2022-02-28) as opposed to erroring
-    pub(crate) saturating: bool,
 }
 
 impl PartialOrd<Self> for Duration {
@@ -55,6 +56,40 @@ impl Ord for Duration {
     }
 }
 
+impl Display for Duration {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        if self.is_zero() {
+            return write!(f, "0s");
+        }
+        if self.negative {
+            write!(f, "-")?
+        }
+        if self.months > 0 {
+            write!(f, "{}m", self.months)?
+        }
+        if self.weeks > 0 {
+            write!(f, "{}w", self.weeks)?
+        }
+        if self.days > 0 {
+            write!(f, "{}d", self.days)?
+        }
+        if self.nsecs > 0 {
+            let secs = self.nsecs / NANOSECONDS;
+            if secs * NANOSECONDS == self.nsecs {
+                write!(f, "{}s", secs)?
+            } else {
+                let us = self.nsecs / 1_000;
+                if us * 1_000 == self.nsecs {
+                    write!(f, "{}us", us)?
+                } else {
+                    write!(f, "{}ns", self.nsecs)?
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
 impl Duration {
     /// Create a new integer size `Duration`
     pub fn new(fixed_slots: i64) -> Self {
@@ -65,7 +100,6 @@ impl Duration {
             nsecs: fixed_slots.abs(),
             negative: fixed_slots < 0,
             parsed_int: true,
-            saturating: false,
         }
     }
 
@@ -96,10 +130,6 @@ impl Duration {
     /// * `y`:  calendar year
     /// * `i`:  index value (only for {Int32, Int64} dtypes)
     ///
-    /// Suffix with `"_saturating"` to indicate that dates too large for
-    /// their month should saturate at the largest date (e.g. 2022-02-29 -> 2022-02-28)
-    /// instead of erroring.
-    ///
     /// By "calendar day", we mean the corresponding time on the next
     /// day (which may not be 24 hours, depending on daylight savings).
     /// Similarly for "calendar week", "calendar month", "calendar quarter",
@@ -121,13 +151,7 @@ impl Duration {
         let mut days = 0;
         let mut months = 0;
         let negative = duration.starts_with('-');
-        let (saturating, mut iter) = match duration.ends_with("_saturating") {
-            true => (
-                true,
-                duration[..duration.len() - "_saturating".len()].char_indices(),
-            ),
-            false => (false, duration.char_indices()),
-        };
+        let mut iter = duration.char_indices();
         let mut start = 0;
 
         // skip the '-' char
@@ -196,7 +220,6 @@ impl Duration {
             months: months.abs(),
             negative,
             parsed_int,
-            saturating,
         }
     }
 
@@ -263,7 +286,6 @@ impl Duration {
             nsecs,
             negative,
             parsed_int: false,
-            saturating: false,
         }
     }
 
@@ -277,7 +299,6 @@ impl Duration {
             nsecs: 0,
             negative,
             parsed_int: false,
-            saturating: false,
         }
     }
 
@@ -291,7 +312,6 @@ impl Duration {
             nsecs: 0,
             negative,
             parsed_int: false,
-            saturating: false,
         }
     }
 
@@ -305,7 +325,6 @@ impl Duration {
             nsecs: 0,
             negative,
             parsed_int: false,
-            saturating: false,
         }
     }
 
@@ -338,8 +357,22 @@ impl Duration {
         self.days
     }
 
-    pub fn is_constant_duration(&self) -> bool {
-        self.months == 0 && self.weeks == 0 && self.days == 0
+    /// Returns whether the duration consists of full days.
+    ///
+    /// Note that 24 hours is not considered a full day due to possible
+    /// daylight savings time transitions.
+    pub fn is_full_days(&self) -> bool {
+        self.nsecs == 0
+    }
+
+    pub fn is_constant_duration(&self, time_zone: Option<&str>) -> bool {
+        if time_zone.is_none() || time_zone == Some("UTC") {
+            self.months == 0
+        } else {
+            // For non-native, non-UTC time zones, 1 calendar day is not
+            // necessarily 24 hours due to daylight savings time.
+            self.months == 0 && self.weeks == 0 && self.days == 0
+        }
     }
 
     /// Returns the nanoseconds from the `Duration` without the weeks or months part.
@@ -347,7 +380,12 @@ impl Duration {
         self.nsecs
     }
 
-    /// Estimated duration of the window duration. Not a very good one if months != 0.
+    /// Returns whether duration is negative.
+    pub fn negative(&self) -> bool {
+        self.negative
+    }
+
+    /// Estimated duration of the window duration. Not a very good one if not a constant duration.
     #[doc(hidden)]
     pub const fn duration_ns(&self) -> i64 {
         self.months * 28 * 24 * 3600 * NANOSECONDS
@@ -359,22 +397,19 @@ impl Duration {
     #[doc(hidden)]
     pub const fn duration_us(&self) -> i64 {
         self.months * 28 * 24 * 3600 * MICROSECONDS
-            + (self.weeks * NS_WEEK + self.nsecs + self.days * NS_DAY) / 1000
+            + (self.weeks * NS_WEEK / 1000 + self.nsecs / 1000 + self.days * NS_DAY / 1000)
     }
 
     #[doc(hidden)]
     pub const fn duration_ms(&self) -> i64 {
         self.months * 28 * 24 * 3600 * MILLISECONDS
-            + (self.weeks * NS_WEEK + self.nsecs + self.days * NS_DAY) / 1_000_000
+            + (self.weeks * NS_WEEK / 1_000_000
+                + self.nsecs / 1_000_000
+                + self.days * NS_DAY / 1_000_000)
     }
 
     #[doc(hidden)]
-    fn add_month(
-        ts: NaiveDateTime,
-        n_months: i64,
-        negative: bool,
-        saturating: bool,
-    ) -> PolarsResult<NaiveDateTime> {
+    fn add_month(ts: NaiveDateTime, n_months: i64, negative: bool) -> NaiveDateTime {
         let mut months = n_months;
         if negative {
             months = -months;
@@ -399,16 +434,12 @@ impl Duration {
             month += 12;
         }
 
-        if saturating {
-            // Normalize the day if we are past the end of the month.
-            let mut last_day_of_month = last_day_of_month(month);
-            if month == (chrono::Month::February.number_from_month() as i32) && is_leap_year(year) {
-                last_day_of_month += 1;
-            }
+        // Normalize the day if we are past the end of the month.
+        let last_day_of_month =
+            DAYS_PER_MONTH[is_leap_year(year) as usize][(month - 1) as usize] as u32;
 
-            if day > last_day_of_month {
-                day = last_day_of_month
-            }
+        if day > last_day_of_month {
+            day = last_day_of_month
         }
 
         // Retrieve the original time and construct a data
@@ -417,17 +448,247 @@ impl Duration {
         let minute = ts.minute();
         let sec = ts.second();
         let nsec = ts.nanosecond();
-        new_datetime(year, month as u32, day, hour, minute, sec, nsec).ok_or(
-            polars_err!(
-                ComputeError: format!(
-                    "cannot advance '{}' by {} month(s). \
-                        If you were trying to get the last day of each month, you may want to try `.dt.month_end` \
-                        or append \"_saturating\" to your duration string.",
-                        ts,
-                        if negative {-n_months} else {n_months}
-                )
-            ),
+        new_datetime(year, month as u32, day, hour, minute, sec, nsec).expect(
+            "Expected valid datetime, please open an issue at https://github.com/pola-rs/polars/issues"
         )
+    }
+
+    /// Localize result to given time zone, respecting DST fold of original datetime.
+    /// For example, 2022-11-06 01:30:00 CST truncated by 1 hour becomes 2022-11-06 01:00:00 CST,
+    /// whereas 2022-11-06 01:30:00 CDT truncated by 1 hour becomes 2022-11-06 01:00:00 CDT.
+    ///
+    /// * `original_dt_local` - original datetime, without time zone.
+    ///   E.g. if the original datetime was 2022-11-06 01:30:00 CST, then this would
+    ///   be 2022-11-06 01:30:00.
+    /// * `original_dt_utc` - original datetime converted to UTC. E.g. if the
+    ///   original datetime was 2022-11-06 01:30:00 CST, then this would
+    ///   be 2022-11-06 07:30:00.
+    /// * `result_dt_local` - result, without time zone.
+    #[cfg(feature = "timezones")]
+    fn localize_result(
+        &self,
+        original_dt_local: NaiveDateTime,
+        original_dt_utc: NaiveDateTime,
+        result_dt_local: NaiveDateTime,
+        tz: &Tz,
+    ) -> PolarsResult<NaiveDateTime> {
+        match localize_datetime_opt(result_dt_local, tz, Ambiguous::Raise) {
+            Some(dt) => Ok(dt.expect("we didn't use Ambiguous::Null")),
+            None => {
+                if try_localize_datetime(
+                    original_dt_local,
+                    tz,
+                    Ambiguous::Earliest,
+                    NonExistent::Raise,
+                )?
+                .expect("we didn't use Ambiguous::Null or NonExistent::Null")
+                    == original_dt_utc
+                {
+                    Ok(try_localize_datetime(
+                        result_dt_local,
+                        tz,
+                        Ambiguous::Earliest,
+                        NonExistent::Raise,
+                    )?
+                    .expect("we didn't use Ambiguous::Null or NonExistent::Null"))
+                } else if try_localize_datetime(
+                    original_dt_local,
+                    tz,
+                    Ambiguous::Latest,
+                    NonExistent::Raise,
+                )?
+                .expect("we didn't use Ambiguous::Null or NonExistent::Null")
+                    == original_dt_utc
+                {
+                    Ok(try_localize_datetime(
+                        result_dt_local,
+                        tz,
+                        Ambiguous::Latest,
+                        NonExistent::Raise,
+                    )?
+                    .expect("we didn't use Ambiguous::Null or NonExistent::Null"))
+                } else {
+                    unreachable!()
+                }
+            },
+        }
+    }
+
+    fn truncate_subweekly<G, J>(
+        &self,
+        t: i64,
+        tz: Option<&Tz>,
+        duration: i64,
+        _timestamp_to_datetime: G,
+        _datetime_to_timestamp: J,
+    ) -> PolarsResult<i64>
+    where
+        G: Fn(i64) -> NaiveDateTime,
+        J: Fn(NaiveDateTime) -> i64,
+    {
+        match tz {
+            #[cfg(feature = "timezones")]
+            // for UTC, use fastpath below (same as naive)
+            Some(tz) if tz != &chrono_tz::UTC => {
+                let original_dt_utc = _timestamp_to_datetime(t);
+                let original_dt_local = unlocalize_datetime(original_dt_utc, tz);
+                let t = _datetime_to_timestamp(original_dt_local);
+                let mut remainder = t % duration;
+                if remainder < 0 {
+                    remainder += duration
+                }
+                let result_timestamp = t - remainder;
+                let result_dt_local = _timestamp_to_datetime(result_timestamp);
+                let result_dt_utc =
+                    self.localize_result(original_dt_local, original_dt_utc, result_dt_local, tz)?;
+                Ok(_datetime_to_timestamp(result_dt_utc))
+            },
+            _ => {
+                let mut remainder = t % duration;
+                if remainder < 0 {
+                    remainder += duration
+                }
+                Ok(t - remainder)
+            },
+        }
+    }
+
+    fn truncate_weekly<G, J>(
+        &self,
+        t: i64,
+        tz: Option<&Tz>,
+        _timestamp_to_datetime: G,
+        _datetime_to_timestamp: J,
+        daily_duration: i64,
+    ) -> PolarsResult<i64>
+    where
+        G: Fn(i64) -> NaiveDateTime,
+        J: Fn(NaiveDateTime) -> i64,
+    {
+        let _original_dt_utc: Option<NaiveDateTime>;
+        let _original_dt_local: Option<NaiveDateTime>;
+        let t = match tz {
+            #[cfg(feature = "timezones")]
+            // for UTC, use fastpath below (same as naive)
+            Some(tz) if tz != &chrono_tz::UTC => {
+                _original_dt_utc = Some(_timestamp_to_datetime(t));
+                _original_dt_local = Some(unlocalize_datetime(_original_dt_utc.unwrap(), tz));
+                _datetime_to_timestamp(_original_dt_local.unwrap())
+            },
+            _ => {
+                _original_dt_utc = None;
+                _original_dt_local = None;
+                t
+            },
+        };
+        // If we did
+        //   t - (t % (7 * self.weeks * daily_duration))
+        // then the timestamp would get truncated to the previous Thursday,
+        // because 1970-01-01 (timestamp 0) is a Thursday.
+        // So, we adjust by 4 days to get to Monday.
+        let mut remainder = (t - 4 * daily_duration) % (7 * self.weeks * daily_duration);
+        if remainder < 0 {
+            remainder += 7 * self.weeks * daily_duration
+        }
+        let result_t_local = t - remainder;
+        match tz {
+            #[cfg(feature = "timezones")]
+            // for UTC, use fastpath below (same as naive)
+            Some(tz) if tz != &chrono_tz::UTC => {
+                let result_dt_local = _timestamp_to_datetime(result_t_local);
+                let result_dt_utc = self.localize_result(
+                    _original_dt_local.unwrap(),
+                    _original_dt_utc.unwrap(),
+                    result_dt_local,
+                    tz,
+                )?;
+                Ok(_datetime_to_timestamp(result_dt_utc))
+            },
+            _ => Ok(result_t_local),
+        }
+    }
+    fn truncate_monthly<G, J>(
+        &self,
+        t: i64,
+        tz: Option<&Tz>,
+        timestamp_to_datetime: G,
+        datetime_to_timestamp: J,
+        daily_duration: i64,
+    ) -> PolarsResult<i64>
+    where
+        G: Fn(i64) -> NaiveDateTime,
+        J: Fn(NaiveDateTime) -> i64,
+    {
+        let original_dt_utc;
+        let original_dt_local;
+        let t = match tz {
+            #[cfg(feature = "timezones")]
+            // for UTC, use fastpath below (same as naive)
+            Some(tz) if tz != &chrono_tz::UTC => {
+                original_dt_utc = timestamp_to_datetime(t);
+                original_dt_local = unlocalize_datetime(original_dt_utc, tz);
+                datetime_to_timestamp(original_dt_local)
+            },
+            _ => {
+                original_dt_utc = timestamp_to_datetime(t);
+                original_dt_local = original_dt_utc;
+                datetime_to_timestamp(original_dt_local)
+            },
+        };
+
+        // Remove the time of day from the timestamp
+        // e.g. 2020-01-01 12:34:56 -> 2020-01-01 00:00:00
+        let mut remainder_time = t % daily_duration;
+        if remainder_time < 0 {
+            remainder_time += daily_duration
+        }
+        let t = t - remainder_time;
+
+        // Calculate how many months we need to subtract...
+        let (mut year, mut month) = (
+            original_dt_local.year() as i64,
+            original_dt_local.month() as i64,
+        );
+        let total = (year * 12) + (month - 1);
+        let mut remainder_months = total % self.months;
+        if remainder_months < 0 {
+            remainder_months += self.months
+        }
+
+        // ...and translate that to how many days we need to subtract.
+        let mut _is_leap_year = is_leap_year(year as i32);
+        let mut remainder_days = (original_dt_local.day() - 1) as i64;
+        while remainder_months > 12 {
+            let prev_year_is_leap_year = is_leap_year((year - 1) as i32);
+            let add_extra_day =
+                (_is_leap_year && month > 2) || (prev_year_is_leap_year && month <= 2);
+            remainder_days += 365 + add_extra_day as i64;
+            remainder_months -= 12;
+            year -= 1;
+            _is_leap_year = prev_year_is_leap_year;
+        }
+        while remainder_months > 0 {
+            month -= 1;
+            if month == 0 {
+                year -= 1;
+                _is_leap_year = is_leap_year(year as i32);
+                month = 12;
+            }
+            remainder_days += DAYS_PER_MONTH[_is_leap_year as usize][(month - 1) as usize];
+            remainder_months -= 1;
+        }
+
+        match tz {
+            #[cfg(feature = "timezones")]
+            // for UTC, use fastpath below (same as naive)
+            Some(tz) if tz != &chrono_tz::UTC => {
+                let result_dt_local = timestamp_to_datetime(t - remainder_days * daily_duration);
+                let result_dt_utc =
+                    self.localize_result(original_dt_local, original_dt_utc, result_dt_local, tz)?;
+                Ok(datetime_to_timestamp(result_dt_utc))
+            },
+            _ => Ok(t - remainder_days * daily_duration),
+        }
     }
 
     #[inline]
@@ -438,7 +699,6 @@ impl Duration {
         nsecs_to_unit: F,
         timestamp_to_datetime: G,
         datetime_to_timestamp: J,
-        _use_earliest: Option<bool>,
     ) -> PolarsResult<i64>
     where
         F: Fn(i64) -> i64,
@@ -449,104 +709,47 @@ impl Duration {
             (0, 0, 0, 0) => polars_bail!(ComputeError: "duration cannot be zero"),
             // truncate by ns/us/ms
             (0, 0, 0, _) => {
-                let t = match tz {
-                    #[cfg(feature = "timezones")]
-                    Some(tz) => {
-                        datetime_to_timestamp(unlocalize_datetime(timestamp_to_datetime(t), tz))
-                    },
-                    _ => t,
-                };
                 let duration = nsecs_to_unit(self.nsecs);
-                let mut remainder = t % duration;
-                if remainder < 0 {
-                    remainder += duration
-                }
-                match tz {
-                    #[cfg(feature = "timezones")]
-                    Some(tz) => Ok(datetime_to_timestamp(localize_datetime(
-                        timestamp_to_datetime(t - remainder),
-                        tz,
-                        _use_earliest,
-                    )?)),
-                    _ => Ok(t - remainder),
-                }
-            },
-            // truncate by weeks
-            (0, _, 0, 0) => {
-                let dt = match tz {
-                    #[cfg(feature = "timezones")]
-                    Some(tz) => unlocalize_datetime(timestamp_to_datetime(t), tz).date(),
-                    _ => timestamp_to_datetime(t).date(),
-                };
-                let week_timestamp = dt.week(Weekday::Mon);
-                let first_day_of_week =
-                    week_timestamp.first_day() - chrono::Duration::weeks(self.weeks - 1);
-                match tz {
-                    #[cfg(feature = "timezones")]
-                    Some(tz) => Ok(datetime_to_timestamp(localize_datetime(
-                        first_day_of_week.and_time(NaiveTime::default()),
-                        tz,
-                        _use_earliest,
-                    )?)),
-                    _ => Ok(datetime_to_timestamp(
-                        first_day_of_week.and_time(NaiveTime::default()),
-                    )),
-                }
+                self.truncate_subweekly(
+                    t,
+                    tz,
+                    duration,
+                    timestamp_to_datetime,
+                    datetime_to_timestamp,
+                )
             },
             // truncate by days
             (0, 0, _, 0) => {
-                let t = match tz {
-                    #[cfg(feature = "timezones")]
-                    Some(tz) => {
-                        datetime_to_timestamp(unlocalize_datetime(timestamp_to_datetime(t), tz))
-                    },
-                    _ => t,
-                };
                 let duration = self.days * nsecs_to_unit(NS_DAY);
-                let mut remainder = t % duration;
-                if remainder < 0 {
-                    remainder += duration
-                }
-                match tz {
-                    #[cfg(feature = "timezones")]
-                    Some(tz) => Ok(datetime_to_timestamp(localize_datetime(
-                        timestamp_to_datetime(t - remainder),
-                        tz,
-                        _use_earliest,
-                    )?)),
-                    _ => Ok(t - remainder),
-                }
+                self.truncate_subweekly(
+                    t,
+                    tz,
+                    duration,
+                    timestamp_to_datetime,
+                    datetime_to_timestamp,
+                )
+            },
+            // truncate by weeks
+            (0, _, 0, 0) => {
+                let duration = nsecs_to_unit(NS_DAY);
+                self.truncate_weekly(
+                    t,
+                    tz,
+                    timestamp_to_datetime,
+                    datetime_to_timestamp,
+                    duration,
+                )
             },
             // truncate by months
             (_, 0, 0, 0) => {
-                let ts = match tz {
-                    #[cfg(feature = "timezones")]
-                    Some(tz) => unlocalize_datetime(timestamp_to_datetime(t), tz),
-                    _ => timestamp_to_datetime(t),
-                };
-                let (year, month) = (ts.year(), ts.month());
-
-                // determine the total number of months and truncate
-                // the number of months by the duration amount
-                let mut total = (year * 12) + (month as i32 - 1);
-                let remainder = total % self.months as i32;
-                total -= remainder;
-
-                // recreate a new time from the year and month combination
-                let (year, month) = ((total / 12), ((total % 12) + 1) as u32);
-
-                let dt = new_datetime(year, month, 1, 0, 0, 0, 0).ok_or(polars_err!(
-                    ComputeError: format!("date '{}-{}-1' does not exist", year, month)
-                ))?;
-                match tz {
-                    #[cfg(feature = "timezones")]
-                    Some(tz) => Ok(datetime_to_timestamp(localize_datetime(
-                        dt,
-                        tz,
-                        _use_earliest,
-                    )?)),
-                    _ => Ok(datetime_to_timestamp(dt)),
-                }
+                let duration = nsecs_to_unit(NS_DAY);
+                self.truncate_monthly(
+                    t,
+                    tz,
+                    timestamp_to_datetime,
+                    datetime_to_timestamp,
+                    duration,
+                )
             },
             _ => {
                 polars_bail!(ComputeError: "duration may not mix month, weeks and nanosecond units")
@@ -556,55 +759,37 @@ impl Duration {
 
     // Truncate the given ns timestamp by the window boundary.
     #[inline]
-    pub fn truncate_ns(
-        &self,
-        t: i64,
-        tz: Option<&Tz>,
-        use_earliest: Option<bool>,
-    ) -> PolarsResult<i64> {
+    pub fn truncate_ns(&self, t: i64, tz: Option<&Tz>) -> PolarsResult<i64> {
         self.truncate_impl(
             t,
             tz,
             |nsecs| nsecs,
             timestamp_ns_to_datetime,
             datetime_to_timestamp_ns,
-            use_earliest,
         )
     }
 
     // Truncate the given ns timestamp by the window boundary.
     #[inline]
-    pub fn truncate_us(
-        &self,
-        t: i64,
-        tz: Option<&Tz>,
-        use_earliest: Option<bool>,
-    ) -> PolarsResult<i64> {
+    pub fn truncate_us(&self, t: i64, tz: Option<&Tz>) -> PolarsResult<i64> {
         self.truncate_impl(
             t,
             tz,
             |nsecs| nsecs / 1000,
             timestamp_us_to_datetime,
             datetime_to_timestamp_us,
-            use_earliest,
         )
     }
 
     // Truncate the given ms timestamp by the window boundary.
     #[inline]
-    pub fn truncate_ms(
-        &self,
-        t: i64,
-        tz: Option<&Tz>,
-        use_earliest: Option<bool>,
-    ) -> PolarsResult<i64> {
+    pub fn truncate_ms(&self, t: i64, tz: Option<&Tz>) -> PolarsResult<i64> {
         self.truncate_impl(
             t,
             tz,
             |nsecs| nsecs / 1_000_000,
             timestamp_ms_to_datetime,
             datetime_to_timestamp_ms,
-            use_earliest,
         )
     }
 
@@ -627,48 +812,65 @@ impl Duration {
         if d.months > 0 {
             let ts = match tz {
                 #[cfg(feature = "timezones")]
-                Some(tz) => unlocalize_datetime(timestamp_to_datetime(t), tz),
+                // for UTC, use fastpath below (same as naive)
+                Some(tz) if tz != &chrono_tz::UTC => {
+                    unlocalize_datetime(timestamp_to_datetime(t), tz)
+                },
                 _ => timestamp_to_datetime(t),
             };
-            let dt = Self::add_month(ts, d.months, d.negative, d.saturating)?;
+            let dt = Self::add_month(ts, d.months, d.negative);
             new_t = match tz {
                 #[cfg(feature = "timezones")]
-                Some(tz) => datetime_to_timestamp(localize_datetime(dt, tz, None)?),
+                // for UTC, use fastpath below (same as naive)
+                Some(tz) if tz != &chrono_tz::UTC => datetime_to_timestamp(
+                    try_localize_datetime(dt, tz, Ambiguous::Raise, NonExistent::Raise)?
+                        .expect("we didn't use Ambiguous::Null or NonExistent::Null"),
+                ),
                 _ => datetime_to_timestamp(dt),
             };
         }
 
         if d.weeks > 0 {
-            let t_weeks = nsecs_to_unit(self.weeks * NS_WEEK);
+            let t_weeks = nsecs_to_unit(NS_WEEK) * self.weeks;
             match tz {
                 #[cfg(feature = "timezones")]
-                Some(tz) => {
+                // for UTC, use fastpath below (same as naive)
+                Some(tz) if tz != &chrono_tz::UTC => {
                     new_t =
                         datetime_to_timestamp(unlocalize_datetime(timestamp_to_datetime(t), tz));
                     new_t += if d.negative { -t_weeks } else { t_weeks };
-                    new_t = datetime_to_timestamp(localize_datetime(
-                        timestamp_to_datetime(new_t),
-                        tz,
-                        None,
-                    )?);
+                    new_t = datetime_to_timestamp(
+                        try_localize_datetime(
+                            timestamp_to_datetime(new_t),
+                            tz,
+                            Ambiguous::Raise,
+                            NonExistent::Raise,
+                        )?
+                        .expect("we didn't use Ambiguous::Null or NonExistent::Null"),
+                    );
                 },
                 _ => new_t += if d.negative { -t_weeks } else { t_weeks },
             };
         }
 
         if d.days > 0 {
-            let t_days = nsecs_to_unit(self.days * NS_DAY);
+            let t_days = nsecs_to_unit(NS_DAY) * self.days;
             match tz {
                 #[cfg(feature = "timezones")]
-                Some(tz) => {
+                // for UTC, use fastpath below (same as naive)
+                Some(tz) if tz != &chrono_tz::UTC => {
                     new_t =
                         datetime_to_timestamp(unlocalize_datetime(timestamp_to_datetime(t), tz));
                     new_t += if d.negative { -t_days } else { t_days };
-                    new_t = datetime_to_timestamp(localize_datetime(
-                        timestamp_to_datetime(new_t),
-                        tz,
-                        None,
-                    )?);
+                    new_t = datetime_to_timestamp(
+                        try_localize_datetime(
+                            timestamp_to_datetime(new_t),
+                            tz,
+                            Ambiguous::Raise,
+                            NonExistent::Raise,
+                        )?
+                        .expect("we didn't use Ambiguous::Null or NonExistent::Null"),
+                    );
                 },
                 _ => new_t += if d.negative { -t_days } else { t_days },
             };
@@ -747,6 +949,42 @@ fn new_datetime(
     Some(NaiveDateTime::new(date, time))
 }
 
+pub fn ensure_is_constant_duration(
+    duration: Duration,
+    time_zone: Option<&str>,
+    variable_name: &str,
+) -> PolarsResult<()> {
+    polars_ensure!(duration.is_constant_duration(time_zone), 
+        InvalidOperation: "expected `{}` to be a constant duration \
+            (i.e. one independent of differing month durations or of daylight savings time), got {}.\n\
+            \n\
+            You may want to try:\n\
+            - using `'730h'` instead of `'1mo'`\n\
+            - using `'24h'` instead of `'1d'` if your series is time-zone-aware", variable_name, duration);
+    Ok(())
+}
+
+pub fn ensure_duration_matches_data_type(
+    duration: Duration,
+    data_type: &DataType,
+    variable_name: &str,
+) -> PolarsResult<()> {
+    match data_type {
+        DataType::Int64 | DataType::UInt64 | DataType::Int32 | DataType::UInt32 => {
+            polars_ensure!(duration.parsed_int || duration.is_zero(), 
+                InvalidOperation: "`{}` duration must be a parsed integer (i.e. use '2i', not '2d') when working with a numeric column", variable_name);
+        },
+        DataType::Datetime(_, _) | DataType::Date | DataType::Duration(_) | DataType::Time => {
+            polars_ensure!(!duration.parsed_int, 
+                InvalidOperation: "`{}` duration may not be a parsed integer (i.e. use '2d', not '2i') when working with a temporal column", variable_name);
+        },
+        _ => {
+            polars_bail!(InvalidOperation: "unsupported data type: {} for `{}`, expected UInt64, UInt32, Int64, Int32, Datetime, Date, Duration, or Time", data_type, variable_name)
+        },
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -790,5 +1028,18 @@ mod test {
             seven_days_negative.add_ns(t, None).unwrap(),
             one_week_negative.add_ns(t, None).unwrap()
         );
+    }
+
+    #[test]
+    fn test_display() {
+        let duration = Duration::parse("1h");
+        let expected = "3600s";
+        assert_eq!(format!("{duration}"), expected);
+        let duration = Duration::parse("1h5ns");
+        let expected = "3600000000005ns";
+        assert_eq!(format!("{duration}"), expected);
+        let duration = Duration::parse("1h5000ns");
+        let expected = "3600000005us";
+        assert_eq!(format!("{duration}"), expected);
     }
 }

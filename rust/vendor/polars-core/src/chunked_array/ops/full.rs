@@ -1,5 +1,4 @@
 use arrow::bitmap::MutableBitmap;
-use polars_arrow::array::default_arrays::FromData;
 
 use crate::chunked_array::builder::get_list_builder;
 use crate::prelude::*;
@@ -22,16 +21,16 @@ where
     T: PolarsNumericType,
 {
     fn full_null(name: &str, length: usize) -> Self {
-        let arr = PrimitiveArray::new_null(T::get_dtype().to_arrow(), length);
-        ChunkedArray::from_chunk_iter(name, [arr])
+        let arr = PrimitiveArray::new_null(T::get_dtype().to_arrow(true), length);
+        ChunkedArray::with_chunk(name, arr)
     }
 }
 impl ChunkFull<bool> for BooleanChunked {
     fn full(name: &str, value: bool, length: usize) -> Self {
         let mut bits = MutableBitmap::with_capacity(length);
         bits.extend_constant(length, value);
-        let mut out: BooleanChunked =
-            (name, BooleanArray::from_data_default(bits.into(), None)).into();
+        let arr = BooleanArray::from_data_default(bits.into(), None);
+        let mut out = BooleanChunked::with_chunk(name, arr);
         out.set_sorted_flag(IsSorted::Ascending);
         out
     }
@@ -39,38 +38,32 @@ impl ChunkFull<bool> for BooleanChunked {
 
 impl ChunkFullNull for BooleanChunked {
     fn full_null(name: &str, length: usize) -> Self {
-        let arr = BooleanArray::new_null(DataType::Boolean.to_arrow(), length);
-        ChunkedArray::from_chunk_iter(name, [arr])
+        let arr = BooleanArray::new_null(ArrowDataType::Boolean, length);
+        ChunkedArray::with_chunk(name, arr)
     }
 }
 
-impl<'a> ChunkFull<&'a str> for Utf8Chunked {
+impl<'a> ChunkFull<&'a str> for StringChunked {
     fn full(name: &str, value: &'a str, length: usize) -> Self {
-        let mut builder = Utf8ChunkedBuilder::new(name, length, length * value.len());
-
-        for _ in 0..length {
-            builder.append_value(value);
-        }
+        let mut builder = StringChunkedBuilder::new(name, length);
+        builder.chunk_builder.extend_constant(length, Some(value));
         let mut out = builder.finish();
         out.set_sorted_flag(IsSorted::Ascending);
         out
     }
 }
 
-impl ChunkFullNull for Utf8Chunked {
+impl ChunkFullNull for StringChunked {
     fn full_null(name: &str, length: usize) -> Self {
-        let arr = Utf8Array::new_null(DataType::Utf8.to_arrow(), length);
-        ChunkedArray::from_chunk_iter(name, [arr])
+        let arr = Utf8ViewArray::new_null(DataType::String.to_arrow(true), length);
+        ChunkedArray::with_chunk(name, arr)
     }
 }
 
 impl<'a> ChunkFull<&'a [u8]> for BinaryChunked {
     fn full(name: &str, value: &'a [u8], length: usize) -> Self {
-        let mut builder = BinaryChunkedBuilder::new(name, length, length * value.len());
-
-        for _ in 0..length {
-            builder.append_value(value);
-        }
+        let mut builder = BinaryChunkedBuilder::new(name, length);
+        builder.chunk_builder.extend_constant(length, Some(value));
         let mut out = builder.finish();
         out.set_sorted_flag(IsSorted::Ascending);
         out
@@ -79,8 +72,26 @@ impl<'a> ChunkFull<&'a [u8]> for BinaryChunked {
 
 impl ChunkFullNull for BinaryChunked {
     fn full_null(name: &str, length: usize) -> Self {
-        let arr = BinaryArray::new_null(DataType::Binary.to_arrow(), length);
-        ChunkedArray::from_chunk_iter(name, [arr])
+        let arr = BinaryViewArray::new_null(DataType::Binary.to_arrow(true), length);
+        ChunkedArray::with_chunk(name, arr)
+    }
+}
+
+impl<'a> ChunkFull<&'a [u8]> for BinaryOffsetChunked {
+    fn full(name: &str, value: &'a [u8], length: usize) -> Self {
+        let mut mutable = MutableBinaryArray::with_capacities(length, length * value.len());
+        mutable.extend_values(std::iter::repeat(value).take(length));
+        let arr: BinaryArray<i64> = mutable.into();
+        let mut out = ChunkedArray::with_chunk(name, arr);
+        out.set_sorted_flag(IsSorted::Ascending);
+        out
+    }
+}
+
+impl ChunkFullNull for BinaryOffsetChunked {
+    fn full_null(name: &str, length: usize) -> Self {
+        let arr = BinaryArray::<i64>::new_null(DataType::BinaryOffset.to_arrow(true), length);
+        ChunkedArray::with_chunk(name, arr)
     }
 }
 
@@ -111,30 +122,27 @@ impl ArrayChunked {
     ) -> ArrayChunked {
         let arr = FixedSizeListArray::new_null(
             ArrowDataType::FixedSizeList(
-                Box::new(ArrowField::new("item", inner_dtype.to_arrow(), true)),
+                Box::new(ArrowField::new("item", inner_dtype.to_arrow(true), true)),
                 width,
             ),
             length,
         );
-        ChunkedArray::from_chunk_iter(name, [arr])
+        ChunkedArray::with_chunk(name, arr)
     }
 }
 
 #[cfg(feature = "dtype-array")]
 impl ChunkFull<&Series> for ArrayChunked {
     fn full(name: &str, value: &Series, length: usize) -> ArrayChunked {
-        if !value.dtype().is_numeric() {
-            todo!("FixedSizeList only supports numeric data types");
-        };
         let width = value.len();
-        let values = value.tile(length);
-        let values = values.chunks()[0].clone();
-        let data_type = ArrowDataType::FixedSizeList(
-            Box::new(ArrowField::new("item", values.data_type().clone(), true)),
+        let dtype = value.dtype();
+        let arrow_dtype = ArrowDataType::FixedSizeList(
+            Box::new(ArrowField::new("item", dtype.to_arrow(true), true)),
             width,
         );
-        let arr = FixedSizeListArray::new(data_type, values, None);
-        ChunkedArray::from_chunk_iter(name, [arr])
+        let value = value.rechunk().chunks()[0].clone();
+        let arr = FixedSizeListArray::full(length, value, arrow_dtype);
+        ChunkedArray::with_chunk(name, arr)
     }
 }
 
@@ -147,21 +155,28 @@ impl ChunkFullNull for ArrayChunked {
 
 impl ListChunked {
     pub fn full_null_with_dtype(name: &str, length: usize, inner_dtype: &DataType) -> ListChunked {
-        let arr = ListArray::new_null(
+        let arr: ListArray<i64> = ListArray::new_null(
             ArrowDataType::LargeList(Box::new(ArrowField::new(
                 "item",
-                inner_dtype.to_arrow(),
+                inner_dtype.to_physical().to_arrow(true),
                 true,
             ))),
             length,
         );
-        ChunkedArray::from_chunk_iter(name, [arr])
+        // SAFETY: physical type matches the logical.
+        unsafe {
+            ChunkedArray::from_chunks_and_dtype(
+                name,
+                vec![Box::new(arr)],
+                DataType::List(Box::new(inner_dtype.clone())),
+            )
+        }
     }
 }
 #[cfg(feature = "dtype-struct")]
 impl ChunkFullNull for StructChunked {
     fn full_null(name: &str, length: usize) -> StructChunked {
-        let s = vec![Series::full_null("", length, &DataType::Null)];
+        let s = vec![Series::new_null("", length)];
         StructChunked::new_unchecked(name, &s)
     }
 }

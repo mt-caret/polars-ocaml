@@ -27,13 +27,13 @@ where
 
     fn finish(mut self) -> ChunkedArray<T> {
         let arr = self.array_builder.as_box();
-        let length = arr.len() as IdxSize;
         let mut ca = ChunkedArray {
             field: Arc::new(self.field),
             chunks: vec![arr],
             phantom: PhantomData,
             bit_settings: Default::default(),
-            length,
+            length: 0,
+            null_count: 0,
         };
         ca.compute_len();
         ca
@@ -50,7 +50,7 @@ where
 {
     pub fn new(name: &str, capacity: usize) -> Self {
         let array_builder = MutablePrimitiveArray::<T::Native>::with_capacity(capacity)
-            .to(T::get_dtype().to_arrow());
+            .to(T::get_dtype().to_arrow(true));
 
         PrimitiveChunkedBuilder {
             array_builder,

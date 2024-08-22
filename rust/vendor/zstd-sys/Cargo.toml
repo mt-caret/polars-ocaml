@@ -13,7 +13,7 @@
 edition = "2018"
 rust-version = "1.64"
 name = "zstd-sys"
-version = "2.0.9+zstd.1.5.5"
+version = "2.0.11+zstd.1.5.6"
 authors = ["Alexandre Bury <alexandre.bury@gmail.com>"]
 build = "build.rs"
 links = "zstd"
@@ -51,7 +51,7 @@ features = ["experimental"]
 doctest = false
 
 [build-dependencies.bindgen]
-version = "0.68"
+version = "0.69"
 features = [
     "runtime",
     "which-rustfmt",
@@ -76,6 +76,7 @@ experimental = []
 fat-lto = []
 legacy = []
 no_asm = []
+no_wasm_shim = []
 non-cargo = []
 pkg-config = []
 std = []

@@ -27,3 +27,7 @@ pub unsafe fn syscall5(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f
                        -> Result<usize> {
     Err(Error::new(ENOSYS))
 }
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct IntRegisters(u8);

@@ -7,7 +7,7 @@ pub(super) fn rename_impl(
 ) -> PolarsResult<DataFrame> {
     let positions = existing
         .iter()
-        .map(|old| df.find_idx_by_name(old))
+        .map(|old| df.get_column_index(old))
         .collect::<Vec<_>>();
 
     for (pos, name) in positions.iter().zip(new.iter()) {
@@ -20,22 +20,4 @@ pub(super) fn rename_impl(
     // recreate dataframe so we check duplicates
     let columns = unsafe { std::mem::take(df.get_columns_mut()) };
     DataFrame::new(columns)
-}
-
-pub(super) fn rename_schema<'a>(
-    input_schema: &'a SchemaRef,
-    existing: &[SmartString],
-    new: &[SmartString],
-) -> PolarsResult<Cow<'a, SchemaRef>> {
-    let mut new_schema = (**input_schema).clone();
-    for (old, new) in existing.iter().zip(new.iter()) {
-        // the column might be removed due to projection pushdown
-        // so we only update if we can find it.
-        if let Some(dtype) = input_schema.get(old) {
-            if new_schema.with_column(new.clone(), dtype.clone()).is_none() {
-                new_schema.remove(old);
-            }
-        }
-    }
-    Ok(Cow::Owned(Arc::new(new_schema)))
 }

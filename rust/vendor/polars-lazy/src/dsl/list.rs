@@ -1,13 +1,14 @@
 use std::sync::Mutex;
 
-use polars_arrow::utils::CustomIterTools;
+use arrow::array::ValueSize;
+use arrow::legacy::utils::CustomIterTools;
+use polars_core::chunked_array::from_iterator_par::ChunkedCollectParIterExt;
 use polars_core::prelude::*;
 use polars_plan::constants::MAP_LIST_NAME;
 use polars_plan::dsl::*;
 use rayon::prelude::*;
 
 use crate::physical_plan::exotic::prepare_expression_for_context;
-use crate::physical_plan::state::ExecutionState;
 use crate::prelude::*;
 
 pub trait IntoListNameSpace {
@@ -23,26 +24,23 @@ impl IntoListNameSpace for ListNameSpace {
 fn offsets_to_groups(offsets: &[i64]) -> Option<GroupsProxy> {
     let mut start = offsets[0];
     let end = *offsets.last().unwrap();
-    let fits_into_idx = (end - start) <= IdxSize::MAX as i64;
-
-    if fits_into_idx {
-        let groups = offsets
-            .iter()
-            .skip(1)
-            .map(|end| {
-                let offset = start as IdxSize;
-                let len = (*end - start) as IdxSize;
-                start = *end;
-                [offset, len]
-            })
-            .collect();
-        Some(GroupsProxy::Slice {
-            groups,
-            rolling: false,
-        })
-    } else {
-        None
+    if IdxSize::try_from(end - start).is_err() {
+        return None;
     }
+    let groups = offsets
+        .iter()
+        .skip(1)
+        .map(|end| {
+            let offset = start as IdxSize;
+            let len = (*end - start) as IdxSize;
+            start = *end;
+            [offset, len]
+        })
+        .collect();
+    Some(GroupsProxy::Slice {
+        groups,
+        rolling: false,
+    })
 }
 
 fn run_per_sublist(
@@ -63,7 +61,7 @@ fn run_per_sublist(
             .par_iter()
             .map(|opt_s| {
                 opt_s.and_then(|s| {
-                    let df = DataFrame::new_no_checks(vec![s]);
+                    let df = s.into_frame();
                     let out = phys_expr.evaluate(&df, &state);
                     match out {
                         Ok(s) => Some(s),
@@ -74,11 +72,11 @@ fn run_per_sublist(
                     }
                 })
             })
-            .collect();
-        err = m_err.lock().unwrap().take();
+            .collect_ca_with_dtype("", output_field.dtype.clone());
+        err = m_err.into_inner().unwrap();
         ca
     } else {
-        let mut df_container = DataFrame::new_no_checks(vec![]);
+        let mut df_container = DataFrame::empty();
 
         lst.into_iter()
             .map(|s| {
@@ -110,7 +108,7 @@ fn run_per_sublist(
     }
 }
 
-fn run_on_groupby_engine(
+fn run_on_group_by_engine(
     name: &str,
     lst: &ListChunked,
     expr: &Expr,
@@ -119,26 +117,26 @@ fn run_on_groupby_engine(
     let arr = lst.downcast_iter().next().unwrap();
     let groups = offsets_to_groups(arr.offsets()).unwrap();
 
-    // list elements in a series
+    // List elements in a series.
     let values = Series::try_from(("", arr.values().clone())).unwrap();
     let inner_dtype = lst.inner_dtype();
-    // ensure we use the logical type
-    let values = values.cast(&inner_dtype).unwrap();
+    // SAFETY:
+    // Invariant in List means values physicals can be cast to inner dtype
+    let values = unsafe { values.cast_unchecked(&inner_dtype).unwrap() };
 
-    let df_context = DataFrame::new_no_checks(vec![values]);
+    let df_context = values.into_frame();
     let phys_expr = prepare_expression_for_context("", expr, &inner_dtype, Context::Aggregation)?;
 
     let state = ExecutionState::new();
     let mut ac = phys_expr.evaluate_on_groups(&df_context, &groups, &state)?;
-    let mut out = match ac.agg_state() {
-        AggState::AggregatedFlat(_) | AggState::Literal(_) => {
+    let out = match ac.agg_state() {
+        AggState::AggregatedScalar(_) | AggState::Literal(_) => {
             let out = ac.aggregated();
             out.as_list().into_series()
         },
         _ => ac.aggregated(),
     };
-    out.rename(name);
-    Ok(Some(out))
+    Ok(Some(out.with_name(name)))
 }
 
 pub trait ListNameSpaceExtension: IntoListNameSpace + Sized {
@@ -152,7 +150,7 @@ pub trait ListNameSpaceExtension: IntoListNameSpace + Sized {
                 match e {
                     #[cfg(feature = "dtype-categorical")]
                     Expr::Cast {
-                        data_type: DataType::Categorical(_),
+                        data_type: DataType::Categorical(_, _) | DataType::Enum(_, _),
                         ..
                     } => {
                         polars_bail!(
@@ -178,23 +176,18 @@ pub trait ListNameSpaceExtension: IntoListNameSpace + Sized {
                 return Ok(Some(Series::new_empty(s.name(), output_field.data_type())));
             }
             if lst.null_count() == lst.len() {
-                return Ok(Some(s));
+                return Ok(Some(s.cast(output_field.data_type())?));
             }
 
             let fits_idx_size = lst.get_values_size() <= (IdxSize::MAX as usize);
-            // if a users passes a return type to `apply`
-            // e.g. `return_dtype=pl.Int64`
-            // this fails as the list builder expects `List<Int64>`
-            // so let's skip that for now
+            // If a users passes a return type to `apply`, e.g. `return_dtype=pl.Int64`,
+            // this fails as the list builder expects `List<Int64>`, so let's skip that for now.
             let is_user_apply = || {
-                expr.into_iter().any(|e| match e {
-                    Expr::AnonymousFunction { options, .. } => options.fmt_str == MAP_LIST_NAME,
-                    _ => false,
-                })
+                expr.into_iter().any(|e| matches!(e, Expr::AnonymousFunction { options, .. } if options.fmt_str == MAP_LIST_NAME))
             };
 
             if fits_idx_size && s.null_count() == 0 && !is_user_apply() {
-                run_on_groupby_engine(s.name(), &lst, &expr)
+                run_on_group_by_engine(s.name(), &lst, &expr)
             } else {
                 run_per_sublist(s, &lst, &expr, parallel, output_field)
             }

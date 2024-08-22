@@ -1,11 +1,7 @@
-use std::ops::Add;
-
-use arrow::compute;
-use arrow::types::simd::Simd;
+use arrow::legacy::kernels::set::set_at_nulls;
+use arrow::legacy::trusted_len::FromIteratorReversed;
+use arrow::legacy::utils::FromTrustedLenIterator;
 use num_traits::{Bounded, NumCast, One, Zero};
-use polars_arrow::kernels::set::set_at_nulls;
-use polars_arrow::trusted_len::FromIteratorReversed;
-use polars_arrow::utils::{CustomIterTools, FromTrustedLenIterator};
 
 use crate::prelude::*;
 
@@ -20,6 +16,10 @@ impl Series {
     /// * Mean fill (replace None with the mean of the whole array)
     /// * Min fill (replace None with the minimum of the whole array)
     /// * Max fill (replace None with the maximum of the whole array)
+    /// * Zero fill (replace None with the value zero)
+    /// * One fill (replace None with the value one)
+    /// * MinBound fill (replace with the minimum of that data type)
+    /// * MaxBound fill (replace with the maximum of that data type)
     ///
     /// *NOTE: If you want to fill the Nones with a value use the
     /// [`fill_null` operation on `ChunkedArray<T>`](crate::chunked_array::ops::ChunkFillNullValue)*.
@@ -46,6 +46,18 @@ impl Series {
     ///     let filled = s.fill_null(FillNullStrategy::Mean)?;
     ///     assert_eq!(Vec::from(filled.i32()?), &[Some(1), Some(1), Some(2)]);
     ///
+    ///     let filled = s.fill_null(FillNullStrategy::Zero)?;
+    ///     assert_eq!(Vec::from(filled.i32()?), &[Some(1), Some(0), Some(2)]);
+    ///
+    ///     let filled = s.fill_null(FillNullStrategy::One)?;
+    ///     assert_eq!(Vec::from(filled.i32()?), &[Some(1), Some(1), Some(2)]);
+    ///
+    ///     let filled = s.fill_null(FillNullStrategy::MinBound)?;
+    ///     assert_eq!(Vec::from(filled.i32()?), &[Some(1), Some(-2147483648), Some(2)]);
+    ///
+    ///     let filled = s.fill_null(FillNullStrategy::MaxBound)?;
+    ///     assert_eq!(Vec::from(filled.i32()?), &[Some(1), Some(2147483647), Some(2)]);
+    ///
     ///     Ok(())
     /// }
     /// example();
@@ -57,10 +69,10 @@ impl Series {
         use DataType::*;
         let out = match s.dtype() {
             Boolean => fill_null_bool(s.bool().unwrap(), strategy),
-            Utf8 => {
+            String => {
                 let s = unsafe { s.cast_unchecked(&Binary)? };
                 let out = s.fill_null(strategy)?;
-                return unsafe { out.cast_unchecked(&Utf8) };
+                return unsafe { out.cast_unchecked(&String) };
             },
             Binary => {
                 let ca = s.binary().unwrap();
@@ -274,12 +286,10 @@ fn fill_null_numeric<T>(
 ) -> PolarsResult<ChunkedArray<T>>
 where
     T: PolarsNumericType,
-    <T::Native as Simd>::Simd: Add<Output = <T::Native as Simd>::Simd>
-        + compute::aggregate::Sum<T::Native>
-        + compute::aggregate::SimdOrd<T::Native>,
+    ChunkedArray<T>: ChunkAgg<T::Native>,
 {
-    // nothing to fill
-    if !ca.has_validity() {
+    // Nothing to fill.
+    if ca.null_count() == 0 {
         return Ok(ca.clone());
     }
     let mut out = match strategy {
@@ -287,8 +297,12 @@ where
         FillNullStrategy::Forward(Some(limit)) => fill_forward_limit(ca, limit),
         FillNullStrategy::Backward(None) => fill_backward(ca),
         FillNullStrategy::Backward(Some(limit)) => fill_backward_limit(ca, limit),
-        FillNullStrategy::Min => ca.fill_null_with_values(ca.min().ok_or_else(err_fill_null)?)?,
-        FillNullStrategy::Max => ca.fill_null_with_values(ca.max().ok_or_else(err_fill_null)?)?,
+        FillNullStrategy::Min => {
+            ca.fill_null_with_values(ChunkAgg::min(ca).ok_or_else(err_fill_null)?)?
+        },
+        FillNullStrategy::Max => {
+            ca.fill_null_with_values(ChunkAgg::max(ca).ok_or_else(err_fill_null)?)?
+        },
         FillNullStrategy::Mean => ca.fill_null_with_values(
             ca.mean()
                 .map(|v| NumCast::from(v).unwrap())
@@ -304,8 +318,8 @@ where
 }
 
 fn fill_null_bool(ca: &BooleanChunked, strategy: FillNullStrategy) -> PolarsResult<Series> {
-    // nothing to fill
-    if !ca.has_validity() {
+    // Nothing to fill.
+    if ca.null_count() == 0 {
         return Ok(ca.clone().into_series());
     }
     match strategy {
@@ -342,8 +356,8 @@ fn fill_null_bool(ca: &BooleanChunked, strategy: FillNullStrategy) -> PolarsResu
 }
 
 fn fill_null_binary(ca: &BinaryChunked, strategy: FillNullStrategy) -> PolarsResult<BinaryChunked> {
-    // nothing to fill
-    if !ca.has_validity() {
+    // Nothing to fill.
+    if ca.null_count() == 0 {
         return Ok(ca.clone());
     }
     match strategy {
@@ -363,13 +377,20 @@ fn fill_null_binary(ca: &BinaryChunked, strategy: FillNullStrategy) -> PolarsRes
             out.rename(ca.name());
             Ok(out)
         },
+        FillNullStrategy::Min => {
+            ca.fill_null_with_values(ca.min_binary().ok_or_else(err_fill_null)?)
+        },
+        FillNullStrategy::Max => {
+            ca.fill_null_with_values(ca.max_binary().ok_or_else(err_fill_null)?)
+        },
+        FillNullStrategy::Zero => ca.fill_null_with_values(&[]),
         strat => polars_bail!(InvalidOperation: "fill-null strategy {:?} is not supported", strat),
     }
 }
 
 fn fill_null_list(ca: &ListChunked, strategy: FillNullStrategy) -> PolarsResult<ListChunked> {
-    // nothing to fill
-    if !ca.has_validity() {
+    // Nothing to fill.
+    if ca.null_count() == 0 {
         return Ok(ca.clone());
     }
     match strategy {

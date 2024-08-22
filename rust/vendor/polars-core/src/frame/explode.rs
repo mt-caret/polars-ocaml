@@ -1,5 +1,5 @@
+use arrow::legacy::kernels::concatenate::concatenate_owned_unchecked;
 use arrow::offset::OffsetsBuffer;
-use polars_arrow::kernels::concatenate::concatenate_owned_unchecked;
 use rayon::prelude::*;
 #[cfg(feature = "serde-lazy")]
 use serde::{Deserialize, Serialize};
@@ -14,7 +14,6 @@ use crate::POOL;
 fn get_exploded(series: &Series) -> PolarsResult<(Series, OffsetsBuffer<i64>)> {
     match series.dtype() {
         DataType::List(_) => series.list().unwrap().explode_and_offsets(),
-        DataType::Utf8 => series.utf8().unwrap().explode_and_offsets(),
         #[cfg(feature = "dtype-array")]
         DataType::Array(_, _) => series.array().unwrap().explode_and_offsets(),
         _ => polars_bail!(opq = explode, series.dtype()),
@@ -22,7 +21,7 @@ fn get_exploded(series: &Series) -> PolarsResult<(Series, OffsetsBuffer<i64>)> {
 }
 
 /// Arguments for `[DataFrame::melt]` function
-#[derive(Clone, Default, Debug, PartialEq)]
+#[derive(Clone, Default, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde-lazy", derive(Serialize, Deserialize))]
 pub struct MeltArgs {
     pub id_vars: Vec<SmartString>,
@@ -97,7 +96,7 @@ impl DataFrame {
             let mut row_idx = IdxCa::from_vec("", row_idx);
             row_idx.set_sorted_flag(IsSorted::Ascending);
 
-            // Safety
+            // SAFETY:
             // We just created indices that are in bounds.
             let mut df = unsafe { df.take_unchecked(&row_idx) };
             process_column(self, &mut df, exploded.clone())?;
@@ -260,13 +259,25 @@ impl DataFrame {
         let id_vars = args.id_vars;
         let mut value_vars = args.value_vars;
 
-        let value_name = args.value_name.as_deref().unwrap_or("value");
         let variable_name = args.variable_name.as_deref().unwrap_or("variable");
+        let value_name = args.value_name.as_deref().unwrap_or("value");
 
         let len = self.height();
 
         // if value vars is empty we take all columns that are not in id_vars.
         if value_vars.is_empty() {
+            // return empty frame if there are no columns available to use as value vars
+            if id_vars.len() == self.width() {
+                let variable_col = Series::new_empty(variable_name, &DataType::String);
+                let value_col = Series::new_empty(variable_name, &DataType::Null);
+
+                let mut out = self.select(id_vars).unwrap().clear().columns;
+                out.push(variable_col);
+                out.push(value_col);
+
+                return Ok(unsafe { DataFrame::new_no_checks(out) });
+            }
+
             let id_vars_set = PlHashSet::from_iter(id_vars.iter().map(|s| s.as_str()));
             value_vars = self
                 .get_columns()
@@ -293,13 +304,9 @@ impl DataFrame {
             st = try_get_supertype(&st, dt?)?;
         }
 
-        let values_len = value_vars.iter().map(|name| name.len()).sum::<usize>();
-
         // The column name of the variable that is melted
-        let mut variable_col = MutableUtf8Array::<i64>::with_capacities(
-            len * value_vars.len() + 1,
-            len * values_len + 1,
-        );
+        let mut variable_col =
+            MutableBinaryViewArray::<str>::with_capacity(len * value_vars.len() + 1);
         // prepare ids
         let ids_ = self.select_with_schema_unchecked(id_vars, &schema)?;
         let mut ids = ids_.clone();
@@ -314,7 +321,7 @@ impl DataFrame {
         let mut values = Vec::with_capacity(value_vars.len());
 
         for value_column_name in &value_vars {
-            variable_col.extend_trusted_len_values(std::iter::repeat(value_column_name).take(len));
+            variable_col.extend_constant(len, Some(value_column_name.as_str()));
             // ensure we go via the schema so we are O(1)
             // self.column() is linear
             // together with this loop that would make it O^2 over value_vars
@@ -323,19 +330,19 @@ impl DataFrame {
             values.extend_from_slice(value_col.chunks())
         }
         let values_arr = concatenate_owned_unchecked(&values)?;
-        // Safety
+        // SAFETY:
         // The give dtype is correct
         let values =
             unsafe { Series::from_chunks_and_dtype_unchecked(value_name, vec![values_arr], &st) };
 
         let variable_col = variable_col.as_box();
-        // Safety
-        // The give dtype is correct
+        // SAFETY:
+        // The given dtype is correct
         let variables = unsafe {
             Series::from_chunks_and_dtype_unchecked(
                 variable_name,
                 vec![variable_col],
-                &DataType::Utf8,
+                &DataType::String,
             )
         };
 
@@ -347,7 +354,6 @@ impl DataFrame {
 
 #[cfg(test)]
 mod test {
-    use crate::frame::explode::MeltArgs;
     use crate::prelude::*;
 
     #[test]
@@ -370,16 +376,6 @@ mod test {
             exploded.column("foo").unwrap().i8().unwrap().get(8),
             Some(2)
         );
-
-        let str = Series::new("foo", &["abc", "de", "fg"]);
-        let df = DataFrame::new(vec![str, s0, s1]).unwrap();
-        let exploded = df.explode(["foo"]).unwrap();
-        assert_eq!(exploded.column("C").unwrap().i32().unwrap().get(6), Some(1));
-        assert_eq!(exploded.column("B").unwrap().i32().unwrap().get(6), Some(3));
-        assert_eq!(
-            exploded.column("foo").unwrap().utf8().unwrap().get(6),
-            Some("g")
-        );
     }
 
     #[test]
@@ -399,7 +395,7 @@ mod test {
             "C" => [1, 1, 1, 1, 1, 1, 1],
         ]?;
 
-        assert!(out.frame_equal_missing(&expected));
+        assert!(out.equals_missing(&expected));
 
         let list = Series::new("foo", [s0.clone(), s1.clear(), s1.clone()]);
         let df = DataFrame::new(vec![list, s0, s1])?;
@@ -410,7 +406,7 @@ mod test {
             "C" => [1, 1, 1, 1, 1, 1, 1],
         ]?;
 
-        assert!(out.frame_equal_missing(&expected));
+        assert!(out.equals_missing(&expected));
         Ok(())
     }
 
@@ -457,8 +453,8 @@ mod test {
 
         let melted = df.melt2(args).unwrap();
         let value = melted.column("value")?;
-        // utf8 because of supertype
-        let value = value.utf8()?;
+        // String because of supertype
+        let value = value.str()?;
         let value = value.into_no_null_iter().collect::<Vec<_>>();
         assert_eq!(
             value,
@@ -477,7 +473,7 @@ mod test {
         let value = value.into_no_null_iter().collect::<Vec<_>>();
         assert_eq!(value, &[1, 3, 5, 10, 11, 12, 2, 4, 6]);
         let variable = melted.column("variable")?;
-        let variable = variable.utf8()?;
+        let variable = variable.str()?;
         let variable = variable.into_no_null_iter().collect::<Vec<_>>();
         assert_eq!(variable, &["B", "B", "B", "C", "C", "C", "D", "D", "D"]);
         assert!(melted.column("A").is_ok());

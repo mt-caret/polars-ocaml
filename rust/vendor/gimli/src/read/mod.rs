@@ -67,6 +67,10 @@
 //! sections. It has methods that simplify access to debugging data that spans
 //! multiple sections. Use of this type is optional, but recommended.
 //!
+//! * The [`DwarfPackage`](./struct.Dwarf.html) type contains the DWARF
+//! package (DWP) sections. It has methods to find a DWARF object (DWO)
+//! within the package.
+//!
 //! * Each section gets its own type. Consider these types the entry points to
 //! the library:
 //!
@@ -201,6 +205,9 @@ pub use self::endian_reader::*;
 
 mod reader;
 pub use self::reader::*;
+
+mod relocate;
+pub use self::relocate::*;
 
 #[cfg(feature = "read")]
 mod abbrev;
@@ -734,7 +741,7 @@ mod tests {
 
         let input = &mut EndianSlice::new(&buf, LittleEndian);
         match input.read_initial_length() {
-            Err(Error::UnknownReservedLength) => assert!(true),
+            Err(Error::UnknownReservedLength) => {}
             otherwise => panic!("Unexpected result: {:?}", otherwise),
         };
     }
@@ -745,7 +752,7 @@ mod tests {
 
         let input = &mut EndianSlice::new(&buf, LittleEndian);
         match input.read_initial_length() {
-            Err(Error::UnexpectedEof(_)) => assert!(true),
+            Err(Error::UnexpectedEof(_)) => {}
             otherwise => panic!("Unexpected result: {:?}", otherwise),
         };
     }
@@ -761,7 +768,7 @@ mod tests {
 
         let input = &mut EndianSlice::new(&buf, LittleEndian);
         match input.read_initial_length() {
-            Err(Error::UnexpectedEof(_)) => assert!(true),
+            Err(Error::UnexpectedEof(_)) => {}
             otherwise => panic!("Unexpected result: {:?}", otherwise),
         };
     }
@@ -820,7 +827,7 @@ mod tests {
 
         let input = &mut EndianSlice::new(&buf, LittleEndian);
         match input.read_offset(Format::Dwarf64) {
-            Err(Error::UnsupportedOffset) => assert!(true),
+            Err(Error::UnsupportedOffset) => {}
             otherwise => panic!("Unexpected result: {:?}", otherwise),
         };
     }

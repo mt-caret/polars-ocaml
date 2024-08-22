@@ -1,219 +1,231 @@
-use std::cmp::Ordering;
-
 use super::*;
 
-impl<T> ChunkedArray<T>
-where
-    T: PolarsNumericType,
-{
-    fn primitive_compare_scalar<Rhs: ToPrimitive>(
-        &self,
-        rhs: Rhs,
-        f: impl Fn(&PrimitiveArray<T::Native>, &dyn Scalar) -> BooleanArray,
-    ) -> BooleanChunked {
-        let rhs: T::Native = NumCast::from(rhs).unwrap();
-        let scalar = PrimitiveScalar::new(T::get_dtype().to_arrow(), Some(rhs));
-        self.apply_kernel_cast(&|arr| Box::new(f(arr, &scalar)))
-    }
-}
-
-fn binary_search<T: PolarsNumericType, F>(
+// Given two monotonic functions f_a and f_d where f_a is ascending
+// (f_a(x[0]) <= f_a(x[1]) <= .. <= f_a(x[n-1])) and f_d is descending
+// (f_d(x[0]) >= f_d(x[1]) >= .. >= f_d(x[n-1])),
+// outputs a mask where both are true.
+//
+// If a function is not given it is always assumed to be true. If invert is
+// true the output mask is inverted.
+fn bitonic_mask<T: PolarsNumericType, FA, FD>(
     ca: &ChunkedArray<T>,
-    // lhs part of mask will be set to boolean
-    // rhs part of mask will be set to !boolean
-    lower_part: bool,
-    cmp_fn: F,
+    f_a: Option<FA>,
+    f_d: Option<FD>,
+    invert: bool,
 ) -> BooleanChunked
 where
-    F: Fn(&T::Native) -> Ordering + Copy,
+    FA: Fn(T::Native) -> bool,
+    FD: Fn(T::Native) -> bool,
 {
-    let chunks = ca
-        .downcast_iter()
-        .map(|arr| {
-            let values = arr.values();
-            let mask = match values.binary_search_by(cmp_fn) {
-                Err(mut idx) => {
-                    if idx == 0 || idx == arr.len() {
-                        let mut mask = MutableBitmap::with_capacity(arr.len());
-                        let fill_value = if idx == 0 { !lower_part } else { lower_part };
-                        mask.extend_constant(arr.len(), fill_value);
-                        BooleanArray::from_data_default(mask.into(), None)
-                    } else {
-                        let found_ordering = cmp_fn(&values[idx]);
+    let mut output_order: Option<IsSorted> = None;
+    let mut last_value: Option<bool> = None;
+    let mut logical_extend = |len: usize, val: bool| {
+        if len != 0 {
+            if let Some(last_value) = last_value {
+                output_order = match (last_value, val, output_order) {
+                    (false, true, None) => Some(IsSorted::Ascending),
+                    (false, true, _) => Some(IsSorted::Not),
+                    (true, false, None) => Some(IsSorted::Descending),
+                    (true, false, _) => Some(IsSorted::Not),
+                    _ => output_order,
+                };
+            }
+            last_value = Some(val);
+        }
+    };
 
-                        idx = idx.saturating_sub(1);
-                        loop {
-                            let current_value = unsafe { values.get_unchecked(idx) };
-                            let current_output = cmp_fn(current_value);
+    let chunks = ca.downcast_iter().map(|arr| {
+        let values = arr.values();
+        let true_range_start = if let Some(f_a) = f_a.as_ref() {
+            values.partition_point(|x| !f_a(*x))
+        } else {
+            0
+        };
+        let true_range_end = if let Some(f_d) = f_d.as_ref() {
+            true_range_start + values[true_range_start..].partition_point(|x| f_d(*x))
+        } else {
+            values.len()
+        };
+        let mut mask = MutableBitmap::with_capacity(arr.len());
+        mask.extend_constant(true_range_start, invert);
+        mask.extend_constant(true_range_end - true_range_start, !invert);
+        mask.extend_constant(arr.len() - true_range_end, invert);
+        logical_extend(true_range_start, invert);
+        logical_extend(true_range_end - true_range_start, !invert);
+        logical_extend(arr.len() - true_range_end, invert);
+        BooleanArray::from_data_default(mask.into(), None)
+    });
 
-                            if current_output != found_ordering || idx == 0 {
-                                break;
-                            }
-
-                            idx = idx.saturating_sub(1);
-                        }
-                        idx += 1;
-                        let mut mask = MutableBitmap::with_capacity(arr.len());
-                        mask.extend_constant(idx, lower_part);
-                        mask.extend_constant(arr.len() - idx, !lower_part);
-                        BooleanArray::from_data_default(mask.into(), None)
-                    }
-                },
-                Ok(_) => {
-                    unreachable!()
-                },
-            };
-            Box::new(mask) as ArrayRef
-        })
-        .collect();
-    unsafe { BooleanChunked::from_chunks(ca.name(), chunks) }
+    let mut ca = BooleanChunked::from_chunk_iter(ca.name(), chunks);
+    ca.set_sorted_flag(output_order.unwrap_or(IsSorted::Ascending));
+    ca
 }
 
 impl<T, Rhs> ChunkCompare<Rhs> for ChunkedArray<T>
 where
     T: PolarsNumericType,
     Rhs: ToPrimitive,
+    T::Array: TotalOrdKernel<Scalar = T::Native>,
 {
     type Item = BooleanChunked;
     fn equal(&self, rhs: Rhs) -> BooleanChunked {
-        self.primitive_compare_scalar(rhs, |l, rhs| comparison::eq_scalar(l, rhs))
+        let rhs: T::Native = NumCast::from(rhs).unwrap();
+        let fa = Some(|x: T::Native| x.tot_ge(&rhs));
+        let fd = Some(|x: T::Native| x.tot_le(&rhs));
+        match (self.is_sorted_flag(), self.null_count()) {
+            (IsSorted::Ascending, 0) => bitonic_mask(self, fa, fd, false),
+            (IsSorted::Descending, 0) => bitonic_mask(self, fd, fa, false),
+            _ => arity::unary_mut_values(self, |arr| arr.tot_eq_kernel_broadcast(&rhs).into()),
+        }
     }
 
     fn equal_missing(&self, rhs: Rhs) -> BooleanChunked {
-        self.primitive_compare_scalar(rhs, |l, rhs| comparison::eq_scalar_and_validity(l, rhs))
+        if self.null_count() == 0 {
+            self.equal(rhs)
+        } else {
+            let rhs: T::Native = NumCast::from(rhs).unwrap();
+            arity::unary_mut_with_options(self, |arr| {
+                arr.tot_eq_missing_kernel_broadcast(&rhs).into()
+            })
+        }
     }
 
     fn not_equal(&self, rhs: Rhs) -> BooleanChunked {
-        self.primitive_compare_scalar(rhs, |l, rhs| comparison::neq_scalar(l, rhs))
+        let rhs: T::Native = NumCast::from(rhs).unwrap();
+        let fa = Some(|x: T::Native| x.tot_ge(&rhs));
+        let fd = Some(|x: T::Native| x.tot_le(&rhs));
+        match (self.is_sorted_flag(), self.null_count()) {
+            (IsSorted::Ascending, 0) => bitonic_mask(self, fa, fd, true),
+            (IsSorted::Descending, 0) => bitonic_mask(self, fd, fa, true),
+            _ => arity::unary_mut_values(self, |arr| arr.tot_ne_kernel_broadcast(&rhs).into()),
+        }
     }
 
     fn not_equal_missing(&self, rhs: Rhs) -> BooleanChunked {
-        self.primitive_compare_scalar(rhs, |l, rhs| comparison::neq_scalar_and_validity(l, rhs))
+        if self.null_count() == 0 {
+            self.not_equal(rhs)
+        } else {
+            let rhs: T::Native = NumCast::from(rhs).unwrap();
+            arity::unary_mut_with_options(self, |arr| {
+                arr.tot_ne_missing_kernel_broadcast(&rhs).into()
+            })
+        }
     }
 
     fn gt(&self, rhs: Rhs) -> BooleanChunked {
+        let rhs: T::Native = NumCast::from(rhs).unwrap();
+        let fa = Some(|x: T::Native| x.tot_gt(&rhs));
+        let fd: Option<fn(_) -> _> = None;
         match (self.is_sorted_flag(), self.null_count()) {
-            (IsSorted::Ascending, 0) if self.len() > 1 => {
-                let rhs: T::Native = NumCast::from(rhs).unwrap();
-
-                let cmp_fn = |a: &T::Native| match compare_fn_nan_max(a, &rhs) {
-                    Ordering::Equal | Ordering::Less => Ordering::Less,
-                    _ => Ordering::Greater,
-                };
-                let mut ca = binary_search(self, false, cmp_fn);
-                ca.set_sorted_flag(IsSorted::Ascending);
-                ca
-            },
-            _ => self.primitive_compare_scalar(rhs, |l, rhs| comparison::gt_scalar(l, rhs)),
+            (IsSorted::Ascending, 0) => bitonic_mask(self, fa, fd, false),
+            (IsSorted::Descending, 0) => bitonic_mask(self, fd, fa, false),
+            _ => arity::unary_mut_values(self, |arr| arr.tot_gt_kernel_broadcast(&rhs).into()),
         }
     }
 
     fn gt_eq(&self, rhs: Rhs) -> BooleanChunked {
+        let rhs: T::Native = NumCast::from(rhs).unwrap();
+        let fa = Some(|x: T::Native| x.tot_ge(&rhs));
+        let fd: Option<fn(_) -> _> = None;
         match (self.is_sorted_flag(), self.null_count()) {
-            (IsSorted::Ascending, 0) if self.len() > 1 => {
-                let rhs: T::Native = NumCast::from(rhs).unwrap();
-
-                let cmp_fn = |a: &T::Native| match compare_fn_nan_max(a, &rhs) {
-                    Ordering::Equal | Ordering::Greater => Ordering::Greater,
-                    Ordering::Less => Ordering::Less,
-                };
-                let mut ca = binary_search(self, false, cmp_fn);
-                ca.set_sorted_flag(IsSorted::Ascending);
-                ca
-            },
-            _ => self.primitive_compare_scalar(rhs, |l, rhs| comparison::gt_eq_scalar(l, rhs)),
+            (IsSorted::Ascending, 0) => bitonic_mask(self, fa, fd, false),
+            (IsSorted::Descending, 0) => bitonic_mask(self, fd, fa, false),
+            _ => arity::unary_mut_values(self, |arr| arr.tot_ge_kernel_broadcast(&rhs).into()),
         }
     }
 
     fn lt(&self, rhs: Rhs) -> BooleanChunked {
+        let rhs: T::Native = NumCast::from(rhs).unwrap();
+        let fa: Option<fn(_) -> _> = None;
+        let fd = Some(|x: T::Native| x.tot_lt(&rhs));
         match (self.is_sorted_flag(), self.null_count()) {
-            (IsSorted::Ascending, 0) => {
-                let rhs: T::Native = NumCast::from(rhs).unwrap();
-
-                let cmp_fn = |a: &T::Native| match compare_fn_nan_max(a, &rhs) {
-                    Ordering::Equal | Ordering::Greater => Ordering::Greater,
-                    Ordering::Less => Ordering::Less,
-                };
-                let mut ca = binary_search(self, true, cmp_fn);
-                ca.set_sorted_flag(IsSorted::Ascending);
-                ca
-            },
-            _ => self.primitive_compare_scalar(rhs, |l, rhs| comparison::lt_scalar(l, rhs)),
+            (IsSorted::Ascending, 0) => bitonic_mask(self, fa, fd, false),
+            (IsSorted::Descending, 0) => bitonic_mask(self, fd, fa, false),
+            _ => arity::unary_mut_values(self, |arr| arr.tot_lt_kernel_broadcast(&rhs).into()),
         }
     }
 
     fn lt_eq(&self, rhs: Rhs) -> BooleanChunked {
+        let rhs: T::Native = NumCast::from(rhs).unwrap();
+        let fa: Option<fn(_) -> _> = None;
+        let fd = Some(|x: T::Native| x.tot_le(&rhs));
         match (self.is_sorted_flag(), self.null_count()) {
-            (IsSorted::Ascending, 0) => {
-                let rhs: T::Native = NumCast::from(rhs).unwrap();
-
-                let cmp_fn = |a: &T::Native| match compare_fn_nan_max(a, &rhs) {
-                    Ordering::Greater => Ordering::Greater,
-                    Ordering::Equal | Ordering::Less => Ordering::Less,
-                };
-                let mut ca = binary_search(self, true, cmp_fn);
-                ca.set_sorted_flag(IsSorted::Ascending);
-                ca
-            },
-            _ => self.primitive_compare_scalar(rhs, |l, rhs| comparison::lt_eq_scalar(l, rhs)),
+            (IsSorted::Ascending, 0) => bitonic_mask(self, fa, fd, false),
+            (IsSorted::Descending, 0) => bitonic_mask(self, fd, fa, false),
+            _ => arity::unary_mut_values(self, |arr| arr.tot_le_kernel_broadcast(&rhs).into()),
         }
-    }
-}
-
-impl Utf8Chunked {
-    pub(super) fn utf8_compare_scalar(
-        &self,
-        rhs: &str,
-        f: impl Fn(&Utf8Array<i64>, &dyn Scalar) -> BooleanArray,
-    ) -> BooleanChunked {
-        let scalar = Utf8Scalar::<i64>::new(Some(rhs));
-        self.apply_kernel_cast(&|arr| Box::new(f(arr, &scalar)))
-    }
-}
-
-impl BinaryChunked {
-    fn binary_compare_scalar(
-        &self,
-        rhs: &[u8],
-        f: impl Fn(&BinaryArray<i64>, &dyn Scalar) -> BooleanArray,
-    ) -> BooleanChunked {
-        let scalar = BinaryScalar::<i64>::new(Some(rhs));
-        self.apply_kernel_cast(&|arr| Box::new(f(arr, &scalar)))
     }
 }
 
 impl ChunkCompare<&[u8]> for BinaryChunked {
     type Item = BooleanChunked;
+
     fn equal(&self, rhs: &[u8]) -> BooleanChunked {
-        self.binary_compare_scalar(rhs, |l, rhs| comparison::eq_scalar(l, rhs))
+        arity::unary_mut_values(self, |arr| arr.tot_eq_kernel_broadcast(rhs).into())
     }
 
     fn equal_missing(&self, rhs: &[u8]) -> BooleanChunked {
-        self.binary_compare_scalar(rhs, |l, rhs| comparison::eq_scalar_and_validity(l, rhs))
+        arity::unary_mut_with_options(self, |arr| arr.tot_eq_missing_kernel_broadcast(rhs).into())
     }
 
     fn not_equal(&self, rhs: &[u8]) -> BooleanChunked {
-        self.binary_compare_scalar(rhs, |l, rhs| comparison::neq_scalar(l, rhs))
+        arity::unary_mut_values(self, |arr| arr.tot_ne_kernel_broadcast(rhs).into())
     }
 
     fn not_equal_missing(&self, rhs: &[u8]) -> BooleanChunked {
-        self.binary_compare_scalar(rhs, |l, rhs| comparison::neq_scalar_and_validity(l, rhs))
+        arity::unary_mut_with_options(self, |arr| arr.tot_ne_missing_kernel_broadcast(rhs).into())
     }
 
     fn gt(&self, rhs: &[u8]) -> BooleanChunked {
-        self.binary_compare_scalar(rhs, |l, rhs| comparison::gt_scalar(l, rhs))
+        arity::unary_mut_values(self, |arr| arr.tot_gt_kernel_broadcast(rhs).into())
     }
 
     fn gt_eq(&self, rhs: &[u8]) -> BooleanChunked {
-        self.binary_compare_scalar(rhs, |l, rhs| comparison::gt_eq_scalar(l, rhs))
+        arity::unary_mut_values(self, |arr| arr.tot_ge_kernel_broadcast(rhs).into())
     }
 
     fn lt(&self, rhs: &[u8]) -> BooleanChunked {
-        self.binary_compare_scalar(rhs, |l, rhs| comparison::lt_scalar(l, rhs))
+        arity::unary_mut_values(self, |arr| arr.tot_lt_kernel_broadcast(rhs).into())
     }
 
     fn lt_eq(&self, rhs: &[u8]) -> BooleanChunked {
-        self.binary_compare_scalar(rhs, |l, rhs| comparison::lt_eq_scalar(l, rhs))
+        arity::unary_mut_values(self, |arr| arr.tot_le_kernel_broadcast(rhs).into())
+    }
+}
+
+impl ChunkCompare<&str> for StringChunked {
+    type Item = BooleanChunked;
+
+    fn equal(&self, rhs: &str) -> BooleanChunked {
+        arity::unary_mut_values(self, |arr| arr.tot_eq_kernel_broadcast(rhs).into())
+    }
+
+    fn equal_missing(&self, rhs: &str) -> BooleanChunked {
+        arity::unary_mut_with_options(self, |arr| arr.tot_eq_missing_kernel_broadcast(rhs).into())
+    }
+
+    fn not_equal(&self, rhs: &str) -> BooleanChunked {
+        arity::unary_mut_values(self, |arr| arr.tot_ne_kernel_broadcast(rhs).into())
+    }
+
+    fn not_equal_missing(&self, rhs: &str) -> BooleanChunked {
+        arity::unary_mut_with_options(self, |arr| arr.tot_ne_missing_kernel_broadcast(rhs).into())
+    }
+
+    fn gt(&self, rhs: &str) -> BooleanChunked {
+        arity::unary_mut_values(self, |arr| arr.tot_gt_kernel_broadcast(rhs).into())
+    }
+
+    fn gt_eq(&self, rhs: &str) -> BooleanChunked {
+        arity::unary_mut_values(self, |arr| arr.tot_ge_kernel_broadcast(rhs).into())
+    }
+
+    fn lt(&self, rhs: &str) -> BooleanChunked {
+        arity::unary_mut_values(self, |arr| arr.tot_lt_kernel_broadcast(rhs).into())
+    }
+
+    fn lt_eq(&self, rhs: &str) -> BooleanChunked {
+        arity::unary_mut_values(self, |arr| arr.tot_le_kernel_broadcast(rhs).into())
     }
 }
 

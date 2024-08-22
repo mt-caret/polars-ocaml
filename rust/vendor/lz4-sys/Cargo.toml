@@ -11,7 +11,7 @@
 
 [package]
 name = "lz4-sys"
-version = "1.9.4"
+version = "1.9.5"
 authors = [
     "Jens Heyens <jens.heyens@ewetel.net>",
     "Artem V. Navrotskiy <bozaro@buzzsoft.ru>",

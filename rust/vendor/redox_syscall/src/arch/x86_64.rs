@@ -51,8 +51,6 @@ syscall! {
 #[derive(Copy, Clone, Debug, Default)]
 #[repr(C)]
 pub struct IntRegisters {
-    // TODO: Some of these don't get set by Redox yet. Should they?
-
     pub r15: usize,
     pub r14: usize,
     pub r13: usize,
@@ -68,25 +66,18 @@ pub struct IntRegisters {
     pub rdx: usize,
     pub rsi: usize,
     pub rdi: usize,
-    // pub orig_rax: usize,
     pub rip: usize,
     pub cs: usize,
     pub rflags: usize,
     pub rsp: usize,
     pub ss: usize,
-    // pub fs_base: usize,
-    // pub gs_base: usize,
-    // pub ds: usize,
-    // pub es: usize,
-    pub fs: usize,
-    // pub gs: usize
 }
 
 impl Deref for IntRegisters {
     type Target = [u8];
     fn deref(&self) -> &[u8] {
         unsafe {
-            slice::from_raw_parts(self as *const IntRegisters as *const u8, mem::size_of::<IntRegisters>())
+            slice::from_raw_parts(self as *const Self as *const u8, mem::size_of::<Self>())
         }
     }
 }
@@ -94,7 +85,7 @@ impl Deref for IntRegisters {
 impl DerefMut for IntRegisters {
     fn deref_mut(&mut self) -> &mut [u8] {
         unsafe {
-            slice::from_raw_parts_mut(self as *mut IntRegisters as *mut u8, mem::size_of::<IntRegisters>())
+            slice::from_raw_parts_mut(self as *mut Self as *mut u8, mem::size_of::<Self>())
         }
     }
 }

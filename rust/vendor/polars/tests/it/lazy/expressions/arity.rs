@@ -10,8 +10,8 @@ fn test_list_broadcast() {
     ]
     .unwrap()
     .lazy()
-    .groupby([col("g")])
-    .agg([col("a").unique_counts() * count()])
+    .group_by([col("g")])
+    .agg([col("a").unique_counts() * len()])
     .collect()
     .unwrap();
 }
@@ -37,7 +37,7 @@ fn ternary_expand_sizes() -> PolarsResult<()> {
         .collect()?;
     let vals = out
         .column("c")?
-        .utf8()?
+        .str()?
         .into_no_null_iter()
         .collect::<Vec<_>>();
     assert_eq!(vals, &["a1", "b2", "otherwise"]);
@@ -55,7 +55,7 @@ fn includes_null_predicate_3038() -> PolarsResult<()> {
         .with_column(
             when(col("a").map(
                 move |s| {
-                    s.utf8()?
+                    s.str()?
                         .to_lowercase()
                         .contains("not_exist", true)
                         .map(|ca| Some(ca.into_series()))
@@ -74,7 +74,7 @@ fn includes_null_predicate_3038() -> PolarsResult<()> {
         "a" => [Some("a1"), None, None],
         "b" => [Some("good hit"), None, None],
     }?;
-    assert!(res.frame_equal_missing(&exp_df));
+    assert!(res.equals_missing(&exp_df));
 
     let df = df! {
         "a" => ["a1", "a2", "a3", "a4", "a2"],
@@ -85,7 +85,7 @@ fn includes_null_predicate_3038() -> PolarsResult<()> {
         .with_column(
             when(col("b").map(
                 move |s| {
-                    s.utf8()?
+                    s.str()?
                         .to_lowercase()
                         .contains_literal("non-existent")
                         .map(|ca| Some(ca.into_series()))
@@ -108,7 +108,7 @@ fn includes_null_predicate_3038() -> PolarsResult<()> {
         "b" => [Some("tree"), None, None, None, None],
         "c" => ["ok1", "ok2", "ft", "ft", "ok2"]
     }?;
-    assert!(res.frame_equal_missing(&exp_df));
+    assert!(res.equals_missing(&exp_df));
 
     Ok(())
 }
@@ -116,7 +116,7 @@ fn includes_null_predicate_3038() -> PolarsResult<()> {
 #[test]
 #[cfg(feature = "dtype-categorical")]
 fn test_when_then_otherwise_cats() -> PolarsResult<()> {
-    polars::enable_string_cache(true);
+    polars::enable_string_cache();
 
     let lf = df!["book" => [Some("bookA"),
         None,
@@ -130,10 +130,10 @@ fn test_when_then_otherwise_cats() -> PolarsResult<()> {
     ]?.lazy();
 
     let out = lf
-        .with_column(col("book").cast(DataType::Categorical(None)))
-        .with_column(col("user").cast(DataType::Categorical(None)))
+        .with_column(col("book").cast(DataType::Categorical(None, Default::default())))
+        .with_column(col("user").cast(DataType::Categorical(None, Default::default())))
         .with_column(
-            when(col("book").eq(Null {}.lit()))
+            when(col("book").is_null())
                 .then(col("user"))
                 .otherwise(col("book"))
                 .alias("a"),
@@ -161,7 +161,7 @@ fn test_when_then_otherwise_single_bool() -> PolarsResult<()> {
 
     let out = df
         .lazy()
-        .groupby_stable([col("key")])
+        .group_by_stable([col("key")])
         .agg([when(col("val").null_count().gt(lit(0)))
             .then(Null {}.lit())
             .otherwise(col("val").sum())
@@ -173,7 +173,7 @@ fn test_when_then_otherwise_single_bool() -> PolarsResult<()> {
         "sum_null_prop" => [Some(1), None]
     ]?;
 
-    assert!(out.frame_equal_missing(&expected));
+    assert!(out.equals_missing(&expected));
 
     Ok(())
 }
@@ -191,7 +191,7 @@ fn test_update_groups_in_cast() -> PolarsResult<()> {
     // in aggregation that cast coerces a list and the cast may forget to update groups
     let out = df
         .lazy()
-        .groupby_stable([col("group")])
+        .group_by_stable([col("group")])
         .agg([col("id").unique_counts() * lit(-1)])
         .collect()?;
 
@@ -200,7 +200,7 @@ fn test_update_groups_in_cast() -> PolarsResult<()> {
         "id"=> [AnyValue::List(Series::new("", [-2i64, -1])), AnyValue::List(Series::new("", [-2i64, -1, -1]))]
     ]?;
 
-    assert!(out.frame_equal(&expected));
+    assert!(out.equals(&expected));
     Ok(())
 }
 
@@ -214,42 +214,20 @@ fn test_when_then_otherwise_sum_in_agg() -> PolarsResult<()> {
 
     let q = df
         .lazy()
-        .groupby([col("groups")])
+        .group_by([col("groups")])
         .agg([when(all().exclude(["groups"]).sum().eq(lit(1)))
             .then(all().exclude(["groups"]).sum())
             .otherwise(lit(NULL))])
-        .sort("groups", Default::default());
+        .sort(["groups"], Default::default());
 
     let expected = df![
         "groups" => [1, 2],
         "dist_a" => [None, Some(1.0f64)],
         "dist_b" => [Some(1.0f64), None]
     ]?;
-    assert!(q.collect()?.frame_equal_missing(&expected));
+    assert!(q.collect()?.equals_missing(&expected));
 
     Ok(())
-}
-
-#[test]
-fn test_null_commutativity() {
-    let df = DataFrame::new_no_checks(vec![]);
-    let out = df
-        .lazy()
-        .select([
-            lit(1).neq(NULL.lit()).alias("a"),
-            NULL.lit().neq(1).alias("b"),
-        ])
-        .collect()
-        .unwrap();
-
-    assert_eq!(
-        out.column("a").unwrap().get(0).unwrap(),
-        AnyValue::Boolean(true)
-    );
-    assert_eq!(
-        out.column("b").unwrap().get(0).unwrap(),
-        AnyValue::Boolean(true)
-    );
 }
 
 #[test]
@@ -260,7 +238,7 @@ fn test_binary_over_3930() -> PolarsResult<()> {
     ]?;
 
     let ss = col("score").pow(2);
-    let mdiff = (ss.clone().shift(-1) - ss.shift(1)) / lit(2);
+    let mdiff = (ss.clone().shift(lit(-1)) - ss.shift(lit(1))) / lit(2);
     let out = df.lazy().select([mdiff.over([col("class")])]).collect()?;
 
     let out = out.column("score")?;
@@ -292,11 +270,11 @@ fn test_ternary_aggregation_set_literals() -> PolarsResult<()> {
     let out = df
         .clone()
         .lazy()
-        .groupby([col("name")])
+        .group_by([col("name")])
         .agg([when(col("value").sum().eq(lit(3)))
             .then(col("value").rank(Default::default(), None))
             .otherwise(lit(Series::new("", &[10 as IdxSize])))])
-        .sort("name", Default::default())
+        .sort(["name"], Default::default())
         .collect()?;
 
     let out = out.column("value")?;
@@ -306,17 +284,17 @@ fn test_ternary_aggregation_set_literals() -> PolarsResult<()> {
     );
     assert_eq!(
         out.get(1)?,
-        AnyValue::List(Series::new("", &[10 as IdxSize]))
+        AnyValue::List(Series::new("", &[10 as IdxSize, 10 as IdxSize]))
     );
 
     let out = df
         .clone()
         .lazy()
-        .groupby([col("name")])
+        .group_by([col("name")])
         .agg([when(col("value").sum().eq(lit(3)))
             .then(lit(Series::new("", &[10 as IdxSize])).alias("value"))
             .otherwise(col("value").rank(Default::default(), None))])
-        .sort("name", Default::default())
+        .sort(["name"], Default::default())
         .collect()?;
 
     let out = out.column("value")?;
@@ -326,36 +304,36 @@ fn test_ternary_aggregation_set_literals() -> PolarsResult<()> {
     );
     assert_eq!(
         out.get(0)?,
-        AnyValue::List(Series::new("", &[10 as IdxSize]))
+        AnyValue::List(Series::new("", &[10 as IdxSize, 10 as IdxSize]))
     );
 
     let out = df
         .clone()
         .lazy()
-        .groupby([col("name")])
+        .group_by([col("name")])
         .agg([when(col("value").sum().eq(lit(3)))
             .then(col("value").rank(Default::default(), None))
             .otherwise(Null {}.lit())])
-        .sort("name", Default::default())
+        .sort(["name"], Default::default())
         .collect()?;
 
     let out = out.column("value")?;
     assert!(matches!(out.get(0)?, AnyValue::List(_)));
-    assert_eq!(out.get(1)?, AnyValue::Null);
+    assert!(matches!(out.get(1)?, AnyValue::List(_)));
 
     // swapped branch
     let out = df
         .lazy()
-        .groupby([col("name")])
+        .group_by([col("name")])
         .agg([when(col("value").sum().eq(lit(3)))
             .then(Null {}.lit().alias("value"))
             .otherwise(col("value").rank(Default::default(), None))])
-        .sort("name", Default::default())
+        .sort(["name"], Default::default())
         .collect()?;
 
     let out = out.column("value")?;
     assert!(matches!(out.get(1)?, AnyValue::List(_)));
-    assert_eq!(out.get(0)?, AnyValue::Null);
+    assert!(matches!(out.get(0)?, AnyValue::List(_)));
 
     Ok(())
 }
@@ -370,16 +348,16 @@ fn test_binary_group_consistency() -> PolarsResult<()> {
     .lazy();
 
     let out = lf
-        .groupby([col("category")])
+        .group_by([col("category")])
         .agg([col("name").filter(col("score").eq(col("score").max()))])
-        .sort("category", Default::default())
+        .sort(["category"], Default::default())
         .collect()?;
     let out = out.column("name")?;
 
-    assert_eq!(out.dtype(), &DataType::List(Box::new(DataType::Utf8)));
+    assert_eq!(out.dtype(), &DataType::List(Box::new(DataType::String)));
     assert_eq!(
         out.explode()?
-            .utf8()?
+            .str()?
             .into_no_null_iter()
             .collect::<Vec<_>>(),
         &["a", "b", "c", "d"]

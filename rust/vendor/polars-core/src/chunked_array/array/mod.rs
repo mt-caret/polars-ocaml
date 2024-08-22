@@ -20,38 +20,42 @@ impl ArrayChunked {
         }
     }
 
-    pub fn to_physical(&mut self, inner_dtype: DataType) {
+    /// # Safety
+    /// The caller must ensure that the logical type given fits the physical type of the array.
+    pub unsafe fn to_logical(&mut self, inner_dtype: DataType) {
         debug_assert_eq!(inner_dtype.to_physical(), self.inner_dtype());
+        let width = self.width();
         let fld = Arc::make_mut(&mut self.field);
-        fld.coerce(DataType::List(Box::new(inner_dtype)))
+        fld.coerce(DataType::Array(Box::new(inner_dtype), width))
     }
 
     /// Get the inner values as `Series`
     pub fn get_inner(&self) -> Series {
-        let ca = self.rechunk();
-        let inner_dtype = self.inner_dtype().to_arrow();
-        let arr = ca.downcast_iter().next().unwrap();
-        unsafe {
-            Series::try_from_arrow_unchecked(
-                self.name(),
-                vec![(arr.values()).clone()],
-                &inner_dtype,
-            )
-            .unwrap()
-        }
+        let chunks: Vec<_> = self.downcast_iter().map(|c| c.values().clone()).collect();
+
+        // SAFETY: Data type of arrays matches because they are chunks from the same array.
+        unsafe { Series::from_chunks_and_dtype_unchecked(self.name(), chunks, &self.inner_dtype()) }
     }
 
-    /// Ignore the list indices and apply `func` to the inner type as `Series`.
+    /// Ignore the list indices and apply `func` to the inner type as [`Series`].
     pub fn apply_to_inner(
         &self,
         func: &dyn Fn(Series) -> PolarsResult<Series>,
     ) -> PolarsResult<ArrayChunked> {
-        // generated Series will have wrong length otherwise.
+        // Rechunk or the generated Series will have wrong length.
         let ca = self.rechunk();
-        let inner_dtype = self.inner_dtype().to_arrow();
+        let field = self.inner_dtype().to_arrow_field("item", true);
 
         let chunks = ca.downcast_iter().map(|arr| {
-            let elements = unsafe { Series::try_from_arrow_unchecked(self.name(), vec![(*arr.values()).clone()], &inner_dtype).unwrap() } ;
+            let elements = unsafe {
+                Series::_try_from_arrow_unchecked_with_md(
+                    self.name(),
+                    vec![(*arr.values()).clone()],
+                    &field.data_type,
+                    Some(&field.metadata),
+                )
+                .unwrap()
+            };
 
             let expected_len = elements.len();
             let out: Series = func(elements)?;
@@ -62,15 +66,12 @@ impl ArrayChunked {
             let out = out.rechunk();
             let values = out.chunks()[0].clone();
 
-            let inner_dtype = FixedSizeListArray::default_datatype(out.dtype().to_arrow(), ca.width());
-            let arr = FixedSizeListArray::new(
-                inner_dtype,
-                values,
-                arr.validity().cloned(),
-            );
-            Ok(Box::new(arr) as ArrayRef)
-        }).collect::<PolarsResult<Vec<_>>>()?;
+            let inner_dtype =
+                FixedSizeListArray::default_datatype(out.dtype().to_arrow(true), ca.width());
+            let arr = FixedSizeListArray::new(inner_dtype, values, arr.validity().cloned());
+            Ok(arr)
+        });
 
-        unsafe { Ok(ArrayChunked::from_chunks(self.name(), chunks)) }
+        ArrayChunked::try_from_chunk_iter(self.name(), chunks)
     }
 }

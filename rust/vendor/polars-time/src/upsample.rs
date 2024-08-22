@@ -1,16 +1,13 @@
 #[cfg(feature = "timezones")]
-use chrono_tz::Tz;
-use polars_core::frame::hash_join::JoinArgs;
+use polars_core::chunked_array::temporal::parse_time_zone;
 use polars_core::prelude::*;
 use polars_core::utils::ensure_sorted_arg;
 use polars_ops::prelude::*;
 
 use crate::prelude::*;
-#[cfg(feature = "timezones")]
-use crate::utils::unlocalize_timestamp;
 
 pub trait PolarsUpsample {
-    /// Upsample a DataFrame at a regular frequency.
+    /// Upsample a [`DataFrame`] at a regular frequency.
     ///
     /// # Arguments
     /// * `by` - First group by these columns and then upsample for every group
@@ -19,7 +16,7 @@ pub trait PolarsUpsample {
     /// * `every` - interval will start 'every' duration
     /// * `offset` - change the start of the date_range by this offset.
     ///
-    /// The `period` and `offset` arguments are created with
+    /// The `every` and `offset` arguments are created with
     /// the following string language:
     /// - 1ns   (1 nanosecond)
     /// - 1us   (1 microsecond)
@@ -33,11 +30,10 @@ pub trait PolarsUpsample {
     /// - 1q    (1 calendar quarter)
     /// - 1y    (1 calendar year)
     /// - 1i    (1 index count)
+    ///
     /// Or combine them:
     /// "3d12h4m25s" # 3 days, 12 hours, 4 minutes, and 25 seconds
-    /// Suffix with `"_saturating"` to saturate dates with days too
-    /// large for their month to the last day of the month (e.g.
-    /// 2022-02-29 to 2022-02-28).
+    ///
     /// By "calendar day", we mean the corresponding time on the next
     /// day (which may not be 24 hours, depending on daylight savings).
     /// Similarly for "calendar week", "calendar month", "calendar quarter",
@@ -50,7 +46,10 @@ pub trait PolarsUpsample {
         offset: Duration,
     ) -> PolarsResult<DataFrame>;
 
-    /// Upsample a DataFrame at a regular frequency.
+    /// Upsample a [`DataFrame`] at a regular frequency.
+    ///
+    /// Similar to [`upsample`][PolarsUpsample::upsample], but order of the
+    /// DataFrame is maintained when `by` is specified.
     ///
     /// # Arguments
     /// * `by` - First group by these columns and then upsample for every group
@@ -59,7 +58,7 @@ pub trait PolarsUpsample {
     /// * `every` - interval will start 'every' duration
     /// * `offset` - change the start of the date_range by this offset.
     ///
-    /// The `period` and `offset` arguments are created with
+    /// The `every` and `offset` arguments are created with
     /// the following string language:
     /// - 1ns   (1 nanosecond)
     /// - 1us   (1 microsecond)
@@ -73,11 +72,10 @@ pub trait PolarsUpsample {
     /// - 1q    (1 calendar quarter)
     /// - 1y    (1 calendar year)
     /// - 1i    (1 index count)
+    ///
     /// Or combine them:
     /// "3d12h4m25s" # 3 days, 12 hours, 4 minutes, and 25 seconds
-    /// Suffix with `"_saturating"` to saturate dates with days too
-    /// large for their month to the last day of the month (e.g.
-    /// 2022-02-29 to 2022-02-28).
+    ///
     /// By "calendar day", we mean the corresponding time on the next
     /// day (which may not be 24 hours, depending on daylight savings).
     /// Similarly for "calendar week", "calendar month", "calendar quarter",
@@ -100,6 +98,9 @@ impl PolarsUpsample for DataFrame {
         offset: Duration,
     ) -> PolarsResult<DataFrame> {
         let by = by.into_vec();
+        let time_type = self.column(time_column)?.dtype();
+        ensure_duration_matches_data_type(offset, time_type, "offset")?;
+        ensure_duration_matches_data_type(every, time_type, "every")?;
         upsample_impl(self, by, time_column, every, offset, false)
     }
 
@@ -111,6 +112,9 @@ impl PolarsUpsample for DataFrame {
         offset: Duration,
     ) -> PolarsResult<DataFrame> {
         let by = by.into_vec();
+        let time_type = self.column(time_column)?.dtype();
+        ensure_duration_matches_data_type(offset, time_type, "offset")?;
+        ensure_duration_matches_data_type(every, time_type, "every")?;
         upsample_impl(self, by, time_column, every, offset, true)
     }
 }
@@ -125,14 +129,44 @@ fn upsample_impl(
 ) -> PolarsResult<DataFrame> {
     let s = source.column(index_column)?;
     ensure_sorted_arg(s, "upsample")?;
-    if matches!(s.dtype(), DataType::Date) {
+    let time_type = s.dtype();
+    if matches!(time_type, DataType::Date) {
         let mut df = source.clone();
-        df.try_apply(index_column, |s| {
+        df.apply(index_column, |s| {
             s.cast(&DataType::Datetime(TimeUnit::Milliseconds, None))
+                .unwrap()
         })
         .unwrap();
-        let mut out = upsample_impl(&df, by, index_column, every, offset, stable).unwrap();
-        out.try_apply(index_column, |s| s.cast(&DataType::Date))
+        let mut out = upsample_impl(&df, by, index_column, every, offset, stable)?;
+        out.apply(index_column, |s| s.cast(time_type).unwrap())
+            .unwrap();
+        Ok(out)
+    } else if matches!(
+        time_type,
+        DataType::UInt32 | DataType::UInt64 | DataType::Int32
+    ) {
+        let mut df = source.clone();
+
+        df.apply(index_column, |s| {
+            s.cast(&DataType::Int64)
+                .unwrap()
+                .cast(&DataType::Datetime(TimeUnit::Nanoseconds, None))
+                .unwrap()
+        })
+        .unwrap();
+        let mut out = upsample_impl(&df, by, index_column, every, offset, stable)?;
+        out.apply(index_column, |s| s.cast(time_type).unwrap())
+            .unwrap();
+        Ok(out)
+    } else if matches!(time_type, DataType::Int64) {
+        let mut df = source.clone();
+        df.apply(index_column, |s| {
+            s.cast(&DataType::Datetime(TimeUnit::Nanoseconds, None))
+                .unwrap()
+        })
+        .unwrap();
+        let mut out = upsample_impl(&df, by, index_column, every, offset, stable)?;
+        out.apply(index_column, |s| s.cast(time_type).unwrap())
             .unwrap();
         Ok(out)
     } else if by.is_empty() {
@@ -140,9 +174,9 @@ fn upsample_impl(
         upsample_single_impl(source, index_column, every, offset)
     } else {
         let gb = if stable {
-            source.groupby_stable(by)
+            source.group_by_stable(by)
         } else {
-            source.groupby(by)
+            source.group_by(by)
         };
         // don't parallelize this, this may SO on large data.
         gb?.apply(|df| {
@@ -165,24 +199,21 @@ fn upsample_single_impl(
         Datetime(tu, tz) => {
             let s = index_column.cast(&Int64).unwrap();
             let ca = s.i64().unwrap();
-            let first = ca.into_iter().flatten().next();
-            let last = ca.into_iter().flatten().next_back();
+            let first = ca.iter().flatten().next();
+            let last = ca.iter().flatten().next_back();
             match (first, last) {
                 (Some(first), Some(last)) => {
-                    let (first, last) = match tz {
+                    let tz = match tz {
                         #[cfg(feature = "timezones")]
-                        Some(tz) => (
-                            unlocalize_timestamp(first, *tu, tz.parse::<Tz>().unwrap()),
-                            unlocalize_timestamp(last, *tu, tz.parse::<Tz>().unwrap()),
-                        ),
-                        _ => (first, last),
+                        Some(tz) => Some(parse_time_zone(tz)?),
+                        _ => None,
                     };
                     let first = match tu {
-                        TimeUnit::Nanoseconds => offset.add_ns(first, None)?,
-                        TimeUnit::Microseconds => offset.add_us(first, None)?,
-                        TimeUnit::Milliseconds => offset.add_ms(first, None)?,
+                        TimeUnit::Nanoseconds => offset.add_ns(first, tz.as_ref())?,
+                        TimeUnit::Microseconds => offset.add_us(first, tz.as_ref())?,
+                        TimeUnit::Milliseconds => offset.add_ms(first, tz.as_ref())?,
                     };
-                    let range = date_range_impl(
+                    let range = datetime_range_impl(
                         index_col_name,
                         first,
                         last,

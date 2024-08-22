@@ -7,10 +7,11 @@ pub(crate) struct UniqueExec {
 
 impl Executor for UniqueExec {
     fn execute(&mut self, state: &mut ExecutionState) -> PolarsResult<DataFrame> {
+        state.should_stop()?;
         #[cfg(debug_assertions)]
         {
             if state.verbose() {
-                println!("run UniqueExec")
+                eprintln!("run UniqueExec")
             }
         }
         let df = self.input.execute(state)?;
@@ -18,9 +19,15 @@ impl Executor for UniqueExec {
         let keep = self.options.keep_strategy;
 
         state.record(
-            || match self.options.maintain_order {
-                true => df.unique_stable(subset, keep, self.options.slice),
-                false => df.unique(subset, keep, self.options.slice),
+            || {
+                if df.height() == 0 {
+                    return Ok(df);
+                }
+
+                match self.options.maintain_order {
+                    true => df.unique_stable(subset, keep, self.options.slice),
+                    false => df.unique(subset, keep, self.options.slice),
+                }
             },
             Cow::Borrowed("unique()"),
         )

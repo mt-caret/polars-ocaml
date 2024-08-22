@@ -183,7 +183,7 @@ where
     /// If the return value is Complete, the caller is given ownership of a
     /// single ref-count, which should be passed on to `complete`.
     ///
-    /// If the return value is Dealloc, then this call consumed the last
+    /// If the return value is `Dealloc`, then this call consumed the last
     /// ref-count and the caller should call `dealloc`.
     ///
     /// Otherwise the ref-count is consumed and the caller should not access
@@ -249,11 +249,11 @@ where
     }
 
     pub(super) fn dealloc(self) {
-        // Release the join waker, if there is one.
-        self.trailer().waker.with_mut(drop);
-
-        // Check causality
-        self.core().stage.with_mut(drop);
+        // Observe that we expect to have mutable access to these objects
+        // because we are going to drop them. This only matters when running
+        // under loom.
+        self.trailer().waker.with_mut(|_| ());
+        self.core().stage.with_mut(|_| ());
 
         // Safety: The caller of this method just transitioned our ref-count to
         // zero, so it is our responsibility to release the allocation.

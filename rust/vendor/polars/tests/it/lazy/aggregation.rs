@@ -1,36 +1,6 @@
 use super::*;
 
 #[test]
-fn test_lazy_df_aggregations() {
-    let df = load_df();
-
-    assert!(df
-        .clone()
-        .lazy()
-        .min()
-        .collect()
-        .unwrap()
-        .frame_equal_missing(&df.min()));
-    assert!(df
-        .clone()
-        .lazy()
-        .median()
-        .collect()
-        .unwrap()
-        .frame_equal_missing(&df.median()));
-    assert!(df
-        .clone()
-        .lazy()
-        .quantile(lit(0.5), QuantileInterpolOptions::default())
-        .collect()
-        .unwrap()
-        .frame_equal_missing(
-            &df.quantile(0.5, QuantileInterpolOptions::default())
-                .unwrap()
-        ));
-}
-
-#[test]
 #[cfg(feature = "temporal")]
 fn test_lazy_agg() {
     let s0 = DateChunked::parse_from_str_slice(
@@ -51,7 +21,7 @@ fn test_lazy_agg() {
 
     let lf = df
         .lazy()
-        .groupby([col("date")])
+        .group_by([col("date")])
         .agg([
             col("rain").min().alias("min"),
             col("rain").sum().alias("sum"),
@@ -59,7 +29,7 @@ fn test_lazy_agg() {
                 .quantile(lit(0.5), QuantileInterpolOptions::default())
                 .alias("median_rain"),
         ])
-        .sort("date", Default::default());
+        .sort(["date"], Default::default());
 
     let new = lf.collect().unwrap();
     let min = new.column("min").unwrap();
@@ -90,7 +60,7 @@ fn test_apply_multiple_error() {
     let _res = df
         .lazy()
         .with_streaming(false)
-        .groupby_stable([col("rf")])
+        .group_by_stable([col("rf")])
         .agg([issue()])
         .collect()
         .unwrap();

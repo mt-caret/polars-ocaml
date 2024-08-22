@@ -34,6 +34,10 @@ pub enum ErrorType {
     ExpectedMapEnd,
     /// Expected a null
     ExpectedNull,
+    /// Expected a true
+    ExpectedTrue,
+    /// Expected a false
+    ExpectedFalse,
     /// Expected a number
     ExpectedNumber,
     /// Expected a signed number
@@ -43,7 +47,7 @@ pub enum ErrorType {
     /// Expected an unsigned number
     ExpectedUnsigned,
     /// Internal error
-    InternalError,
+    InternalError(InternalError),
     /// Invalid escape sequence
     InvalidEscape,
     /// Invalid exponent in a floating point number
@@ -82,8 +86,15 @@ pub enum ErrorType {
     ExpectedObjectKey,
     /// Overflow of a limited buffer
     Overflow,
+    /// No SIMD support detected during runtime
+    SimdUnsupported,
     /// IO error
     Io(std::io::Error),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum InternalError {
+    TapeError,
 }
 
 impl From<std::io::Error> for Error {
@@ -102,6 +113,8 @@ impl PartialEq for ErrorType {
             | (Self::ExpectedArray, Self::ExpectedArray)
             | (Self::ExpectedArrayComma, Self::ExpectedArrayComma)
             | (Self::ExpectedBoolean, Self::ExpectedBoolean)
+            | (Self::ExpectedTrue, Self::ExpectedTrue)
+            | (Self::ExpectedFalse, Self::ExpectedFalse)
             | (Self::ExpectedEnum, Self::ExpectedEnum)
             | (Self::ExpectedFloat, Self::ExpectedFloat)
             | (Self::ExpectedInteger, Self::ExpectedInteger)
@@ -114,7 +127,6 @@ impl PartialEq for ErrorType {
             | (Self::ExpectedSigned, Self::ExpectedSigned)
             | (Self::ExpectedString, Self::ExpectedString)
             | (Self::ExpectedUnsigned, Self::ExpectedUnsigned)
-            | (Self::InternalError, Self::InternalError)
             | (Self::InvalidEscape, Self::InvalidEscape)
             | (Self::InvalidExponent, Self::InvalidExponent)
             | (Self::InvalidNumber, Self::InvalidNumber)
@@ -134,6 +146,7 @@ impl PartialEq for ErrorType {
             | (Self::ExpectedObjectKey, Self::ExpectedObjectKey)
             | (Self::Overflow, Self::Overflow) => true,
             (Self::Serde(s1), Self::Serde(s2)) => s1 == s2,
+            (Self::InternalError(e1), Self::InternalError(e2)) => e1 == e2,
             _ => false,
         }
     }
@@ -170,6 +183,24 @@ impl Error {
             error: t,
         }
     }
+
+    /// Returns the byte index the error occurred at.
+    #[must_use]
+    pub fn index(&self) -> usize {
+        self.index
+    }
+
+    /// Returns the current character the error occurred at.
+    #[must_use]
+    pub fn character(&self) -> Option<char> {
+        self.character
+    }
+
+    /// Returns the type of error that occurred.
+    #[must_use]
+    pub fn error(&self) -> &ErrorType {
+        &self.error
+    }
 }
 impl std::error::Error for Error {}
 
@@ -188,15 +219,5 @@ impl fmt::Display for Error {
 impl From<Error> for std::io::Error {
     fn from(e: Error) -> Self {
         std::io::Error::new(std::io::ErrorKind::InvalidData, e)
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use super::{Error, ErrorType};
-    #[test]
-    fn fmt() {
-        let e = Error::generic(ErrorType::InternalError);
-        assert_eq!(e.to_string(), "InternalError at character 0");
     }
 }

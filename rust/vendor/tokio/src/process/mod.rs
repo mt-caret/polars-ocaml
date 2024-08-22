@@ -544,11 +544,9 @@ impl Command {
 
     /// Sets configuration for the child process's standard input (stdin) handle.
     ///
-    /// Defaults to [`inherit`] when used with `spawn` or `status`, and
-    /// defaults to [`piped`] when used with `output`.
+    /// Defaults to [`inherit`].
     ///
     /// [`inherit`]: std::process::Stdio::inherit
-    /// [`piped`]: std::process::Stdio::piped
     ///
     /// # Examples
     ///
@@ -672,6 +670,8 @@ impl Command {
     #[cfg(unix)]
     #[cfg_attr(docsrs, doc(cfg(unix)))]
     pub fn uid(&mut self, id: u32) -> &mut Command {
+        #[cfg(target_os = "nto")]
+        let id = id as i32;
         self.std.uid(id);
         self
     }
@@ -681,6 +681,8 @@ impl Command {
     #[cfg(unix)]
     #[cfg_attr(docsrs, doc(cfg(unix)))]
     pub fn gid(&mut self, id: u32) -> &mut Command {
+        #[cfg(target_os = "nto")]
+        let id = id as i32;
         self.std.gid(id);
         self
     }
@@ -739,15 +741,15 @@ impl Command {
     }
 
     /// Sets the process group ID (PGID) of the child process. Equivalent to a
-    /// setpgid call in the child process, but may be more efficient.
+    /// `setpgid` call in the child process, but may be more efficient.
     ///
     /// Process groups determine which processes receive signals.
     ///
     /// **Note**: This is an [unstable API][unstable] but will be stabilised once
-    /// tokio's MSRV is sufficiently new. See [the documentation on
+    /// tokio's `MSRV` is sufficiently new. See [the documentation on
     /// unstable features][unstable] for details about using unstable features.
     ///
-    /// If you want similar behaviour without using this unstable feature you can
+    /// If you want similar behavior without using this unstable feature you can
     /// create a [`std::process::Command`] and convert that into a
     /// [`tokio::process::Command`] using the `From` trait.
     ///
@@ -1109,7 +1111,7 @@ impl Child {
     /// Attempts to force the child to exit, but does not wait for the request
     /// to take effect.
     ///
-    /// On Unix platforms, this is the equivalent to sending a SIGKILL. Note
+    /// On Unix platforms, this is the equivalent to sending a `SIGKILL`. Note
     /// that on Unix platforms it is possible for a zombie process to remain
     /// after a kill is sent; to avoid this, the caller should ensure that either
     /// `child.wait().await` or `child.try_wait()` is invoked successfully.
@@ -1125,12 +1127,12 @@ impl Child {
 
     /// Forces the child to exit.
     ///
-    /// This is equivalent to sending a SIGKILL on unix platforms.
+    /// This is equivalent to sending a `SIGKILL` on unix platforms.
     ///
     /// If the child has to be killed remotely, it is possible to do it using
-    /// a combination of the select! macro and a oneshot channel. In the following
+    /// a combination of the select! macro and a `oneshot` channel. In the following
     /// example, the child will run until completion unless a message is sent on
-    /// the oneshot channel. If that happens, the child is killed immediately
+    /// the `oneshot` channel. If that happens, the child is killed immediately
     /// using the `.kill()` method.
     ///
     /// ```no_run

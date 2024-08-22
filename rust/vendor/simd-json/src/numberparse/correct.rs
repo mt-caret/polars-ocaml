@@ -9,9 +9,8 @@ use super::{is_made_of_eight_digits_fast, parse_eight_digits_unrolled};
 use crate::charutils::is_structural_or_whitespace;
 use crate::error::Error;
 use crate::safer_unchecked::GetSaferUnchecked;
-use crate::unlikely;
 use crate::StaticNode;
-use crate::{mem, static_cast_i64, Deserializer, ErrorType, Result};
+use crate::{Deserializer, ErrorType, Result};
 
 macro_rules! get {
     ($buf:ident, $idx:expr) => {
@@ -21,6 +20,24 @@ macro_rules! get {
 macro_rules! err {
     ($idx:ident, $num:expr) => {
         return Err(Error::new_c($idx, $num as char, ErrorType::InvalidNumber))
+    };
+}
+
+macro_rules! check_overflow {
+    ($overflowed:ident, $buf:ident, $idx:ident, $start_idx:ident, $end_index:ident) => {
+        if $overflowed {
+            #[cfg(not(feature = "big-int-as-float"))]
+            {
+                err!($idx, get!($buf, $idx))
+            }
+            #[cfg(feature = "big-int-as-float")]
+            {
+                return f64_from_parts_slow(
+                    unsafe { $buf.get_kinda_unchecked($start_idx..$end_index) },
+                    $start_idx,
+                );
+            }
+        }
     };
 }
 
@@ -74,7 +91,9 @@ impl<'de> Deserializer<'de> {
             idx += 1;
             let first_after_period = idx as i64;
             if is_integer(get!(buf, idx)) {
-                num = 10_u64.wrapping_mul(num) + u64::from(get!(buf, idx) - b'0');
+                num = 10_u64
+                    .wrapping_mul(num)
+                    .wrapping_add(u64::from(get!(buf, idx) - b'0'));
                 idx += 1;
             } else {
                 err!(idx, get!(buf, idx))
@@ -93,7 +112,9 @@ impl<'de> Deserializer<'de> {
                 }
             }
             while is_integer(get!(buf, idx)) {
-                num = 10_u64.wrapping_mul(num) + u64::from(get!(buf, idx) - b'0');
+                num = 10_u64
+                    .wrapping_mul(num)
+                    .wrapping_add(u64::from(get!(buf, idx) - b'0'));
                 idx += 1;
             }
             exponent = first_after_period.wrapping_sub(idx as i64);
@@ -166,7 +187,7 @@ impl<'de> Deserializer<'de> {
                 start_idx,
             )
         } else if unlikely!(digit_count >= 18) {
-            parse_large_integer(start_idx, buf, negative)
+            parse_large_integer(start_idx, buf, negative, idx)
         } else if is_structural_or_whitespace(get!(buf, idx)) == 0 {
             err!(idx, get!(buf, idx))
         } else {
@@ -182,7 +203,12 @@ impl<'de> Deserializer<'de> {
 #[cfg(not(feature = "128bit"))]
 #[cold]
 #[allow(clippy::cast_possible_wrap)]
-fn parse_large_integer(start_idx: usize, buf: &[u8], negative: bool) -> Result<StaticNode> {
+fn parse_large_integer(
+    start_idx: usize,
+    buf: &[u8],
+    negative: bool,
+    #[allow(unused_variables)] end_index: usize,
+) -> Result<StaticNode> {
     let mut idx = start_idx;
     if negative {
         idx += 1;
@@ -197,16 +223,12 @@ fn parse_large_integer(start_idx: usize, buf: &[u8], negative: bool) -> Result<S
             let digit = u64::from(get!(buf, idx) - b'0');
             {
                 let (res, overflowed) = 10_u64.overflowing_mul(num);
-                if overflowed {
-                    err!(idx, get!(buf, idx))
-                }
+                check_overflow!(overflowed, buf, idx, start_idx, end_index);
                 num = res;
             }
             {
                 let (res, overflowed) = num.overflowing_add(digit);
-                if overflowed {
-                    err!(idx, get!(buf, idx))
-                }
+                check_overflow!(overflowed, buf, idx, start_idx, end_index);
                 num = res;
             }
             idx += 1;
@@ -224,7 +246,12 @@ fn parse_large_integer(start_idx: usize, buf: &[u8], negative: bool) -> Result<S
 #[cfg(feature = "128bit")]
 #[cold]
 #[allow(clippy::cast_possible_wrap)]
-fn parse_large_integer(start_idx: usize, buf: &[u8], negative: bool) -> Result<StaticNode> {
+fn parse_large_integer(
+    start_idx: usize,
+    buf: &[u8],
+    negative: bool,
+    #[allow(unused_variables)] end_index: usize,
+) -> Result<StaticNode> {
     let mut idx = start_idx;
     if negative {
         idx += 1;
@@ -239,16 +266,12 @@ fn parse_large_integer(start_idx: usize, buf: &[u8], negative: bool) -> Result<S
             let digit = u128::from(get!(buf, idx) - b'0');
             {
                 let (res, overflowed) = 10_u128.overflowing_mul(num);
-                if overflowed {
-                    err!(idx, get!(buf, idx))
-                }
+                check_overflow!(overflowed, buf, idx, start_idx, end_index);
                 num = res;
             }
             {
                 let (res, overflowed) = num.overflowing_add(digit);
-                if overflowed {
-                    err!(idx, get!(buf, idx))
-                }
+                check_overflow!(overflowed, buf, idx, start_idx, end_index);
                 num = res;
             }
             idx += 1;
@@ -540,6 +563,16 @@ mod test {
     #[test]
     fn tiny_float() -> Result<(), crate::Error> {
         assert_eq!(to_value_from_str("-0.00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000596916642387374")?, Static(F64(-0.00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000596916642387374)));
+        Ok(())
+    }
+
+    #[test]
+    #[cfg(feature = "big-int-as-float")]
+    fn huge_int() -> Result<(), crate::Error> {
+        assert_eq!(
+            to_value_from_str("999999999999999999999999999999")?,
+            Static(F64(999999999999999999999999999999f64))
+        );
         Ok(())
     }
 }

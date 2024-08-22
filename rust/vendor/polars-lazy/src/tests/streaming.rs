@@ -1,3 +1,5 @@
+use polars_ops::frame::JoinCoalesce;
+
 use super::*;
 
 fn get_csv_file() -> LazyFrame {
@@ -37,9 +39,9 @@ fn test_streaming_parquet() -> PolarsResult<()> {
     let q = get_parquet_file();
 
     let q = q
-        .groupby([col("sugars_g")])
+        .group_by([col("sugars_g")])
         .agg([((lit(1) - col("fats_g")) + col("calories")).sum()])
-        .sort("sugars_g", Default::default());
+        .sort(["sugars_g"], Default::default());
 
     assert_streaming_with_default(q, true, false);
     Ok(())
@@ -51,9 +53,9 @@ fn test_streaming_csv() -> PolarsResult<()> {
 
     let q = q
         .select([col("sugars_g"), col("calories")])
-        .groupby([col("sugars_g")])
+        .group_by([col("sugars_g")])
         .agg([col("calories").sum()])
-        .sort("sugars_g", Default::default());
+        .sort(["sugars_g"], Default::default());
 
     assert_streaming_with_default(q, true, false);
     Ok(())
@@ -62,7 +64,7 @@ fn test_streaming_csv() -> PolarsResult<()> {
 #[test]
 fn test_streaming_glob() -> PolarsResult<()> {
     let q = get_csv_glob();
-    let q = q.sort("sugars_g", Default::default());
+    let q = q.sort(["sugars_g"], Default::default());
 
     assert_streaming_with_default(q, true, false);
     Ok(())
@@ -95,16 +97,14 @@ fn test_streaming_multiple_keys_aggregate() -> PolarsResult<()> {
 
     let q = q
         .filter(col("sugars_g").gt(lit(10)))
-        .groupby([col("sugars_g"), col("calories")])
+        .group_by([col("sugars_g"), col("calories")])
         .agg([
             (col("fats_g") * lit(10)).sum(),
             col("calories").mean().alias("cal_mean"),
         ])
         .sort_by_exprs(
             [col("sugars_g"), col("calories")],
-            [false, false],
-            false,
-            false,
+            SortMultipleOptions::default().with_order_descendings([false, false]),
         );
 
     assert_streaming_with_default(q, true, false);
@@ -117,12 +117,12 @@ fn test_streaming_first_sum() -> PolarsResult<()> {
 
     let q = q
         .select([col("sugars_g"), col("calories")])
-        .groupby([col("sugars_g")])
+        .group_by([col("sugars_g")])
         .agg([
             col("calories").sum(),
             col("calories").first().alias("calories_first"),
         ])
-        .sort("sugars_g", Default::default());
+        .sort(["sugars_g"], Default::default());
 
     assert_streaming_with_default(q, true, false);
     Ok(())
@@ -135,7 +135,10 @@ fn test_streaming_unique() -> PolarsResult<()> {
     let q = q
         .select([col("sugars_g"), col("calories")])
         .unique(None, Default::default())
-        .sort_by_exprs([cols(["sugars_g", "calories"])], [false], false, false);
+        .sort_by_exprs(
+            [cols(["sugars_g", "calories"])],
+            SortMultipleOptions::default(),
+        );
 
     assert_streaming_with_default(q, true, false);
     Ok(())
@@ -146,7 +149,7 @@ fn test_streaming_aggregate_slice() -> PolarsResult<()> {
     let q = get_parquet_file();
 
     let q = q
-        .groupby([col("sugars_g")])
+        .group_by([col("sugars_g")])
         .agg([((lit(1) - col("fats_g")) + col("calories")).sum()])
         .slice(3, 3);
 
@@ -173,7 +176,7 @@ fn test_streaming_cross_join() -> PolarsResult<()> {
         .cross_join(q.clone())
         .filter(col("calories").gt(col("calories_right")));
     let q2 = q1
-        .select([all().suffix("_second")])
+        .select([all().name().suffix("_second")])
         .cross_join(q)
         .filter(col("calories_right_second").lt(col("calories")))
         .select([
@@ -213,6 +216,7 @@ fn test_streaming_inner_join3() -> PolarsResult<()> {
     assert_streaming_with_default(q, true, false);
     Ok(())
 }
+
 #[test]
 fn test_streaming_inner_join2() -> PolarsResult<()> {
     let lf_left = df![
@@ -294,10 +298,11 @@ fn test_streaming_partial() -> PolarsResult<()> {
         .right_on([col("a")])
         .suffix("_foo")
         .how(JoinType::Outer)
+        .coalesce(JoinCoalesce::CoalesceColumns)
         .finish();
 
     let q = q.left_join(
-        lf_left.select([all().suffix("_foo")]),
+        lf_left.select([all().name().suffix("_foo")]),
         col("a"),
         col("a_foo"),
     );
@@ -311,7 +316,7 @@ fn test_streaming_aggregate_join() -> PolarsResult<()> {
     let q = get_parquet_file();
 
     let q = q
-        .groupby([col("sugars_g")])
+        .group_by([col("sugars_g")])
         .agg([((lit(1) - col("fats_g")) + col("calories")).sum()])
         .slice(0, 3);
 
@@ -378,13 +383,44 @@ fn test_sort_maintain_order_streaming() -> PolarsResult<()> {
     .lazy();
 
     let res = q
-        .sort_by_exprs([col("A")], [false], false, true)
+        .sort_by_exprs(
+            [col("A")],
+            SortMultipleOptions::default()
+                .with_nulls_last(true)
+                .with_maintain_order(true),
+        )
         .slice(0, 3)
         .with_streaming(true)
         .collect()?;
-    assert!(res.frame_equal(&df![
+    assert!(res.equals(&df![
         "A" => [1, 1, 1],
         "B" => ["A", "B", "C"],
     ]?));
+    Ok(())
+}
+
+#[test]
+fn test_streaming_outer_join() -> PolarsResult<()> {
+    let lf_left = df![
+         "a"=> [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19],
+        "b"=> [0, 0, 0, 3, 0, 1, 3, 3, 3, 1, 4, 4, 2, 1, 1, 3, 1, 4, 2, 2],
+    ]?
+    .lazy();
+
+    let lf_right = df![
+           "a"=> [10, 18, 13, 9, 1, 13, 14, 12, 15, 11],
+    "b"=> [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+       ]?
+    .lazy();
+
+    let q = lf_left
+        .outer_join(lf_right, col("a"), col("a"))
+        .sort_by_exprs([all()], SortMultipleOptions::default());
+
+    // Toggle so that the join order is swapped.
+    for toggle in [true, true] {
+        assert_streaming_with_default(q.clone().with_streaming(toggle), true, false);
+    }
+
     Ok(())
 }

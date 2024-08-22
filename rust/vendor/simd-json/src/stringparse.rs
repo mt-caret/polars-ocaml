@@ -7,7 +7,7 @@ use crate::safer_unchecked::GetSaferUnchecked;
 /// begin copypasta
 /// These chars yield themselves: " \ /
 /// b -> backspace, f -> formfeed, n -> newline, r -> cr, t -> horizontal tab
-/// u not handled in this table as it's complex
+/// u not handled in this table as it's Container
 pub(crate) const ESCAPE_MAP: [u8; 256] = [
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 0x0.
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x22, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -27,15 +27,25 @@ const LOW_SURROGATES: Range<u32> = 0xdc00..0xe000;
 
 /// handle a unicode codepoint
 /// write appropriate values into dest
+#[cfg_attr(not(feature = "no-inline"), inline)]
+#[allow(dead_code)]
+pub(crate) fn handle_unicode_codepoint(
+    src_ptr: &[u8],
+    dst_ptr: &mut [u8],
+) -> Result<(usize, usize), ErrorType> {
+    let (code_point, src_offset) = get_unicode_codepoint(src_ptr)?;
+    let offset: usize = codepoint_to_utf8(code_point, dst_ptr);
+    Ok((offset, src_offset))
+}
+
+/// handle a unicode codepoint
+/// write appropriate values into dest
 /// src will advance 6 bytes or 12 bytes
 /// dest will advance a variable amount (return via pointer)
 /// return true if the unicode codepoint was valid
 /// We work in little-endian then swap at write time
-#[cfg_attr(not(feature = "no-inline"), inline(always))]
-pub(crate) fn handle_unicode_codepoint(
-    mut src_ptr: &[u8],
-    dst_ptr: &mut [u8],
-) -> Result<(usize, usize), ErrorType> {
+#[cfg_attr(not(feature = "no-inline"), inline)]
+pub(crate) fn get_unicode_codepoint(mut src_ptr: &[u8]) -> Result<(u32, usize), ErrorType> {
     // hex_to_u32_nocheck fills high 16 bits of the return value with 1s if the
     // conversion isn't valid; we defer the check for this to inside the
     // multilingual plane check
@@ -77,6 +87,5 @@ pub(crate) fn handle_unicode_codepoint(
         // This is a low surrogate on it's own, which is invalid.
         return Err(ErrorType::InvalidUtf8);
     }
-    let offset: usize = codepoint_to_utf8(code_point, dst_ptr);
-    Ok((offset, src_offset))
+    Ok((code_point, src_offset))
 }

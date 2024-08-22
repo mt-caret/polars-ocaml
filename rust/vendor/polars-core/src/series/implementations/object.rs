@@ -4,14 +4,11 @@ use std::borrow::Cow;
 use ahash::RandomState;
 
 use crate::chunked_array::object::PolarsObjectSafe;
-use crate::chunked_array::ops::compare_inner::{IntoPartialEqInner, PartialEqInner};
+use crate::chunked_array::ops::compare_inner::{IntoTotalEqInner, TotalEqInner};
 use crate::chunked_array::Settings;
-use crate::frame::groupby::{GroupsProxy, IntoGroupsProxy};
 use crate::prelude::*;
 use crate::series::implementations::SeriesWrap;
 use crate::series::private::{PrivateSeries, PrivateSeriesNumeric};
-#[cfg(feature = "chunked_ids")]
-use crate::series::IsSorted;
 
 impl<T: PolarsObject> PrivateSeriesNumeric for SeriesWrap<ObjectChunked<T>> {}
 
@@ -50,20 +47,21 @@ where
         self.0.agg_list(groups)
     }
 
-    fn into_partial_eq_inner<'a>(&'a self) -> Box<dyn PartialEqInner + 'a> {
-        (&self.0).into_partial_eq_inner()
+    fn into_total_eq_inner<'a>(&'a self) -> Box<dyn TotalEqInner + 'a> {
+        (&self.0).into_total_eq_inner()
     }
 
     fn vec_hash(&self, random_state: RandomState, buf: &mut Vec<u64>) -> PolarsResult<()> {
-        self.0.vec_hash(random_state, buf);
+        self.0.vec_hash(random_state, buf)?;
         Ok(())
     }
 
     fn vec_hash_combine(&self, build_hasher: RandomState, hashes: &mut [u64]) -> PolarsResult<()> {
-        self.0.vec_hash_combine(build_hasher, hashes);
+        self.0.vec_hash_combine(build_hasher, hashes)?;
         Ok(())
     }
 
+    #[cfg(feature = "algorithm_group_by")]
     fn group_tuples(&self, multithreaded: bool, sorted: bool) -> PolarsResult<GroupsProxy> {
         IntoGroupsProxy::group_tuples(&self.0, multithreaded, sorted)
     }
@@ -82,8 +80,8 @@ where
         ObjectChunked::rename(&mut self.0, name)
     }
 
-    fn chunk_lengths(&self) -> ChunkIdIter {
-        ObjectChunked::chunk_id(&self.0)
+    fn chunk_lengths(&self) -> ChunkLenIter {
+        ObjectChunked::chunk_lengths(&self.0)
     }
 
     fn name(&self) -> &str {
@@ -96,6 +94,9 @@ where
 
     fn chunks(&self) -> &Vec<ArrayRef> {
         ObjectChunked::chunks(&self.0)
+    }
+    unsafe fn chunks_mut(&mut self) -> &mut Vec<ArrayRef> {
+        self.0.chunks_mut()
     }
 
     fn slice(&self, offset: i64, length: usize) -> Series {
@@ -118,44 +119,20 @@ where
         ChunkFilter::filter(&self.0, filter).map(|ca| ca.into_series())
     }
 
-    #[cfg(feature = "chunked_ids")]
-    unsafe fn _take_chunked_unchecked(&self, by: &[ChunkId], sorted: IsSorted) -> Series {
-        self.0.take_chunked_unchecked(by, sorted).into_series()
-    }
-
-    #[cfg(feature = "chunked_ids")]
-    unsafe fn _take_opt_chunked_unchecked(&self, by: &[Option<ChunkId>]) -> Series {
-        self.0.take_opt_chunked_unchecked(by).into_series()
-    }
-
     fn take(&self, indices: &IdxCa) -> PolarsResult<Series> {
-        Ok(ChunkTake::take(&self.0, indices.into())?.into_series())
+        Ok(self.0.take(indices)?.into_series())
     }
 
-    fn take_iter(&self, iter: &mut dyn TakeIterator) -> PolarsResult<Series> {
-        Ok(ChunkTake::take(&self.0, iter.into())?.into_series())
+    unsafe fn take_unchecked(&self, indices: &IdxCa) -> Series {
+        self.0.take_unchecked(indices).into_series()
     }
 
-    unsafe fn take_iter_unchecked(&self, iter: &mut dyn TakeIterator) -> Series {
-        ChunkTake::take_unchecked(&self.0, iter.into()).into_series()
+    fn take_slice(&self, indices: &[IdxSize]) -> PolarsResult<Series> {
+        Ok(self.0.take(indices)?.into_series())
     }
 
-    unsafe fn take_unchecked(&self, idx: &IdxCa) -> PolarsResult<Series> {
-        let idx = if idx.chunks.len() > 1 {
-            Cow::Owned(idx.rechunk())
-        } else {
-            Cow::Borrowed(idx)
-        };
-        Ok(ChunkTake::take_unchecked(&self.0, (&*idx).into()).into_series())
-    }
-
-    unsafe fn take_opt_iter_unchecked(&self, iter: &mut dyn TakeIteratorNulls) -> Series {
-        ChunkTake::take_unchecked(&self.0, iter.into()).into_series()
-    }
-
-    #[cfg(feature = "take_opt_iter")]
-    fn take_opt_iter(&self, _iter: &mut dyn TakeIteratorNulls) -> PolarsResult<Series> {
-        todo!()
+    unsafe fn take_slice_unchecked(&self, indices: &[IdxSize]) -> Series {
+        self.0.take_unchecked(indices).into_series()
     }
 
     fn len(&self) -> usize {
@@ -172,7 +149,7 @@ where
     }
 
     fn cast(&self, data_type: &DataType) -> PolarsResult<Series> {
-        if matches!(data_type, DataType::Object(_)) {
+        if matches!(data_type, DataType::Object(_, None)) {
             Ok(self.0.clone().into_series())
         } else {
             Err(PolarsError::ComputeError(
@@ -183,6 +160,9 @@ where
 
     fn get(&self, index: usize) -> PolarsResult<AnyValue> {
         ObjectChunked::get_any_value(&self.0, index)
+    }
+    unsafe fn get_unchecked(&self, index: usize) -> AnyValue {
+        ObjectChunked::get_any_value_unchecked(&self.0, index)
     }
     fn null_count(&self) -> usize {
         ObjectChunked::null_count(&self.0)
@@ -228,27 +208,16 @@ where
         ObjectChunked::<T>::get_object(&self.0, index)
     }
 
-    fn as_any(&self) -> &dyn Any {
-        &self.0
+    unsafe fn get_object_chunked_unchecked(
+        &self,
+        chunk: usize,
+        index: usize,
+    ) -> Option<&dyn PolarsObjectSafe> {
+        ObjectChunked::<T>::get_object_chunked_unchecked(&self.0, chunk, index)
     }
 
-    fn _sum_as_series(&self) -> Series {
-        ObjectChunked::<T>::full_null(self.name(), 1).into_series()
-    }
-    fn max_as_series(&self) -> Series {
-        ObjectChunked::<T>::full_null(self.name(), 1).into_series()
-    }
-    fn min_as_series(&self) -> Series {
-        ObjectChunked::<T>::full_null(self.name(), 1).into_series()
-    }
-    fn median_as_series(&self) -> Series {
-        ObjectChunked::<T>::full_null(self.name(), 1).into_series()
-    }
-    fn var_as_series(&self, _ddof: u8) -> Series {
-        ObjectChunked::<T>::full_null(self.name(), 1).into_series()
-    }
-    fn std_as_series(&self, _ddof: u8) -> Series {
-        ObjectChunked::<T>::full_null(self.name(), 1).into_series()
+    fn as_any(&self) -> &dyn Any {
+        &self.0
     }
 }
 
@@ -258,6 +227,7 @@ mod test {
 
     #[test]
     fn test_downcast_object() -> PolarsResult<()> {
+        #[allow(non_local_definitions)]
         impl PolarsObject for i32 {
             fn type_name() -> &'static str {
                 "i32"

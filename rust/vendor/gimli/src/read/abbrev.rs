@@ -66,17 +66,7 @@ impl<T> DebugAbbrev<T> {
     ///
     /// This is useful when `R` implements `Reader` but `T` does not.
     ///
-    /// ## Example Usage
-    ///
-    /// ```rust,no_run
-    /// # let load_section = || unimplemented!();
-    /// // Read the DWARF section into a `Vec` with whatever object loader you're using.
-    /// let owned_section: gimli::DebugAbbrev<Vec<u8>> = load_section();
-    /// // Create a reference to the DWARF section.
-    /// let section = owned_section.borrow(|section| {
-    ///     gimli::EndianSlice::new(&section, gimli::LittleEndian)
-    /// });
-    /// ```
+    /// Used by `DwarfSections::borrow`.
     pub fn borrow<'a, F, R>(&'a self, mut borrow: F) -> DebugAbbrev<R>
     where
         F: FnMut(&'a T) -> R,
@@ -641,7 +631,7 @@ pub(crate) fn get_attribute_size(form: constants::DwForm, encoding: Encoding) ->
 }
 
 #[cfg(test)]
-pub mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::constants;
     use crate::endianity::LittleEndian;
@@ -853,7 +843,7 @@ pub mod tests {
             .append_bytes(&expected_rest)
             .get_contents()
             .unwrap();
-        let rest = &mut EndianSlice::new(&*buf, LittleEndian);
+        let rest = &mut EndianSlice::new(&buf, LittleEndian);
 
         let abbrev1 = Abbreviation::new(
             1,
@@ -908,7 +898,7 @@ pub mod tests {
             .append_bytes(&expected_rest)
             .get_contents()
             .unwrap();
-        let buf = &mut EndianSlice::new(&*buf, LittleEndian);
+        let buf = &mut EndianSlice::new(&buf, LittleEndian);
 
         match Abbreviations::parse(buf) {
             Err(Error::DuplicateAbbreviationCode) => {}
@@ -959,7 +949,7 @@ pub mod tests {
             .append_bytes(&expected_rest)
             .get_contents()
             .unwrap();
-        let rest = &mut EndianSlice::new(&*buf, LittleEndian);
+        let rest = &mut EndianSlice::new(&buf, LittleEndian);
 
         let expect = Some(Abbreviation::new(
             1,
@@ -988,7 +978,7 @@ pub mod tests {
             .append_bytes(&expected_rest)
             .get_contents()
             .unwrap();
-        let rest = &mut EndianSlice::new(&*buf, LittleEndian);
+        let rest = &mut EndianSlice::new(&buf, LittleEndian);
 
         let expect = Some(Abbreviation::new(
             1,
@@ -1014,7 +1004,7 @@ pub mod tests {
             .abbrev_attr(constants::DW_AT_name, constants::DW_FORM_implicit_const)
             .get_contents()
             .unwrap();
-        let buf = &mut EndianSlice::new(&*buf, LittleEndian);
+        let buf = &mut EndianSlice::new(&buf, LittleEndian);
 
         match Abbreviation::parse(buf) {
             Err(Error::UnexpectedEof(_)) => {}
@@ -1030,7 +1020,7 @@ pub mod tests {
             .append_bytes(&expected_rest)
             .get_contents()
             .unwrap();
-        let rest = &mut EndianSlice::new(&*buf, LittleEndian);
+        let rest = &mut EndianSlice::new(&buf, LittleEndian);
 
         let abbrev = Abbreviation::parse(rest).expect("Should parse null abbreviation");
         assert!(abbrev.is_none());

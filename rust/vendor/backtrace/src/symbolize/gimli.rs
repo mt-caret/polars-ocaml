@@ -30,17 +30,20 @@ cfg_if::cfg_if! {
     if #[cfg(windows)] {
         #[path = "gimli/mmap_windows.rs"]
         mod mmap;
+    } else if #[cfg(target_vendor = "apple")] {
+        #[path = "gimli/mmap_unix.rs"]
+        mod mmap;
     } else if #[cfg(any(
         target_os = "android",
         target_os = "freebsd",
         target_os = "fuchsia",
         target_os = "haiku",
-        target_os = "ios",
+        target_os = "hurd",
         target_os = "linux",
-        target_os = "macos",
         target_os = "openbsd",
         target_os = "solaris",
         target_os = "illumos",
+        target_os = "aix",
     ))] {
         #[path = "gimli/mmap_unix.rs"]
         mod mmap;
@@ -116,8 +119,17 @@ impl<'data> Context<'data> {
         dwp: Option<Object<'data>>,
     ) -> Option<Context<'data>> {
         let mut sections = gimli::Dwarf::load(|id| -> Result<_, ()> {
-            let data = object.section(stash, id.name()).unwrap_or(&[]);
-            Ok(EndianSlice::new(data, Endian))
+            if cfg!(not(target_os = "aix")) {
+                let data = object.section(stash, id.name()).unwrap_or(&[]);
+                Ok(EndianSlice::new(data, Endian))
+            } else {
+                if let Some(name) = id.xcoff_name() {
+                    let data = object.section(stash, name).unwrap_or(&[]);
+                    Ok(EndianSlice::new(data, Endian))
+                } else {
+                    Ok(EndianSlice::new(&[], Endian))
+                }
+            }
         })
         .ok()?;
 
@@ -184,14 +196,12 @@ cfg_if::cfg_if! {
     if #[cfg(windows)] {
         mod coff;
         use self::coff::{handle_split_dwarf, Object};
-    } else if #[cfg(any(
-        target_os = "macos",
-        target_os = "ios",
-        target_os = "tvos",
-        target_os = "watchos",
-    ))] {
+    } else if #[cfg(any(target_vendor = "apple"))] {
         mod macho;
         use self::macho::{handle_split_dwarf, Object};
+    } else if #[cfg(target_os = "aix")] {
+        mod xcoff;
+        use self::xcoff::{handle_split_dwarf, Object};
     } else {
         mod elf;
         use self::elf::{handle_split_dwarf, Object};
@@ -202,12 +212,7 @@ cfg_if::cfg_if! {
     if #[cfg(windows)] {
         mod libs_windows;
         use libs_windows::native_libraries;
-    } else if #[cfg(any(
-        target_os = "macos",
-        target_os = "ios",
-        target_os = "tvos",
-        target_os = "watchos",
-    ))] {
+    } else if #[cfg(target_vendor = "apple")] {
         mod libs_macos;
         use libs_macos::native_libraries;
     } else if #[cfg(target_os = "illumos")] {
@@ -218,6 +223,7 @@ cfg_if::cfg_if! {
             target_os = "linux",
             target_os = "fuchsia",
             target_os = "freebsd",
+            target_os = "hurd",
             target_os = "openbsd",
             target_os = "netbsd",
             all(target_os = "android", feature = "dl_iterate_phdr"),
@@ -234,6 +240,9 @@ cfg_if::cfg_if! {
     } else if #[cfg(target_os = "haiku")] {
         mod libs_haiku;
         use libs_haiku::native_libraries;
+    } else if #[cfg(target_os = "aix")] {
+        mod libs_aix;
+        use libs_aix::native_libraries;
     } else {
         // Everything else should doesn't know how to load native libraries.
         fn native_libraries() -> Vec<Library> {
@@ -261,6 +270,13 @@ struct Cache {
 
 struct Library {
     name: OsString,
+    #[cfg(target_os = "aix")]
+    /// On AIX, the library mmapped can be a member of a big-archive file.
+    /// For example, with a big-archive named libfoo.a containing libbar.so,
+    /// one can use `dlopen("libfoo.a(libbar.so)", RTLD_MEMBER | RTLD_LAZY)`
+    /// to use the `libbar.so` library. In this case, only `libbar.so` is
+    /// mmapped, not the whole `libfoo.a`.
+    member_name: OsString,
     /// Segments of this library loaded into memory, and where they're loaded.
     segments: Vec<LibrarySegment>,
     /// The "bias" of this library, typically where it's loaded into memory.
@@ -278,6 +294,19 @@ struct LibrarySegment {
     stated_virtual_memory_address: usize,
     /// The size of this segment in memory.
     len: usize,
+}
+
+#[cfg(target_os = "aix")]
+fn create_mapping(lib: &Library) -> Option<Mapping> {
+    let name = &lib.name;
+    let member_name = &lib.member_name;
+    Mapping::new(name.as_ref(), member_name)
+}
+
+#[cfg(not(target_os = "aix"))]
+fn create_mapping(lib: &Library) -> Option<Mapping> {
+    let name = &lib.name;
+    Mapping::new(name.as_ref())
 }
 
 // unsafe because this is required to be externally synchronized
@@ -360,8 +389,7 @@ impl Cache {
             // When the mapping is not in the cache, create a new mapping,
             // insert it into the front of the cache, and evict the oldest cache
             // entry if necessary.
-            let name = &self.libraries[lib].name;
-            let mapping = Mapping::new(name.as_ref())?;
+            let mapping = create_mapping(&self.libraries[lib])?;
 
             if self.mappings.len() == MAPPINGS_CACHE_SIZE {
                 self.mappings.pop();
@@ -393,7 +421,7 @@ pub unsafe fn resolve(what: ResolveWhat<'_>, cb: &mut dyn FnMut(&super::Symbol))
     };
 
     Cache::with_global(|cache| {
-        let (lib, addr) = match cache.avma_to_svma(addr as *const u8) {
+        let (lib, addr) = match cache.avma_to_svma(addr.cast_const().cast::<u8>()) {
             Some(pair) => pair,
             None => return,
         };
@@ -435,10 +463,7 @@ pub unsafe fn resolve(what: ResolveWhat<'_>, cb: &mut dyn FnMut(&super::Symbol))
         }
         if !any_frames {
             if let Some(name) = cx.object.search_symtab(addr as u64) {
-                call(Symbol::Symtab {
-                    addr: addr as *mut c_void,
-                    name,
-                });
+                call(Symbol::Symtab { name });
             }
         }
     });
@@ -454,7 +479,7 @@ pub enum Symbol<'a> {
     },
     /// Couldn't find debug information, but we found it in the symbol table of
     /// the elf executable.
-    Symtab { addr: *mut c_void, name: &'a [u8] },
+    Symtab { name: &'a [u8] },
 }
 
 impl Symbol<'_> {

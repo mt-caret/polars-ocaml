@@ -9,10 +9,10 @@ fn test_int_range_agg() -> PolarsResult<()> {
 
     let out = df
         .lazy()
-        .with_columns([int_range(lit(0i32), count(), 1).over([col("x")])])
+        .with_columns([int_range(lit(0i32), len(), 1, DataType::Int64).over([col("x")])])
         .collect()?;
     assert_eq!(
-        Vec::from_iter(out.column("int")?.i64()?.into_no_null_iter()),
+        Vec::from_iter(out.column("literal")?.i64()?.into_no_null_iter()),
         &[0, 1, 0, 1, 0, 1]
     );
 
@@ -28,7 +28,7 @@ fn test_groups_update() -> PolarsResult<()> {
 
     let out = df
         .lazy()
-        .groupby_stable([col("group")])
+        .group_by_stable([col("group")])
         .agg([col("id").unique_counts().log(2.0)])
         .explode([col("id")])
         .collect()?;
@@ -50,9 +50,9 @@ fn test_groups_update_binary_shift_log() -> PolarsResult<()> {
         "b" => [1, 2, 1, 2],
     ]?
     .lazy()
-    .groupby([col("b")])
-    .agg([col("a") - col("a").shift(1).log(2.0)])
-    .sort("b", Default::default())
+    .group_by([col("b")])
+    .agg([col("a") - col("a").shift(lit(1)).log(2.0)])
+    .sort(["b"], Default::default())
     .explode([col("a")])
     .collect()?;
     assert_eq!(
@@ -70,7 +70,7 @@ fn test_expand_list() -> PolarsResult<()> {
         "b" => [2, 3],
     ]?
     .lazy()
-    .select([cols(["a", "b"]).cumsum(false)])
+    .select([cols(["a", "b"]).cum_sum(false)])
     .collect()?;
 
     let expected = df![
@@ -78,7 +78,7 @@ fn test_expand_list() -> PolarsResult<()> {
         "b" => [2, 5]
     ]?;
 
-    assert!(out.frame_equal(&expected));
+    assert!(out.equals(&expected));
 
     Ok(())
 }
@@ -89,17 +89,26 @@ fn test_apply_groups_empty() -> PolarsResult<()> {
         "id" => [1, 1],
         "hi" => ["here", "here"]
     ]?;
+    let out = df
+        .clone()
+        .lazy()
+        .filter(col("id").eq(lit(2)))
+        .group_by([col("id")])
+        .agg([col("hi").drop_nulls().unique()])
+        .explain(true)
+        .unwrap();
+    println!("{}", out);
 
     let out = df
         .lazy()
         .filter(col("id").eq(lit(2)))
-        .groupby([col("id")])
+        .group_by([col("id")])
         .agg([col("hi").drop_nulls().unique()])
         .collect()?;
 
     assert_eq!(
         out.dtypes(),
-        &[DataType::Int32, DataType::List(Box::new(DataType::Utf8))]
+        &[DataType::Int32, DataType::List(Box::new(DataType::String))]
     );
     assert_eq!(out.shape(), (0, 2));
 

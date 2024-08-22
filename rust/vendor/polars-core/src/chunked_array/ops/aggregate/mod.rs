@@ -2,81 +2,70 @@
 mod quantile;
 mod var;
 
-use std::cmp::Ordering;
 use std::ops::Add;
 
 use arrow::compute;
 use arrow::types::simd::Simd;
 use arrow::types::NativeType;
-use num_traits::{Float, ToPrimitive, Zero};
-use polars_arrow::kernels::rolling::{compare_fn_nan_max, compare_fn_nan_min};
+use num_traits::{Float, One, ToPrimitive, Zero};
+use polars_compute::float_sum;
+use polars_compute::min_max::MinMaxKernel;
+use polars_utils::min_max::MinMax;
 pub use quantile::*;
 pub use var::*;
 
+use super::float_sorted_arg_max::{
+    float_arg_max_sorted_ascending, float_arg_max_sorted_descending,
+};
 use crate::chunked_array::ChunkedArray;
 use crate::datatypes::{BooleanChunked, PolarsNumericType};
 use crate::prelude::*;
 use crate::series::IsSorted;
-use crate::utils::CustomIterTools;
 
-/// Aggregations that return Series of unit length. Those can be used in broadcasting operations.
+/// Aggregations that return [`Series`] of unit length. Those can be used in broadcasting operations.
 pub trait ChunkAggSeries {
-    /// Get the sum of the ChunkedArray as a new Series of length 1.
-    fn sum_as_series(&self) -> Series {
+    /// Get the sum of the [`ChunkedArray`] as a new [`Series`] of length 1.
+    fn sum_reduce(&self) -> Scalar {
         unimplemented!()
     }
-    /// Get the max of the ChunkedArray as a new Series of length 1.
-    fn max_as_series(&self) -> Series {
+    /// Get the max of the [`ChunkedArray`] as a new [`Series`] of length 1.
+    fn max_reduce(&self) -> Scalar {
         unimplemented!()
     }
-    /// Get the min of the ChunkedArray as a new Series of length 1.
-    fn min_as_series(&self) -> Series {
+    /// Get the min of the [`ChunkedArray`] as a new [`Series`] of length 1.
+    fn min_reduce(&self) -> Scalar {
         unimplemented!()
     }
-    /// Get the product of the ChunkedArray as a new Series of length 1.
-    fn prod_as_series(&self) -> Series {
+    /// Get the product of the [`ChunkedArray`] as a new [`Series`] of length 1.
+    fn prod_reduce(&self) -> Scalar {
         unimplemented!()
     }
 }
 
-fn sum_float_unaligned_slice<T: NumericNative>(values: &[T]) -> T {
-    values.iter().copied().sum()
-}
-
-fn sum_float_unaligned<T: NumericNative>(array: &PrimitiveArray<T>) -> T {
-    if array.len() == 0 || array.null_count() == array.len() {
-        return T::zero();
-    }
-    array.into_iter().flatten().copied().sum()
-}
-
-/// Floating point arithmetic is non-associative.
-/// The simd chunks are determined by memory location
-/// e.g.
-///
-/// |HEAD|  - | SIMD | - |TAIL|
-///
-/// The SIMD chunks have a certain alignment and depending of the start of the buffer
-/// head and tail may have different sizes, making a sum non-deterministic for the same
-/// values but different memory locations
-fn stable_sum<T: NumericNative + NativeType>(array: &PrimitiveArray<T>) -> T
+fn sum<T>(array: &PrimitiveArray<T>) -> T
 where
     T: NumericNative + NativeType,
-    <T as Simd>::Simd: Add<Output = <T as Simd>::Simd>
-        + compute::aggregate::Sum<T>
-        + compute::aggregate::SimdOrd<T>,
+    <T as Simd>::Simd: Add<Output = <T as Simd>::Simd> + compute::aggregate::Sum<T>,
 {
+    if array.null_count() == array.len() {
+        return T::default();
+    }
+
     if T::is_float() {
-        use arrow::types::simd::NativeSimd;
-        let values = array.values().as_slice();
-        let (a, _, _) = <T as Simd>::Simd::align(values);
-        // we only choose SIMD path if buffer is aligned to SIMD
-        if a.is_empty() {
-            compute::aggregate::sum_primitive(array).unwrap_or(T::zero())
-        } else if array.null_count() == 0 {
-            sum_float_unaligned_slice(values)
-        } else {
-            sum_float_unaligned(array)
+        unsafe {
+            if T::is_f32() {
+                let f32_arr =
+                    std::mem::transmute::<&PrimitiveArray<T>, &PrimitiveArray<f32>>(array);
+                let sum = float_sum::sum_arr_as_f32(f32_arr);
+                std::mem::transmute_copy::<f32, T>(&sum)
+            } else if T::is_f64() {
+                let f64_arr =
+                    std::mem::transmute::<&PrimitiveArray<T>, &PrimitiveArray<f64>>(array);
+                let sum = float_sum::sum_arr_as_f64(f64_arr);
+                std::mem::transmute_copy::<f64, T>(&sum)
+            } else {
+                unreachable!("only supported float types are f32 and f64");
+            }
         }
     } else {
         compute::aggregate::sum_primitive(array).unwrap_or(T::zero())
@@ -86,142 +75,127 @@ where
 impl<T> ChunkAgg<T::Native> for ChunkedArray<T>
 where
     T: PolarsNumericType,
-    <T::Native as Simd>::Simd: Add<Output = <T::Native as Simd>::Simd>
-        + compute::aggregate::Sum<T::Native>
-        + compute::aggregate::SimdOrd<T::Native>,
+    PrimitiveArray<T::Native>: for<'a> MinMaxKernel<Scalar<'a> = T::Native>,
+    <T::Native as Simd>::Simd:
+        Add<Output = <T::Native as Simd>::Simd> + compute::aggregate::Sum<T::Native>,
 {
     fn sum(&self) -> Option<T::Native> {
         Some(
             self.downcast_iter()
-                .map(stable_sum)
+                .map(sum)
                 .fold(T::Native::zero(), |acc, v| acc + v),
         )
     }
 
     fn min(&self) -> Option<T::Native> {
-        if self.is_empty() {
+        if self.null_count() == self.len() {
             return None;
         }
+        // There is at least one non-null value.
         match self.is_sorted_flag() {
             IsSorted::Ascending => {
-                self.first_non_null().and_then(|idx| {
-                    // Safety:
-                    // first_non_null returns in bound index
-                    unsafe { self.get_unchecked(idx) }
-                })
+                let idx = self.first_non_null().unwrap();
+                unsafe { self.get_unchecked(idx) }
             },
             IsSorted::Descending => {
-                self.last_non_null().and_then(|idx| {
-                    // Safety:
-                    // last returns in bound index
-                    unsafe { self.get_unchecked(idx) }
-                })
+                let idx = self.last_non_null().unwrap();
+                unsafe { self.get_unchecked(idx) }
             },
             IsSorted::Not => self
                 .downcast_iter()
-                .filter_map(compute::aggregate::min_primitive)
-                .fold_first_(|acc, v| {
-                    if matches!(compare_fn_nan_max(&acc, &v), Ordering::Less) {
-                        acc
-                    } else {
-                        v
-                    }
-                }),
+                .filter_map(MinMaxKernel::min_ignore_nan_kernel)
+                .reduce(MinMax::min_ignore_nan),
         }
     }
 
     fn max(&self) -> Option<T::Native> {
-        if self.is_empty() {
+        if self.null_count() == self.len() {
             return None;
         }
+        // There is at least one non-null value.
         match self.is_sorted_flag() {
             IsSorted::Ascending => {
-                self.last_non_null().and_then(|idx| {
-                    // Safety:
-                    // first_non_null returns in bound index
-                    unsafe { self.get_unchecked(idx) }
-                })
+                let idx = if T::get_dtype().is_float() {
+                    float_arg_max_sorted_ascending(self)
+                } else {
+                    self.last_non_null().unwrap()
+                };
+
+                unsafe { self.get_unchecked(idx) }
             },
             IsSorted::Descending => {
-                self.first_non_null().and_then(|idx| {
-                    // Safety:
-                    // last returns in bound index
-                    unsafe { self.get_unchecked(idx) }
-                })
+                let idx = if T::get_dtype().is_float() {
+                    float_arg_max_sorted_descending(self)
+                } else {
+                    self.first_non_null().unwrap()
+                };
+
+                unsafe { self.get_unchecked(idx) }
             },
             IsSorted::Not => self
                 .downcast_iter()
-                .filter_map(compute::aggregate::max_primitive)
-                .fold_first_(|acc, v| {
-                    if matches!(compare_fn_nan_min(&acc, &v), Ordering::Greater) {
-                        acc
+                .filter_map(MinMaxKernel::max_ignore_nan_kernel)
+                .reduce(MinMax::max_ignore_nan),
+        }
+    }
+
+    fn min_max(&self) -> Option<(T::Native, T::Native)> {
+        if self.null_count() == self.len() {
+            return None;
+        }
+        // There is at least one non-null value.
+        match self.is_sorted_flag() {
+            IsSorted::Ascending => {
+                let min = unsafe { self.get_unchecked(self.first_non_null().unwrap()) };
+                let max = {
+                    let idx = if T::get_dtype().is_float() {
+                        float_arg_max_sorted_ascending(self)
                     } else {
-                        v
-                    }
+                        self.last_non_null().unwrap()
+                    };
+
+                    unsafe { self.get_unchecked(idx) }
+                };
+                min.zip(max)
+            },
+            IsSorted::Descending => {
+                let min = unsafe { self.get_unchecked(self.last_non_null().unwrap()) };
+                let max = {
+                    let idx = if T::get_dtype().is_float() {
+                        float_arg_max_sorted_descending(self)
+                    } else {
+                        self.first_non_null().unwrap()
+                    };
+
+                    unsafe { self.get_unchecked(idx) }
+                };
+
+                min.zip(max)
+            },
+            IsSorted::Not => self
+                .downcast_iter()
+                .filter_map(MinMaxKernel::min_max_ignore_nan_kernel)
+                .reduce(|(min1, max1), (min2, max2)| {
+                    (
+                        MinMax::min_ignore_nan(min1, min2),
+                        MinMax::max_ignore_nan(max1, max2),
+                    )
                 }),
         }
     }
 
     fn mean(&self) -> Option<f64> {
-        if self.is_empty() || self.null_count() == self.len() {
+        if self.null_count() == self.len() {
             return None;
         }
-        match self.dtype() {
-            DataType::Float64 => {
-                let len = (self.len() - self.null_count()) as f64;
-                self.sum().map(|v| v.to_f64().unwrap() / len)
-            },
-            _ => {
-                let null_count = self.null_count();
-                let len = self.len();
-                match null_count {
-                    nc if nc == len => None,
-                    #[cfg(feature = "simd")]
-                    _ => {
-                        // TODO: investigate if we need a stable mean
-                        // because of SIMD memory locations and associativity.
-                        // similar to sum
-                        let mut sum = 0.0;
-                        for arr in self.downcast_iter() {
-                            sum += polars_arrow::kernels::agg_mean::sum_as_f64(arr);
-                        }
-                        Some(sum / (len - null_count) as f64)
-                    },
-                    #[cfg(not(feature = "simd"))]
-                    _ => {
-                        let mut acc = 0.0;
-                        let len = (len - null_count) as f64;
 
-                        for arr in self.downcast_iter() {
-                            if arr.null_count() > 0 {
-                                for v in arr.into_iter().flatten() {
-                                    // safety
-                                    // all these types can be coerced to f64
-                                    unsafe {
-                                        let val = v.to_f64().unwrap_unchecked();
-                                        acc += val
-                                    }
-                                }
-                            } else {
-                                for v in arr.values().as_slice() {
-                                    // safety
-                                    // all these types can be coerced to f64
-                                    unsafe {
-                                        let val = v.to_f64().unwrap_unchecked();
-                                        acc += val
-                                    }
-                                }
-                            }
-                        }
-                        Some(acc / len)
-                    },
-                }
-            },
-        }
+        let len = (self.len() - self.null_count()) as f64;
+        let sum: f64 = self.downcast_iter().map(float_sum::sum_arr_as_f64).sum();
+        Some(sum / len)
     }
 }
 
-/// Booleans are casted to 1 or 0.
+/// Booleans are cast to 1 or 0.
 impl BooleanChunked {
     pub fn sum(&self) -> Option<IdxSize> {
         Some(if self.is_empty() {
@@ -279,183 +253,173 @@ impl BooleanChunked {
     }
 }
 
-// Needs the same trait bounds as the implementation of ChunkedArray<T> of dyn Series
+// Needs the same trait bounds as the implementation of ChunkedArray<T> of dyn Series.
 impl<T> ChunkAggSeries for ChunkedArray<T>
 where
     T: PolarsNumericType,
-    <T::Native as Simd>::Simd: Add<Output = <T::Native as Simd>::Simd>
-        + compute::aggregate::Sum<T::Native>
-        + compute::aggregate::SimdOrd<T::Native>,
+    PrimitiveArray<T::Native>: for<'a> MinMaxKernel<Scalar<'a> = T::Native>,
+    <T::Native as Simd>::Simd:
+        Add<Output = <T::Native as Simd>::Simd> + compute::aggregate::Sum<T::Native>,
     ChunkedArray<T>: IntoSeries,
 {
-    fn sum_as_series(&self) -> Series {
-        let v = self.sum();
-        let mut ca: ChunkedArray<T> = [v].iter().copied().collect();
-        ca.rename(self.name());
-        ca.into_series()
-    }
-    fn max_as_series(&self) -> Series {
-        let v = self.max();
-        let mut ca: ChunkedArray<T> = [v].iter().copied().collect();
-        ca.rename(self.name());
-        ca.into_series()
-    }
-    fn min_as_series(&self) -> Series {
-        let v = self.min();
-        let mut ca: ChunkedArray<T> = [v].iter().copied().collect();
-        ca.rename(self.name());
-        ca.into_series()
+    fn sum_reduce(&self) -> Scalar {
+        let v: Option<T::Native> = self.sum();
+        Scalar::new(T::get_dtype(), v.into())
     }
 
-    fn prod_as_series(&self) -> Series {
-        let mut prod = None;
-        for opt_v in self.into_iter() {
-            match (prod, opt_v) {
-                (_, None) => return Self::full_null(self.name(), 1).into_series(),
-                (None, Some(v)) => prod = Some(v),
-                (Some(p), Some(v)) => prod = Some(p * v),
+    fn max_reduce(&self) -> Scalar {
+        let v = ChunkAgg::max(self);
+        Scalar::new(T::get_dtype(), v.into())
+    }
+
+    fn min_reduce(&self) -> Scalar {
+        let v = ChunkAgg::min(self);
+        Scalar::new(T::get_dtype(), v.into())
+    }
+
+    fn prod_reduce(&self) -> Scalar {
+        let mut prod = T::Native::one();
+
+        for arr in self.downcast_iter() {
+            for v in arr.into_iter().flatten() {
+                prod = prod * *v
             }
         }
-        Self::from_slice_options(self.name(), &[prod]).into_series()
+        Scalar::new(T::get_dtype(), prod.into())
     }
-}
-
-macro_rules! impl_as_series {
-    ($self:expr, $agg:ident, $ty: ty) => {{
-        let v = $self.$agg();
-        let mut ca: $ty = [v].iter().copied().collect();
-        ca.rename($self.name());
-        ca.into_series()
-    }};
-    ($self:expr, $agg:ident, $arg:expr, $ty: ty) => {{
-        let v = $self.$agg($arg);
-        let mut ca: $ty = [v].iter().copied().collect();
-        ca.rename($self.name());
-        ca.into_series()
-    }};
 }
 
 impl<T> VarAggSeries for ChunkedArray<T>
 where
     T: PolarsIntegerType,
-    <T::Native as Simd>::Simd: Add<Output = <T::Native as Simd>::Simd>
-        + compute::aggregate::Sum<T::Native>
-        + compute::aggregate::SimdOrd<T::Native>,
+    ChunkedArray<T>: ChunkVar,
 {
-    fn var_as_series(&self, ddof: u8) -> Series {
-        impl_as_series!(self, var, ddof, Float64Chunked)
+    fn var_reduce(&self, ddof: u8) -> Scalar {
+        let v = self.var(ddof);
+        Scalar::new(DataType::Float64, v.into())
     }
 
-    fn std_as_series(&self, ddof: u8) -> Series {
-        impl_as_series!(self, std, ddof, Float64Chunked)
+    fn std_reduce(&self, ddof: u8) -> Scalar {
+        let v = self.std(ddof);
+        Scalar::new(DataType::Float64, v.into())
     }
 }
 
 impl VarAggSeries for Float32Chunked {
-    fn var_as_series(&self, ddof: u8) -> Series {
-        impl_as_series!(self, var, ddof, Float32Chunked)
+    fn var_reduce(&self, ddof: u8) -> Scalar {
+        let v = self.var(ddof).map(|v| v as f32);
+        Scalar::new(DataType::Float32, v.into())
     }
 
-    fn std_as_series(&self, ddof: u8) -> Series {
-        impl_as_series!(self, std, ddof, Float32Chunked)
+    fn std_reduce(&self, ddof: u8) -> Scalar {
+        let v = self.std(ddof).map(|v| v as f32);
+        Scalar::new(DataType::Float32, v.into())
     }
 }
 
 impl VarAggSeries for Float64Chunked {
-    fn var_as_series(&self, ddof: u8) -> Series {
-        impl_as_series!(self, var, ddof, Float64Chunked)
+    fn var_reduce(&self, ddof: u8) -> Scalar {
+        let v = self.var(ddof);
+        Scalar::new(DataType::Float64, v.into())
     }
 
-    fn std_as_series(&self, ddof: u8) -> Series {
-        impl_as_series!(self, std, ddof, Float64Chunked)
+    fn std_reduce(&self, ddof: u8) -> Scalar {
+        let v = self.std(ddof);
+        Scalar::new(DataType::Float64, v.into())
     }
-}
-
-macro_rules! impl_quantile_as_series {
-    ($self:expr, $agg:ident, $ty: ty, $qtl:expr, $opt:expr) => {{
-        let v = $self.$agg($qtl, $opt)?;
-        let mut ca: $ty = [v].iter().copied().collect();
-        ca.rename($self.name());
-        Ok(ca.into_series())
-    }};
 }
 
 impl<T> QuantileAggSeries for ChunkedArray<T>
 where
     T: PolarsIntegerType,
     T::Native: Ord,
-    <T::Native as Simd>::Simd: Add<Output = <T::Native as Simd>::Simd>
-        + compute::aggregate::Sum<T::Native>
-        + compute::aggregate::SimdOrd<T::Native>,
+    <T::Native as Simd>::Simd:
+        Add<Output = <T::Native as Simd>::Simd> + compute::aggregate::Sum<T::Native>,
 {
-    fn quantile_as_series(
+    fn quantile_reduce(
         &self,
         quantile: f64,
         interpol: QuantileInterpolOptions,
-    ) -> PolarsResult<Series> {
-        impl_quantile_as_series!(self, quantile, Float64Chunked, quantile, interpol)
+    ) -> PolarsResult<Scalar> {
+        let v = self.quantile(quantile, interpol)?;
+        Ok(Scalar::new(DataType::Float64, v.into()))
     }
 
-    fn median_as_series(&self) -> Series {
-        impl_as_series!(self, median, Float64Chunked)
+    fn median_reduce(&self) -> Scalar {
+        let v = self.median();
+        Scalar::new(DataType::Float64, v.into())
     }
 }
 
 impl QuantileAggSeries for Float32Chunked {
-    fn quantile_as_series(
+    fn quantile_reduce(
         &self,
         quantile: f64,
         interpol: QuantileInterpolOptions,
-    ) -> PolarsResult<Series> {
-        impl_quantile_as_series!(self, quantile, Float32Chunked, quantile, interpol)
+    ) -> PolarsResult<Scalar> {
+        let v = self.quantile(quantile, interpol)?;
+        Ok(Scalar::new(DataType::Float32, v.into()))
     }
 
-    fn median_as_series(&self) -> Series {
-        impl_as_series!(self, median, Float32Chunked)
+    fn median_reduce(&self) -> Scalar {
+        let v = self.median();
+        Scalar::new(DataType::Float32, v.into())
     }
 }
 
 impl QuantileAggSeries for Float64Chunked {
-    fn quantile_as_series(
+    fn quantile_reduce(
         &self,
         quantile: f64,
         interpol: QuantileInterpolOptions,
-    ) -> PolarsResult<Series> {
-        impl_quantile_as_series!(self, quantile, Float64Chunked, quantile, interpol)
+    ) -> PolarsResult<Scalar> {
+        let v = self.quantile(quantile, interpol)?;
+        Ok(Scalar::new(DataType::Float64, v.into()))
     }
 
-    fn median_as_series(&self) -> Series {
-        impl_as_series!(self, median, Float64Chunked)
+    fn median_reduce(&self) -> Scalar {
+        let v = self.median();
+        Scalar::new(DataType::Float64, v.into())
     }
 }
 
 impl ChunkAggSeries for BooleanChunked {
-    fn sum_as_series(&self) -> Series {
+    fn sum_reduce(&self) -> Scalar {
         let v = self.sum();
-        Series::new(self.name(), [v])
+        Scalar::new(IDX_DTYPE, v.into())
     }
-    fn max_as_series(&self) -> Series {
+    fn max_reduce(&self) -> Scalar {
         let v = self.max();
-        Series::new(self.name(), [v])
+        Scalar::new(DataType::Boolean, v.into())
     }
-    fn min_as_series(&self) -> Series {
+    fn min_reduce(&self) -> Scalar {
         let v = self.min();
-        Series::new(self.name(), [v])
+        Scalar::new(DataType::Boolean, v.into())
     }
 }
 
-impl Utf8Chunked {
+impl StringChunked {
     pub(crate) fn max_str(&self) -> Option<&str> {
         if self.is_empty() {
             return None;
         }
         match self.is_sorted_flag() {
-            IsSorted::Ascending => self.get(self.len() - 1),
-            IsSorted::Descending => self.get(0),
+            IsSorted::Ascending => {
+                self.last_non_null().and_then(|idx| {
+                    // SAFETY: last_non_null returns in bound index
+                    unsafe { self.get_unchecked(idx) }
+                })
+            },
+            IsSorted::Descending => {
+                self.first_non_null().and_then(|idx| {
+                    // SAFETY: first_non_null returns in bound index
+                    unsafe { self.get_unchecked(idx) }
+                })
+            },
             IsSorted::Not => self
                 .downcast_iter()
-                .filter_map(compute::aggregate::max_string)
-                .fold_first_(|acc, v| if acc > v { acc } else { v }),
+                .filter_map(MinMaxKernel::max_ignore_nan_kernel)
+                .reduce(MinMax::max_ignore_nan),
         }
     }
     pub(crate) fn min_str(&self) -> Option<&str> {
@@ -463,77 +427,172 @@ impl Utf8Chunked {
             return None;
         }
         match self.is_sorted_flag() {
-            IsSorted::Ascending => self.get(0),
-            IsSorted::Descending => self.get(self.len() - 1),
+            IsSorted::Ascending => {
+                self.first_non_null().and_then(|idx| {
+                    // SAFETY: first_non_null returns in bound index
+                    unsafe { self.get_unchecked(idx) }
+                })
+            },
+            IsSorted::Descending => {
+                self.last_non_null().and_then(|idx| {
+                    // SAFETY: last_non_null returns in bound index
+                    unsafe { self.get_unchecked(idx) }
+                })
+            },
             IsSorted::Not => self
                 .downcast_iter()
-                .filter_map(compute::aggregate::min_string)
-                .fold_first_(|acc, v| if acc < v { acc } else { v }),
+                .filter_map(MinMaxKernel::min_ignore_nan_kernel)
+                .reduce(MinMax::min_ignore_nan),
         }
     }
 }
 
-impl ChunkAggSeries for Utf8Chunked {
-    fn sum_as_series(&self) -> Series {
-        Utf8Chunked::full_null(self.name(), 1).into_series()
+impl ChunkAggSeries for StringChunked {
+    fn sum_reduce(&self) -> Scalar {
+        Scalar::new(DataType::String, AnyValue::Null)
     }
-    fn max_as_series(&self) -> Series {
-        Series::new(self.name(), &[self.max_str()])
+    fn max_reduce(&self) -> Scalar {
+        let av: AnyValue = self.max_str().into();
+        Scalar::new(DataType::String, av.into_static().unwrap())
     }
-    fn min_as_series(&self) -> Series {
-        Series::new(self.name(), &[self.min_str()])
+    fn min_reduce(&self) -> Scalar {
+        let av: AnyValue = self.min_str().into();
+        Scalar::new(DataType::String, av.into_static().unwrap())
+    }
+}
+
+#[cfg(feature = "dtype-categorical")]
+impl CategoricalChunked {
+    fn min_categorical(&self) -> Option<&str> {
+        if self.is_empty() || self.null_count() == self.len() {
+            return None;
+        }
+        if self.uses_lexical_ordering() {
+            // Fast path where all categories are used
+            if self._can_fast_unique() {
+                self.get_rev_map().get_categories().min_ignore_nan_kernel()
+            } else {
+                let rev_map = self.get_rev_map();
+                // SAFETY:
+                // Indices are in bounds
+                self.physical()
+                    .iter()
+                    .flat_map(|opt_el: Option<u32>| {
+                        opt_el.map(|el| unsafe { rev_map.get_unchecked(el) })
+                    })
+                    .min()
+            }
+        } else {
+            // SAFETY:
+            // Indices are in bounds
+            self.physical()
+                .min()
+                .map(|el| unsafe { self.get_rev_map().get_unchecked(el) })
+        }
+    }
+
+    fn max_categorical(&self) -> Option<&str> {
+        if self.is_empty() || self.null_count() == self.len() {
+            return None;
+        }
+        if self.uses_lexical_ordering() {
+            // Fast path where all categories are used
+            if self._can_fast_unique() {
+                self.get_rev_map().get_categories().max_ignore_nan_kernel()
+            } else {
+                let rev_map = self.get_rev_map();
+                // SAFETY:
+                // Indices are in bounds
+                self.physical()
+                    .iter()
+                    .flat_map(|opt_el: Option<u32>| {
+                        opt_el.map(|el| unsafe { rev_map.get_unchecked(el) })
+                    })
+                    .max()
+            }
+        } else {
+            // SAFETY:
+            // Indices are in bounds
+            self.physical()
+                .max()
+                .map(|el| unsafe { self.get_rev_map().get_unchecked(el) })
+        }
+    }
+}
+
+#[cfg(feature = "dtype-categorical")]
+impl ChunkAggSeries for CategoricalChunked {
+    fn min_reduce(&self) -> Scalar {
+        let av: AnyValue = self.min_categorical().into();
+        Scalar::new(DataType::String, av.into_static().unwrap())
+    }
+    fn max_reduce(&self) -> Scalar {
+        let av: AnyValue = self.max_categorical().into();
+        Scalar::new(DataType::String, av.into_static().unwrap())
+    }
+}
+
+impl BinaryChunked {
+    pub(crate) fn max_binary(&self) -> Option<&[u8]> {
+        if self.is_empty() {
+            return None;
+        }
+        match self.is_sorted_flag() {
+            IsSorted::Ascending => {
+                self.last_non_null().and_then(|idx| {
+                    // SAFETY: last_non_null returns in bound index.
+                    unsafe { self.get_unchecked(idx) }
+                })
+            },
+            IsSorted::Descending => {
+                self.first_non_null().and_then(|idx| {
+                    // SAFETY: first_non_null returns in bound index.
+                    unsafe { self.get_unchecked(idx) }
+                })
+            },
+            IsSorted::Not => self
+                .downcast_iter()
+                .filter_map(MinMaxKernel::max_ignore_nan_kernel)
+                .reduce(MinMax::max_ignore_nan),
+        }
+    }
+
+    pub(crate) fn min_binary(&self) -> Option<&[u8]> {
+        if self.is_empty() {
+            return None;
+        }
+        match self.is_sorted_flag() {
+            IsSorted::Ascending => {
+                self.first_non_null().and_then(|idx| {
+                    // SAFETY: first_non_null returns in bound index.
+                    unsafe { self.get_unchecked(idx) }
+                })
+            },
+            IsSorted::Descending => {
+                self.last_non_null().and_then(|idx| {
+                    // SAFETY: last_non_null returns in bound index.
+                    unsafe { self.get_unchecked(idx) }
+                })
+            },
+            IsSorted::Not => self
+                .downcast_iter()
+                .filter_map(MinMaxKernel::min_ignore_nan_kernel)
+                .reduce(MinMax::min_ignore_nan),
+        }
     }
 }
 
 impl ChunkAggSeries for BinaryChunked {
-    fn sum_as_series(&self) -> Series {
-        BinaryChunked::full_null(self.name(), 1).into_series()
+    fn sum_reduce(&self) -> Scalar {
+        unimplemented!()
     }
-    fn max_as_series(&self) -> Series {
-        Series::new(
-            self.name(),
-            &[self
-                .downcast_iter()
-                .filter_map(compute::aggregate::max_binary)
-                .fold_first_(|acc, v| if acc > v { acc } else { v })],
-        )
+    fn max_reduce(&self) -> Scalar {
+        let av: AnyValue = self.max_binary().into();
+        Scalar::new(self.dtype().clone(), av.into_static().unwrap())
     }
-    fn min_as_series(&self) -> Series {
-        Series::new(
-            self.name(),
-            &[self
-                .downcast_iter()
-                .filter_map(compute::aggregate::min_binary)
-                .fold_first_(|acc, v| if acc < v { acc } else { v })],
-        )
-    }
-}
-
-impl ChunkAggSeries for ListChunked {
-    fn sum_as_series(&self) -> Series {
-        ListChunked::full_null_with_dtype(self.name(), 1, &self.inner_dtype()).into_series()
-    }
-    fn max_as_series(&self) -> Series {
-        ListChunked::full_null_with_dtype(self.name(), 1, &self.inner_dtype()).into_series()
-    }
-    fn min_as_series(&self) -> Series {
-        ListChunked::full_null_with_dtype(self.name(), 1, &self.inner_dtype()).into_series()
-    }
-}
-
-#[cfg(feature = "dtype-array")]
-impl ChunkAggSeries for ArrayChunked {
-    fn sum_as_series(&self) -> Series {
-        ArrayChunked::full_null_with_dtype(self.name(), 1, &self.inner_dtype(), self.width())
-            .into_series()
-    }
-    fn max_as_series(&self) -> Series {
-        ArrayChunked::full_null_with_dtype(self.name(), 1, &self.inner_dtype(), self.width())
-            .into_series()
-    }
-    fn min_as_series(&self) -> Series {
-        ArrayChunked::full_null_with_dtype(self.name(), 1, &self.inner_dtype(), self.width())
-            .into_series()
+    fn min_reduce(&self) -> Scalar {
+        let av: AnyValue = self.min_binary().into();
+        Scalar::new(self.dtype().clone(), av.into_static().unwrap())
     }
 }
 
@@ -542,15 +601,13 @@ impl<T: PolarsObject> ChunkAggSeries for ObjectChunked<T> {}
 
 #[cfg(test)]
 mod test {
-    use polars_arrow::prelude::QuantileInterpolOptions;
-
     use crate::prelude::*;
 
     #[test]
     fn test_var() {
-        // validated with numpy
-        // Note that numpy as an argument ddof which influences results. The default is ddof=0
-        // we chose ddof=1, which is standard in statistics
+        // Validated with numpy. Note that numpy uses ddof as an argument which
+        // influences results. The default ddof=0, we chose ddof=1, which is
+        // standard in statistics.
         let ca1 = Int32Chunked::new("", &[5, 8, 9, 5, 0]);
         let ca2 = Int32Chunked::new(
             "",
@@ -626,10 +683,9 @@ mod test {
         assert_eq!(ca.mean().unwrap(), 1.5);
         assert_eq!(
             ca.into_series()
-                .mean_as_series()
-                .f32()
-                .unwrap()
-                .get(0)
+                .mean_reduce()
+                .value()
+                .extract::<f32>()
                 .unwrap(),
             1.5
         );
@@ -637,7 +693,7 @@ mod test {
         let ca = Float32Chunked::full_null("", 3);
         assert_eq!(ca.mean(), None);
         assert_eq!(
-            ca.into_series().mean_as_series().f32().unwrap().get(0),
+            ca.into_series().mean_reduce().value().extract::<f32>(),
             None
         );
     }
@@ -752,7 +808,7 @@ mod test {
         );
         assert_eq!(
             ca.quantile(0.6, QuantileInterpolOptions::Nearest).unwrap(),
-            Some(4.0)
+            Some(3.0)
         );
 
         assert_eq!(
@@ -829,11 +885,11 @@ mod test {
 
         assert_eq!(
             ca.quantile(0.1, QuantileInterpolOptions::Nearest).unwrap(),
-            Some(1.0)
+            Some(2.0)
         );
         assert_eq!(
             ca.quantile(0.9, QuantileInterpolOptions::Nearest).unwrap(),
-            Some(7.0)
+            Some(6.0)
         );
         assert_eq!(
             ca.quantile(0.6, QuantileInterpolOptions::Nearest).unwrap(),
@@ -891,148 +947,5 @@ mod test {
             ca.quantile(0.6, QuantileInterpolOptions::Linear).unwrap(),
             Some(4.6)
         );
-
-        let ca = Float32Chunked::from_slice(
-            "",
-            &[
-                0.166189, 0.166559, 0.168517, 0.169393, 0.175272, 0.233167, 0.238787, 0.266562,
-                0.26903, 0.285792, 0.292801, 0.293429, 0.301706, 0.308534, 0.331489, 0.346095,
-                0.367644, 0.369939, 0.372074, 0.41014, 0.415789, 0.421781, 0.427725, 0.465363,
-                0.500208, 2.621727, 2.803311, 3.868526,
-            ],
-        );
-
-        assert!(
-            (ca.quantile(0.1, QuantileInterpolOptions::Nearest)
-                .unwrap()
-                .unwrap()
-                - 0.168517)
-                .abs()
-                < 0.00001
-        );
-        assert!(
-            (ca.quantile(0.9, QuantileInterpolOptions::Nearest)
-                .unwrap()
-                .unwrap()
-                - 2.621727)
-                .abs()
-                < 0.00001
-        );
-        assert!(
-            (ca.quantile(0.6, QuantileInterpolOptions::Nearest)
-                .unwrap()
-                .unwrap()
-                - 0.367644)
-                .abs()
-                < 0.00001
-        );
-
-        assert!(
-            (ca.quantile(0.1, QuantileInterpolOptions::Lower)
-                .unwrap()
-                .unwrap()
-                - 0.168517)
-                .abs()
-                < 0.00001
-        );
-        assert!(
-            (ca.quantile(0.9, QuantileInterpolOptions::Lower)
-                .unwrap()
-                .unwrap()
-                - 0.500208)
-                .abs()
-                < 0.00001
-        );
-        assert!(
-            (ca.quantile(0.6, QuantileInterpolOptions::Lower)
-                .unwrap()
-                .unwrap()
-                - 0.367644)
-                .abs()
-                < 0.00001
-        );
-
-        assert!(
-            (ca.quantile(0.1, QuantileInterpolOptions::Higher)
-                .unwrap()
-                .unwrap()
-                - 0.169393)
-                .abs()
-                < 0.00001
-        );
-        assert!(
-            (ca.quantile(0.9, QuantileInterpolOptions::Higher)
-                .unwrap()
-                .unwrap()
-                - 2.621727)
-                .abs()
-                < 0.00001
-        );
-        assert!(
-            (ca.quantile(0.6, QuantileInterpolOptions::Higher)
-                .unwrap()
-                .unwrap()
-                - 0.369939)
-                .abs()
-                < 0.00001
-        );
-
-        assert!(
-            (ca.quantile(0.1, QuantileInterpolOptions::Midpoint)
-                .unwrap()
-                .unwrap()
-                - 0.168955)
-                .abs()
-                < 0.0001
-        );
-        assert!(
-            (ca.quantile(0.9, QuantileInterpolOptions::Midpoint)
-                .unwrap()
-                .unwrap()
-                - 1.560967)
-                .abs()
-                < 0.0001
-        );
-        assert!(
-            (ca.quantile(0.6, QuantileInterpolOptions::Midpoint)
-                .unwrap()
-                .unwrap()
-                - 0.368791)
-                .abs()
-                < 0.0001
-        );
-
-        assert!(
-            (ca.quantile(0.1, QuantileInterpolOptions::Linear)
-                .unwrap()
-                .unwrap()
-                - 0.169130)
-                .abs()
-                < 0.0001
-        );
-        assert!(
-            (ca.quantile(0.9, QuantileInterpolOptions::Linear)
-                .unwrap()
-                .unwrap()
-                - 1.136664)
-                .abs()
-                < 0.0001
-        );
-        assert!(
-            (ca.quantile(0.6, QuantileInterpolOptions::Linear)
-                .unwrap()
-                .unwrap()
-                - 0.368103)
-                .abs()
-                < 0.0001
-        );
-    }
-
-    #[test]
-    fn test_median_floats() {
-        let a = Series::new("a", &[1.0f64, 2.0, 3.0]);
-        let expected = Series::new("a", [2.0f64]);
-        assert!(a.median_as_series().series_equal_missing(&expected));
-        assert_eq!(a.median(), Some(2.0f64))
     }
 }

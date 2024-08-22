@@ -1,25 +1,24 @@
+#[cfg(feature = "cse")]
 mod hash;
 mod schema;
+mod utils;
 
-use std::sync::Arc;
+use std::hash::{Hash, Hasher};
 
-use polars_arrow::prelude::QuantileInterpolOptions;
-use polars_core::frame::groupby::GroupByMethod;
+#[cfg(feature = "cse")]
+pub(super) use hash::traverse_and_hash_aexpr;
 use polars_core::prelude::*;
 use polars_core::utils::{get_time_units, try_get_supertype};
 use polars_utils::arena::{Arena, Node};
 use strum_macros::IntoStaticStr;
+pub use utils::*;
 
-use crate::dsl::function_expr::FunctionExpr;
-#[cfg(feature = "cse")]
-use crate::logical_plan::visitor::AexprNode;
+use crate::constants::LEN;
 use crate::logical_plan::Context;
-use crate::prelude::aexpr::NodeInputs::Single;
-use crate::prelude::names::COUNT;
 use crate::prelude::*;
 
 #[derive(Clone, Debug, IntoStaticStr)]
-pub enum AAggExpr {
+pub enum IRAggExpr {
     Min {
         input: Node,
         propagate_nans: bool,
@@ -40,15 +39,29 @@ pub enum AAggExpr {
         interpol: QuantileInterpolOptions,
     },
     Sum(Node),
-    Count(Node),
+    Count(Node, bool),
     Std(Node, u8),
     Var(Node, u8),
     AggGroups(Node),
 }
 
-impl AAggExpr {
-    pub(super) fn equal_nodes(&self, other: &AAggExpr) -> bool {
-        use AAggExpr::*;
+impl Hash for IRAggExpr {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        std::mem::discriminant(self).hash(state);
+        match self {
+            Self::Min { propagate_nans, .. } | Self::Max { propagate_nans, .. } => {
+                propagate_nans.hash(state)
+            },
+            Self::Quantile { interpol, .. } => interpol.hash(state),
+            Self::Std(_, v) | Self::Var(_, v) => v.hash(state),
+            _ => {},
+        }
+    }
+}
+
+impl IRAggExpr {
+    pub(super) fn equal_nodes(&self, other: &IRAggExpr) -> bool {
+        use IRAggExpr::*;
         match (self, other) {
             (
                 Min {
@@ -74,9 +87,9 @@ impl AAggExpr {
     }
 }
 
-impl From<AAggExpr> for GroupByMethod {
-    fn from(value: AAggExpr) -> Self {
-        use AAggExpr::*;
+impl From<IRAggExpr> for GroupByMethod {
+    fn from(value: IRAggExpr) -> Self {
+        use IRAggExpr::*;
         match value {
             Min { propagate_nans, .. } => {
                 if propagate_nans {
@@ -99,7 +112,7 @@ impl From<AAggExpr> for GroupByMethod {
             Mean(_) => GroupByMethod::Mean,
             Implode(_) => GroupByMethod::Implode,
             Sum(_) => GroupByMethod::Sum,
-            Count(_) => GroupByMethod::Count,
+            Count(_, include_nulls) => GroupByMethod::Count { include_nulls },
             Std(_, ddof) => GroupByMethod::Std(ddof),
             Var(_, ddof) => GroupByMethod::Var(ddof),
             AggGroups(_) => GroupByMethod::Groups,
@@ -108,12 +121,12 @@ impl From<AAggExpr> for GroupByMethod {
     }
 }
 
-// AExpr representation of Nodes which are allocated in an Arena
+/// IR expression node that is allocated in an [`Arena`][polars_utils::arena::Arena].
 #[derive(Clone, Debug, Default)]
 pub enum AExpr {
     Explode(Node),
-    Alias(Node, Arc<str>),
-    Column(Arc<str>),
+    Alias(Node, ColumnName),
+    Column(ColumnName),
     Literal(LiteralValue),
     BinaryExpr {
         left: Node,
@@ -129,34 +142,38 @@ pub enum AExpr {
         expr: Node,
         options: SortOptions,
     },
-    Take {
+    Gather {
         expr: Node,
         idx: Node,
+        returns_scalar: bool,
     },
     SortBy {
         expr: Node,
         by: Vec<Node>,
-        descending: Vec<bool>,
+        sort_options: SortMultipleOptions,
     },
     Filter {
         input: Node,
         by: Node,
     },
-    Agg(AAggExpr),
+    Agg(IRAggExpr),
     Ternary {
         predicate: Node,
         truthy: Node,
         falsy: Node,
     },
     AnonymousFunction {
-        input: Vec<Node>,
+        input: Vec<ExprIR>,
         function: SpecialEq<Arc<dyn SeriesUdf>>,
         output_type: GetOutput,
         options: FunctionOptions,
     },
     Function {
-        /// function arguments
-        input: Vec<Node>,
+        /// Function arguments
+        /// Some functions rely on aliases,
+        /// for instance assignment of struct fields.
+        /// Therefore we need `[ExprIr]`.
+        input: Vec<ExprIR>,
         /// function to apply
         function: FunctionExpr,
         options: FunctionOptions,
@@ -164,8 +181,7 @@ pub enum AExpr {
     Window {
         function: Node,
         partition_by: Vec<Node>,
-        order_by: Option<Node>,
-        options: WindowOptions,
+        options: WindowType,
     },
     #[default]
     Wildcard,
@@ -174,26 +190,14 @@ pub enum AExpr {
         offset: Node,
         length: Node,
     },
-    Count,
+    Len,
     Nth(i64),
 }
 
 impl AExpr {
     #[cfg(feature = "cse")]
-    pub(crate) fn is_equal(l: Node, r: Node, arena: &Arena<AExpr>) -> bool {
-        let arena = arena as *const Arena<AExpr> as *mut Arena<AExpr>;
-        // safety: we can pass a *mut pointer
-        // the equality operation will not access mutable
-        unsafe {
-            let ae_node_l = AexprNode::from_raw(l, arena);
-            let ae_node_r = AexprNode::from_raw(r, arena);
-            ae_node_l == ae_node_r
-        }
-    }
-
-    #[cfg(feature = "cse")]
     pub(crate) fn col(name: &str) -> Self {
-        AExpr::Column(Arc::from(name))
+        AExpr::Column(ColumnName::from(name))
     }
     /// Any expression that is sensitive to the number of elements in a group
     /// - Aggregations
@@ -210,12 +214,12 @@ impl AExpr {
             | SortBy { .. }
             | Agg { .. }
             | Window { .. }
-            | Count
+            | Len
             | Slice { .. }
-            | Take { .. }
+            | Gather { .. }
             | Nth(_)
              => true,
-            | Alias(_, _)
+            Alias(_, _)
             | Explode(_)
             | Column(_)
             | Literal(_)
@@ -241,49 +245,50 @@ impl AExpr {
     }
 
     /// Push nodes at this level to a pre-allocated stack
-    pub(crate) fn nodes(&self, container: &mut Vec<Node>) {
+    pub(crate) fn nodes<C: PushNode>(&self, container: &mut C) {
         use AExpr::*;
 
         match self {
-            Nth(_) | Column(_) | Literal(_) | Wildcard | Count => {},
-            Alias(e, _) => container.push(*e),
+            Nth(_) | Column(_) | Literal(_) | Wildcard | Len => {},
+            Alias(e, _) => container.push_node(*e),
             BinaryExpr { left, op: _, right } => {
                 // reverse order so that left is popped first
-                container.push(*right);
-                container.push(*left);
+                container.push_node(*right);
+                container.push_node(*left);
             },
-            Cast { expr, .. } => container.push(*expr),
-            Sort { expr, .. } => container.push(*expr),
-            Take { expr, idx } => {
-                container.push(*idx);
+            Cast { expr, .. } => container.push_node(*expr),
+            Sort { expr, .. } => container.push_node(*expr),
+            Gather { expr, idx, .. } => {
+                container.push_node(*idx);
                 // latest, so that it is popped first
-                container.push(*expr);
+                container.push_node(*expr);
             },
             SortBy { expr, by, .. } => {
                 for node in by {
-                    container.push(*node)
+                    container.push_node(*node)
                 }
                 // latest, so that it is popped first
-                container.push(*expr);
+                container.push_node(*expr);
             },
             Filter { input, by } => {
-                container.push(*by);
+                container.push_node(*by);
                 // latest, so that it is popped first
-                container.push(*input);
+                container.push_node(*input);
             },
-            Agg(agg_e) => {
-                let node = agg_e.get_input().first();
-                container.push(node);
+            Agg(agg_e) => match agg_e.get_input() {
+                NodeInputs::Single(node) => container.push_node(node),
+                NodeInputs::Many(nodes) => container.extend_from_slice(&nodes),
+                NodeInputs::Leaf => {},
             },
             Ternary {
                 truthy,
                 falsy,
                 predicate,
             } => {
-                container.push(*predicate);
-                container.push(*falsy);
+                container.push_node(*predicate);
+                container.push_node(*falsy);
                 // latest, so that it is popped first
-                container.push(*truthy);
+                container.push_node(*truthy);
             },
             AnonymousFunction { input, .. } | Function { input, .. } =>
             // we iterate in reverse order, so that the lhs is popped first and will be found
@@ -292,34 +297,29 @@ impl AExpr {
                 input
                     .iter()
                     .rev()
-                    .copied()
-                    .for_each(|node| container.push(node))
+                    .for_each(|e| container.push_node(e.node()))
             },
-            Explode(e) => container.push(*e),
+            Explode(e) => container.push_node(*e),
             Window {
                 function,
                 partition_by,
-                order_by,
                 options: _,
             } => {
                 for e in partition_by.iter().rev() {
-                    container.push(*e);
-                }
-                if let Some(e) = order_by {
-                    container.push(*e);
+                    container.push_node(*e);
                 }
                 // latest so that it is popped first
-                container.push(*function);
+                container.push_node(*function);
             },
             Slice {
                 input,
                 offset,
                 length,
             } => {
-                container.push(*length);
-                container.push(*offset);
+                container.push_node(*length);
+                container.push_node(*offset);
                 // latest so that it is popped first
-                container.push(*input);
+                container.push_node(*input);
             },
         }
     }
@@ -327,16 +327,16 @@ impl AExpr {
     pub(crate) fn replace_inputs(mut self, inputs: &[Node]) -> Self {
         use AExpr::*;
         let input = match &mut self {
-            Column(_) | Literal(_) | Wildcard | Count | Nth(_) => return self,
+            Column(_) | Literal(_) | Wildcard | Len | Nth(_) => return self,
             Alias(input, _) => input,
             Cast { expr, .. } => expr,
-            Explode(input) | Slice { input, .. } => input,
+            Explode(input) => input,
             BinaryExpr { left, right, .. } => {
                 *right = inputs[0];
                 *left = inputs[1];
                 return self;
             },
-            Take { expr, idx } => {
+            Gather { expr, idx, .. } => {
                 *idx = inputs[0];
                 *expr = inputs[1];
                 return self;
@@ -354,7 +354,15 @@ impl AExpr {
                 return self;
             },
             Agg(a) => {
-                a.set_input(inputs[0]);
+                match a {
+                    IRAggExpr::Quantile { expr, quantile, .. } => {
+                        *expr = inputs[0];
+                        *quantile = inputs[1];
+                    },
+                    _ => {
+                        a.set_input(inputs[0]);
+                    },
+                }
                 return self;
             },
             Ternary {
@@ -368,21 +376,33 @@ impl AExpr {
                 return self;
             },
             AnonymousFunction { input, .. } | Function { input, .. } => {
-                input.clear();
-                input.extend(inputs.iter().rev().copied());
+                debug_assert_eq!(input.len(), inputs.len());
+
+                // Assign in reverse order as that was the order in which nodes were extracted.
+                for (e, node) in input.iter_mut().zip(inputs.iter().rev()) {
+                    e.set_node(*node);
+                }
+                return self;
+            },
+            Slice {
+                input,
+                offset,
+                length,
+            } => {
+                *length = inputs[0];
+                *offset = inputs[1];
+                *input = inputs[2];
                 return self;
             },
             Window {
                 function,
                 partition_by,
-                order_by,
                 ..
             } => {
                 *function = *inputs.last().unwrap();
                 partition_by.clear();
                 partition_by.extend_from_slice(&inputs[..inputs.len() - 1]);
 
-                assert!(order_by.is_none());
                 return self;
             },
         };
@@ -393,14 +413,15 @@ impl AExpr {
     pub(crate) fn is_leaf(&self) -> bool {
         matches!(
             self,
-            AExpr::Column(_) | AExpr::Literal(_) | AExpr::Count | AExpr::Nth(_)
+            AExpr::Column(_) | AExpr::Literal(_) | AExpr::Len | AExpr::Nth(_)
         )
     }
 }
 
-impl AAggExpr {
+impl IRAggExpr {
     pub fn get_input(&self) -> NodeInputs {
-        use AAggExpr::*;
+        use IRAggExpr::*;
+        use NodeInputs::*;
         match self {
             Min { input, .. } => Single(*input),
             Max { input, .. } => Single(*input),
@@ -410,16 +431,16 @@ impl AAggExpr {
             Last(input) => Single(*input),
             Mean(input) => Single(*input),
             Implode(input) => Single(*input),
-            Quantile { expr, .. } => Single(*expr),
+            Quantile { expr, quantile, .. } => Many(vec![*expr, *quantile]),
             Sum(input) => Single(*input),
-            Count(input) => Single(*input),
+            Count(input, _) => Single(*input),
             Std(input, _) => Single(*input),
             Var(input, _) => Single(*input),
             AggGroups(input) => Single(*input),
         }
     }
     pub fn set_input(&mut self, input: Node) {
-        use AAggExpr::*;
+        use IRAggExpr::*;
         let node = match self {
             Min { input, .. } => input,
             Max { input, .. } => input,
@@ -431,7 +452,7 @@ impl AAggExpr {
             Implode(input) => input,
             Quantile { expr, .. } => expr,
             Sum(input) => input,
-            Count(input) => input,
+            Count(input, _) => input,
             Std(input, _) => input,
             Var(input, _) => input,
             AggGroups(input) => input,
@@ -449,7 +470,7 @@ pub enum NodeInputs {
 impl NodeInputs {
     pub fn first(&self) -> Node {
         match self {
-            Single(node) => *node,
+            NodeInputs::Single(node) => *node,
             NodeInputs::Many(nodes) => nodes[0],
             NodeInputs::Leaf => panic!(),
         }

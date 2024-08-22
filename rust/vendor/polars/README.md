@@ -1,11 +1,11 @@
 <h1 align="center">
-  <img src="https://raw.githubusercontent.com/pola-rs/polars-static/master/logos/polars_github_logo_rect_dark_name.svg">
+  <img src="https://raw.githubusercontent.com/pola-rs/polars-static/master/banner/polars_github_banner.svg" alt="Polars logo">
   <br>
 </h1>
 
 <div align="center">
   <a href="https://crates.io/crates/polars">
-    <img src="https://img.shields.io/crates/v/polars.svg"/>
+    <img src="https://img.shields.io/crates/v/polars.svg" alt="crates.io Latest Release"/>
   </a>
   <a href="https://pypi.org/project/polars/">
     <img src="https://img.shields.io/pypi/v/polars.svg" alt="PyPi Latest Release"/>
@@ -23,13 +23,13 @@
 
 <p align="center">
   <b>Documentation</b>:
-  <a href="https://pola-rs.github.io/polars/py-polars/html/reference/index.html">Python</a>
+  <a href="https://docs.pola.rs/py-polars/html/reference/index.html">Python</a>
   -
   <a href="https://docs.rs/polars/latest/polars/">Rust</a>
   -
   <a href="https://pola-rs.github.io/nodejs-polars/index.html">Node.js</a>
   -
-  <a href="https://rpolars.github.io/index.html">R</a>
+  <a href="https://pola-rs.github.io/r-polars/index.html">R</a>
   |
   <b>StackOverflow</b>:
   <a href="https://stackoverflow.com/questions/tagged/python-polars">Python</a>
@@ -40,12 +40,12 @@
   -
   <a href="https://stackoverflow.com/questions/tagged/r-polars">R</a>
   |
-  <a href="https://pola-rs.github.io/polars-book/">User Guide</a>
+  <a href="https://docs.pola.rs/">User guide</a>
   |
   <a href="https://discord.gg/4UfP5cfBE7">Discord</a>
 </p>
 
-## Polars: Blazingly fast DataFrames in Rust, Python, Node.js, R and SQL
+## Polars: Blazingly fast DataFrames in Rust, Python, Node.js, R, and SQL
 
 Polars is a DataFrame interface on top of an OLAP Query Engine implemented in Rust using
 [Apache Arrow Columnar Format](https://arrow.apache.org/docs/format/Columnar.html) as the memory model.
@@ -55,10 +55,10 @@ Polars is a DataFrame interface on top of an OLAP Query Engine implemented in Ru
 - SIMD
 - Query optimization
 - Powerful expression API
-- Hybrid Streaming (larger than RAM datasets)
+- Hybrid Streaming (larger-than-RAM datasets)
 - Rust | Python | NodeJS | R | ...
 
-To learn more, read the [User Guide](https://pola-rs.github.io/polars-book/).
+To learn more, read the [user guide](https://docs.pola.rs/).
 
 ## Python
 
@@ -102,20 +102,18 @@ shape: (5, 8)
 ## SQL
 
 ```python
->>> # create a sql context
->>> context = pl.SQLContext()
->>> # register a table
->>> table = pl.scan_ipc("file.arrow")
->>> context.register("my_table", table)
->>> # the query we want to run
+>>> df = pl.scan_ipc("file.arrow")
+>>> # create a SQL context, registering the frame as a table
+>>> sql = pl.SQLContext(my_table=df)
+>>> # create a SQL query to execute
 >>> query = """
-... SELECT sum(v1) as sum_v1, min(v2) as min_v2 FROM my_table
-... WHERE id1 = 'id016'
-... LIMIT 10
+...   SELECT sum(v1) as sum_v1, min(v2) as min_v2 FROM my_table
+...   WHERE id1 = 'id016'
+...   LIMIT 10
 ... """
 >>> ## OPTION 1
->>> # run query to materialization
->>> context.query(query)
+>>> # run the query, materializing as a DataFrame
+>>> sql.execute(query, eager=True)
  shape: (1, 2)
  ┌────────┬────────┐
  │ sum_v1 ┆ min_v2 │
@@ -125,20 +123,20 @@ shape: (5, 8)
  │ 298268 ┆ 1      │
  └────────┴────────┘
 >>> ## OPTION 2
->>> # Don't materialize the query, but return as LazyFrame
->>> # and continue in python
->>> lf = context.execute(query)
+>>> # run the query but don't immediately materialize the result.
+>>> # this returns a LazyFrame that you can continue to operate on.
+>>> lf = sql.execute(query)
 >>> (lf.join(other_table)
-...      .groupby("foo")
+...      .group_by("foo")
 ...      .agg(
 ...     pl.col("sum_v1").count()
 ... ).collect())
 ```
 
-SQL commands can also be ran directly from your terminal using the Polars CLI:
+SQL commands can also be run directly from your terminal using the Polars CLI:
 
 ```bash
-# run an inline sql query
+# run an inline SQL query
 > polars -c "SELECT sum(v1) as sum_v1, min(v2) as min_v2 FROM read_ipc('file.arrow') WHERE id1 = 'id016' LIMIT 10"
 
 # run interactively
@@ -155,11 +153,7 @@ Refer to the [Polars CLI repository](https://github.com/pola-rs/polars-cli) for 
 
 ### Blazingly fast
 
-Polars is very fast. In fact, it is one of the best performing solutions available.
-See the results in [DuckDB's db-benchmark](https://duckdblabs.github.io/db-benchmark/).
-
-In the [TPCH benchmarks](https://www.pola.rs/benchmarks.html) polars is orders of magnitudes faster than pandas, dask, modin and vaex
-on full queries (including IO).
+Polars is very fast. In fact, it is one of the best performing solutions available. See the [TPC-H benchmarks](https://www.pola.rs/benchmarks.html) results.
 
 ### Lightweight
 
@@ -169,18 +163,18 @@ Polars is also very lightweight. It comes with zero required dependencies, and t
 - numpy: 104ms
 - pandas: 520ms
 
-### Handles larger than RAM data
+### Handles larger-than-RAM data
 
-If you have data that does not fit into memory, polars lazy is able to process your query (or parts of your query) in a
-streaming fashion, this drastically reduces memory requirements so you might be able to process your 250GB dataset on your
-laptop. Collect with `collect(streaming=True)` to run the query streaming. (This might be a little slower, but
-it is still very fast!)
+If you have data that does not fit into memory, Polars' query engine is able to process your query (or parts of your query) in a streaming fashion.
+This drastically reduces memory requirements, so you might be able to process your 250GB dataset on your laptop.
+Collect with `collect(streaming=True)` to run the query streaming.
+(This might be a little slower, but it is still very fast!)
 
 ## Setup
 
 ### Python
 
-Install the latest polars version with:
+Install the latest Polars version with:
 
 ```sh
 pip install polars
@@ -192,43 +186,42 @@ Install Polars with all optional dependencies.
 
 ```sh
 pip install 'polars[all]'
-pip install 'polars[numpy,pandas,pyarrow]'  # install a subset of all optional dependencies
 ```
 
-You can also install the dependencies directly.
+You can also install a subset of all optional dependencies.
 
-| Tag        | Description                                                                  |
-| ---------- | ---------------------------------------------------------------------------- |
-| **all**    | Install all optional dependencies (all of the following)                     |
-| pandas     | Install with Pandas for converting data to and from Pandas Dataframes/Series |
-| numpy      | Install with numpy for converting data to and from numpy arrays              |
-| pyarrow    | Reading data formats using PyArrow                                           |
-| fsspec     | Support for reading from remote file systems                                 |
-| connectorx | Support for reading from SQL databases                                       |
-| xlsx2csv   | Support for reading from Excel files                                         |
-| deltalake  | Support for reading from Delta Lake Tables                                   |
-| timezone   | Timezone support, only needed if are on Python<3.9 or you are on Windows     |
+```sh
+pip install 'polars[numpy,pandas,pyarrow]'
+```
 
-Releases happen quite often (weekly / every few days) at the moment, so updating polars regularly to get the latest bugfixes / features might not be a bad idea.
+See the [User Guide](https://docs.pola.rs/user-guide/installation/#feature-flags) for more details on optional dependencies
+
+To see the current Polars version and a full list of its optional dependencies, run:
+
+```python
+pl.show_versions()
+```
+
+Releases happen quite often (weekly / every few days) at the moment, so updating Polars regularly to get the latest bugfixes / features might not be a bad idea.
 
 ### Rust
 
-You can take latest release from `crates.io`, or if you want to use the latest features / performance improvements
-point to the `main` branch of this repo.
+You can take latest release from `crates.io`, or if you want to use the latest features / performance
+improvements point to the `main` branch of this repo.
 
 ```toml
 polars = { git = "https://github.com/pola-rs/polars", rev = "<optional git tag>" }
 ```
 
-Required Rust version `>=1.62`
+Requires Rust version `>=1.71`.
 
 ## Contributing
 
-Want to contribute? Read our [contribution guideline](./CONTRIBUTING.md).
+Want to contribute? Read our [contributing guide](https://docs.pola.rs/development/contributing/).
 
-## Python: compile polars from source
+## Python: compile Polars from source
 
-If you want a bleeding edge release or maximal performance you should compile **polars** from source.
+If you want a bleeding edge release or maximal performance you should compile Polars from source.
 
 This can be done by going through the following steps in sequence:
 
@@ -247,30 +240,25 @@ Note that the Rust crate implementing the Python bindings is called `py-polars` 
 Rust crate `polars` itself. However, both the Python package and the Python module are named `polars`, so you
 can `pip install polars` and `import polars`.
 
-## Use custom Rust function in python?
+## Using custom Rust functions in Python
 
-Extending polars with UDFs compiled in Rust is easy. We expose pyo3 extensions for `DataFrame` and `Series`
+Extending Polars with UDFs compiled in Rust is easy. We expose PyO3 extensions for `DataFrame` and `Series`
 data structures. See more in https://github.com/pola-rs/pyo3-polars.
 
 ## Going big...
 
-Do you expect more than `2^32` ~4,2 billion rows? Compile polars with the `bigidx` feature flag.
+Do you expect more than 2^32 (~4.2 billion) rows? Compile Polars with the `bigidx` feature
+flag or, for Python users, install `pip install polars-u64-idx`.
 
-Or for python users install `pip install polars-u64-idx`.
-
-Don't use this unless you hit the row boundary as the default polars is faster and consumes less memory.
+Don't use this unless you hit the row boundary as the default build of Polars is faster and consumes less memory.
 
 ## Legacy
 
-Do you want polars to run on an old CPU (e.g. dating from before 2011)? Install `pip install polars-lts-cpu`. This polars project is
-compiled without [avx](https://en.wikipedia.org/wiki/Advanced_Vector_Extensions) target features.
-
-## Acknowledgements
-
-Development of Polars is proudly powered by
-
-[![Xomnia](https://raw.githubusercontent.com/pola-rs/polars-static/master/sponsors/xomnia.png)](https://www.xomnia.com/)
+Do you want Polars to run on an old CPU (e.g. dating from before 2011), or on an `x86-64` build
+of Python on Apple Silicon under Rosetta? Install `pip install polars-lts-cpu`. This version of
+Polars is compiled without [AVX](https://en.wikipedia.org/wiki/Advanced_Vector_Extensions) target
+features.
 
 ## Sponsors
 
-[<img src="https://raw.githubusercontent.com/pola-rs/polars-static/master/sponsors/xomnia.png" height="40" />](https://www.xomnia.com/) &emsp; [<img src="https://www.jetbrains.com/company/brand/img/jetbrains_logo.png" height="50" />](https://www.jetbrains.com)
+[<img src="https://www.jetbrains.com/company/brand/img/jetbrains_logo.png" height="50" alt="JetBrains logo" />](https://www.jetbrains.com)

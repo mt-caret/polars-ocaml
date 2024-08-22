@@ -12,12 +12,9 @@
 [package]
 edition = "2018"
 name = "enum_dispatch"
-version = "0.3.12"
+version = "0.3.13"
 authors = ["Anton Lazarev <https://antonok.com>"]
-exclude = [
-    "benches",
-    "tests",
-]
+exclude = ["benches"]
 description = "Near drop-in replacement for dynamic-dispatched method calls with up to 10x the speed"
 readme = "README.md"
 keywords = [

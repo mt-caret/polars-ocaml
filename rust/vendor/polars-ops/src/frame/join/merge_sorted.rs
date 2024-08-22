@@ -1,4 +1,4 @@
-use polars_arrow::utils::{CustomIterTools, FromTrustedLenIterator};
+use arrow::legacy::utils::{CustomIterTools, FromTrustedLenIterator};
 use polars_core::prelude::*;
 use polars_core::with_match_physical_numeric_polars_type;
 
@@ -10,7 +10,7 @@ pub fn _merge_sorted_dfs(
     check_schema: bool,
 ) -> PolarsResult<DataFrame> {
     if check_schema {
-        left.frame_equal_schema(right)?;
+        left.schema_equal(right)?;
     }
     let dtype_lhs = left_s.dtype();
     let dtype_rhs = right_s.dtype();
@@ -19,6 +19,13 @@ pub fn _merge_sorted_dfs(
         dtype_lhs == dtype_rhs,
         ComputeError: "merge-sort datatype mismatch: {} != {}", dtype_lhs, dtype_rhs
     );
+
+    // If one frame is empty, we can return the other immediately.
+    if right_s.is_empty() {
+        return Ok(left.clone());
+    } else if left_s.is_empty() {
+        return Ok(right.clone());
+    }
 
     let merge_indicator = series_to_merge_indicator(left_s, right_s);
     let new_columns = left
@@ -36,7 +43,7 @@ pub fn _merge_sorted_dfs(
         })
         .collect();
 
-    Ok(DataFrame::new_no_checks(new_columns))
+    Ok(unsafe { DataFrame::new_no_checks(new_columns) })
 }
 
 fn merge_series(lhs: &Series, rhs: &Series, merge_indicator: &[bool]) -> Series {
@@ -48,14 +55,14 @@ fn merge_series(lhs: &Series, rhs: &Series, merge_indicator: &[bool]) -> Series 
 
             merge_ca(lhs, rhs, merge_indicator).into_series()
         },
-        Utf8 => {
+        String => {
             // dispatch via binary
             let lhs = lhs.cast(&Binary).unwrap();
             let rhs = rhs.cast(&Binary).unwrap();
             let lhs = lhs.binary().unwrap();
             let rhs = rhs.binary().unwrap();
             let out = merge_ca(lhs, rhs, merge_indicator);
-            unsafe { out.cast_unchecked(&Utf8).unwrap() }
+            unsafe { out.cast_unchecked(&String).unwrap() }
         },
         Binary => {
             let lhs = lhs.binary().unwrap();
@@ -113,7 +120,7 @@ where
         }
     });
 
-    // Safety: length is correct
+    // SAFETY: length is correct
     unsafe { iter.trust_my_length(total_len).collect_trusted() }
 }
 
@@ -127,9 +134,9 @@ fn series_to_merge_indicator(lhs: &Series, rhs: &Series) -> Vec<bool> {
             let rhs = rhs_s.bool().unwrap();
             get_merge_indicator(lhs.into_iter(), rhs.into_iter())
         },
-        DataType::Utf8 => {
-            let lhs = lhs_s.utf8().unwrap();
-            let rhs = rhs_s.utf8().unwrap();
+        DataType::String => {
+            let lhs = lhs_s.str().unwrap();
+            let rhs = rhs_s.str().unwrap();
 
             get_merge_indicator(lhs.into_iter(), rhs.into_iter())
         },
@@ -175,8 +182,6 @@ where
     for a in &mut a_iter {
         current_a = a;
         if a <= current_b {
-            // safety
-            // we pre-allocated enough
             out.push(A_INDICATOR);
             continue;
         }

@@ -1,5 +1,3 @@
-#![feature(stdsimd)]
-
 use argminmax::ArgMinMax;
 use codspeed_criterion_compat::*;
 use dev_utils::{config, utils};
@@ -12,7 +10,7 @@ use argminmax::simd::{SIMDArgMinMax, NEON};
 
 fn argminmax_u32_random_array_long(c: &mut Criterion) {
     let n = config::ARRAY_LENGTH_LONG;
-    let data: &[u32] = &utils::get_random_array::<u32>(n, u32::MIN, u32::MAX);
+    let data: &[u32] = &utils::SampleUniformFullRange::get_random_array(n);
     c.bench_function("scalar_u32_argminmax", |b| {
         b.iter(|| SCALAR::argminmax(black_box(data)))
     });

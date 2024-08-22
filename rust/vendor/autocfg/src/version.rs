@@ -1,4 +1,3 @@
-use std::path::Path;
 use std::process::Command;
 use std::str;
 
@@ -22,9 +21,9 @@ impl Version {
         }
     }
 
-    pub fn from_rustc(rustc: &Path) -> Result<Self, Error> {
+    pub fn from_command(command: &mut Command) -> Result<Self, Error> {
         // Get rustc's verbose version
-        let output = try!(Command::new(rustc)
+        let output = try!(command
             .args(&["--version", "--verbose"])
             .output()
             .map_err(error::from_io));
@@ -47,9 +46,15 @@ impl Version {
 
         // Split the version into semver components.
         let mut iter = version.splitn(3, '.');
-        let major = try!(iter.next().ok_or(error::from_str("missing major version")));
-        let minor = try!(iter.next().ok_or(error::from_str("missing minor version")));
-        let patch = try!(iter.next().ok_or(error::from_str("missing patch version")));
+        let major = try!(iter
+            .next()
+            .ok_or_else(|| error::from_str("missing major version")));
+        let minor = try!(iter
+            .next()
+            .ok_or_else(|| error::from_str("missing minor version")));
+        let patch = try!(iter
+            .next()
+            .ok_or_else(|| error::from_str("missing patch version")));
 
         Ok(Version::new(
             try!(major.parse().map_err(error::from_num)),

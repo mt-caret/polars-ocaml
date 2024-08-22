@@ -8,6 +8,7 @@ use std::string::String;
 // make sure to add it to this list as well.
 const ALLOWED_CFGS: &'static [&'static str] = &[
     "emscripten_new_stat_abi",
+    "espidf_time64",
     "freebsd10",
     "freebsd11",
     "freebsd12",
@@ -34,7 +35,7 @@ const ALLOWED_CFGS: &'static [&'static str] = &[
 
 // Extra values to allow for check-cfg.
 const CHECK_CFG_EXTRA: &'static [(&'static str, &'static [&'static str])] = &[
-    ("target_os", &["switch", "aix", "ohos", "hurd"]),
+    ("target_os", &["switch", "aix", "ohos", "hurd", "visionos"]),
     ("target_env", &["illumos", "wasi", "aix", "ohos"]),
     (
         "target_arch",
@@ -51,7 +52,7 @@ fn main() {
     let align_cargo_feature = env::var("CARGO_FEATURE_ALIGN").is_ok();
     let const_extern_fn_cargo_feature = env::var("CARGO_FEATURE_CONST_EXTERN_FN").is_ok();
     let libc_ci = env::var("LIBC_CI").is_ok();
-    let libc_check_cfg = env::var("LIBC_CHECK_CFG").is_ok();
+    let libc_check_cfg = env::var("LIBC_CHECK_CFG").is_ok() || rustc_minor_ver >= 80;
 
     if env::var("CARGO_FEATURE_USE_STD").is_ok() {
         println!(

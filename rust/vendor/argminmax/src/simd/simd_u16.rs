@@ -10,16 +10,30 @@
 /// the ordinal integer values and then transform the result back to the original u16
 /// values.
 ///
-#[cfg(any(target_arch = "x86", target_arch = "x86_64", feature = "nightly_simd"))]
+#[cfg(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    all(target_arch = "arm", feature = "nightly_simd"),
+    target_arch = "aarch64",
+))]
 use super::config::SIMDInstructionSet;
-#[cfg(any(target_arch = "x86", target_arch = "x86_64", feature = "nightly_simd"))]
+#[cfg(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    all(target_arch = "arm", feature = "nightly_simd"),
+    target_arch = "aarch64",
+))]
 use super::generic::{impl_SIMDArgMinMax, impl_SIMDInit_Int, SIMDArgMinMax, SIMDInit, SIMDOps};
-#[cfg(any(target_arch = "x86", target_arch = "x86_64", feature = "nightly_simd"))]
+#[cfg(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    all(target_arch = "arm", feature = "nightly_simd"),
+    target_arch = "aarch64",
+))]
 use crate::SCALAR;
 #[cfg(target_arch = "aarch64")]
 use std::arch::aarch64::*;
-#[cfg(target_arch = "arm")]
-#[cfg(feature = "nightly_simd")]
+#[cfg(all(target_arch = "arm", feature = "nightly_simd"))]
 use std::arch::arm::*;
 #[cfg(target_arch = "x86")]
 use std::arch::x86::*;
@@ -27,7 +41,12 @@ use std::arch::x86::*;
 use std::arch::x86_64::*;
 
 /// The dtype-strategy for performing operations on u16 data: (default) Int
-#[cfg(any(target_arch = "x86", target_arch = "x86_64", feature = "nightly_simd"))]
+#[cfg(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    all(target_arch = "arm", feature = "nightly_simd"),
+    target_arch = "aarch64",
+))]
 use super::super::dtype_strategy::Int;
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
@@ -40,8 +59,13 @@ fn _i16ord_to_u16(ord_i16: i16) -> u16 {
     unsafe { std::mem::transmute::<i16, u16>(ord_i16 ^ XOR_VALUE) }
 }
 
-#[cfg(any(target_arch = "x86", target_arch = "x86_64", feature = "nightly_simd"))]
-const MAX_INDEX: usize = i16::MAX as usize;
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+const MAX_INDEX: usize = i16::MAX as usize; // SIMD operations on signed ints
+#[cfg(any(
+    all(target_arch = "arm", feature = "nightly_simd"),
+    target_arch = "aarch64"
+))]
+const MAX_INDEX: usize = u8::MAX as usize; // SIMD operations on unsigned ints
 
 // --------------------------------------- AVX2 ----------------------------------------
 
@@ -463,8 +487,10 @@ mod avx512 {
 
 // --------------------------------------- NEON ----------------------------------------
 
-#[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
-#[cfg(feature = "nightly_simd")]
+#[cfg(any(
+    all(target_arch = "arm", feature = "nightly_simd"),
+    target_arch = "aarch64" // stable for AArch64
+))]
 mod neon {
     use super::super::config::NEON;
     use super::*;
@@ -584,7 +610,7 @@ mod neon {
     target_arch = "x86",
     target_arch = "x86_64",
     all(target_arch = "arm", feature = "nightly_simd"),
-    all(target_arch = "aarch64", feature = "nightly_simd"),
+    target_arch = "aarch64",
 ))]
 #[cfg(test)]
 mod tests {
@@ -609,7 +635,7 @@ mod tests {
     use dev_utils::utils;
 
     fn get_array_u16(n: usize) -> Vec<u16> {
-        utils::get_random_array(n, u16::MIN, u16::MAX)
+        utils::SampleUniformFullRange::get_random_array(n)
     }
 
     // The scalar implementation

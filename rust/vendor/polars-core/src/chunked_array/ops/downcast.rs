@@ -2,10 +2,8 @@ use std::marker::PhantomData;
 
 use arrow::array::*;
 
-#[cfg(feature = "object")]
-use crate::chunked_array::object::ObjectArray;
 use crate::prelude::*;
-use crate::utils::index_to_chunked_index;
+use crate::utils::{index_to_chunked_index, index_to_chunked_index_rev};
 
 pub struct Chunks<'a, T> {
     chunks: &'a [ArrayRef],
@@ -20,6 +18,7 @@ impl<'a, T> Chunks<'a, T> {
         }
     }
 
+    #[inline]
     pub fn get(&self, index: usize) -> Option<&'a T> {
         self.chunks.get(index).map(|arr| {
             let arr = &**arr;
@@ -27,6 +26,7 @@ impl<'a, T> Chunks<'a, T> {
         })
     }
 
+    #[inline]
     pub unsafe fn get_unchecked(&self, index: usize) -> &'a T {
         let arr = self.chunks.get_unchecked(index);
         let arr = &**arr;
@@ -37,6 +37,7 @@ impl<'a, T> Chunks<'a, T> {
         self.chunks.len()
     }
 
+    #[inline]
     pub fn last(&self) -> Option<&'a T> {
         self.chunks.last().map(|arr| {
             let arr = &**arr;
@@ -46,191 +47,97 @@ impl<'a, T> Chunks<'a, T> {
 }
 
 #[doc(hidden)]
-impl<T> ChunkedArray<T>
-where
-    T: PolarsNumericType,
-{
-    pub fn downcast_iter(
-        &self,
-    ) -> impl Iterator<Item = &PrimitiveArray<T::Native>> + DoubleEndedIterator {
-        self.chunks.iter().map(|arr| {
-            // Safety:
-            // This should be the array type in PolarsNumericType
-            let arr = &**arr;
-            unsafe { &*(arr as *const dyn Array as *const PrimitiveArray<T::Native>) }
+impl<T: PolarsDataType> ChunkedArray<T> {
+    #[inline]
+    pub fn downcast_into_iter(mut self) -> impl DoubleEndedIterator<Item = T::Array> {
+        let chunks = std::mem::take(&mut self.chunks);
+        chunks.into_iter().map(|arr| {
+            // SAFETY: T::Array guarantees this is correct.
+            let ptr = Box::into_raw(arr).cast::<T::Array>();
+            unsafe { *Box::from_raw(ptr) }
         })
+    }
+
+    #[inline]
+    pub fn downcast_iter(&self) -> impl DoubleEndedIterator<Item = &T::Array> {
+        self.chunks.iter().map(|arr| {
+            // SAFETY: T::Array guarantees this is correct.
+            let arr = &**arr;
+            unsafe { &*(arr as *const dyn Array as *const T::Array) }
+        })
+    }
+
+    #[inline]
+    pub fn downcast_slices(&self) -> Option<impl DoubleEndedIterator<Item = &[T::Physical<'_>]>> {
+        if self.null_count != 0 {
+            return None;
+        }
+        let arr = self.downcast_iter().next().unwrap();
+        if arr.as_slice().is_some() {
+            Some(self.downcast_iter().map(|arr| arr.as_slice().unwrap()))
+        } else {
+            None
+        }
     }
 
     /// # Safety
     /// The caller must ensure:
     ///     * the length remains correct.
     ///     * the flags (sorted, etc) remain correct.
-    pub unsafe fn downcast_iter_mut(
-        &mut self,
-    ) -> impl Iterator<Item = &mut PrimitiveArray<T::Native>> + DoubleEndedIterator {
+    #[inline]
+    pub unsafe fn downcast_iter_mut(&mut self) -> impl DoubleEndedIterator<Item = &mut T::Array> {
         self.chunks.iter_mut().map(|arr| {
-            // Safety:
-            // This should be the array type in PolarsNumericType
+            // SAFETY: T::Array guarantees this is correct.
             let arr = &mut **arr;
-            &mut *(arr as *mut dyn Array as *mut PrimitiveArray<T::Native>)
+            &mut *(arr as *mut dyn Array as *mut T::Array)
         })
     }
 
-    pub fn downcast_chunks(&self) -> Chunks<'_, PrimitiveArray<T::Native>> {
-        Chunks::new(&self.chunks)
-    }
-
-    /// Get the index of the chunk and the index of the value in that chunk
     #[inline]
-    pub(crate) fn index_to_chunked_index(&self, index: usize) -> (usize, usize) {
-        if self.chunks.len() == 1 {
-            return (0, index);
-        }
-        index_to_chunked_index(self.downcast_iter().map(|arr| arr.len()), index)
-    }
-}
-
-#[doc(hidden)]
-impl BooleanChunked {
-    pub fn downcast_iter(&self) -> impl Iterator<Item = &BooleanArray> + DoubleEndedIterator {
-        self.chunks.iter().map(|arr| {
-            // Safety:
-            // This should be the array type in BooleanChunked
-            let arr = &**arr;
-            unsafe { &*(arr as *const dyn Array as *const BooleanArray) }
-        })
-    }
-    pub fn downcast_chunks(&self) -> Chunks<'_, BooleanArray> {
+    pub fn downcast_chunks(&self) -> Chunks<'_, T::Array> {
         Chunks::new(&self.chunks)
     }
 
     #[inline]
-    pub(crate) fn index_to_chunked_index(&self, index: usize) -> (usize, usize) {
-        if self.chunks.len() == 1 {
-            return (0, index);
-        }
-        index_to_chunked_index(self.downcast_iter().map(|arr| arr.len()), index)
-    }
-}
-
-#[doc(hidden)]
-impl Utf8Chunked {
-    pub fn downcast_iter(&self) -> impl Iterator<Item = &Utf8Array<i64>> + DoubleEndedIterator {
-        // Safety:
-        // This is the array type that must be in a Utf8Chunked
-        self.chunks.iter().map(|arr| {
-            // Safety:
-            // This should be the array type in Utf8Chunked
-            let arr = &**arr;
-            unsafe { &*(arr as *const dyn Array as *const Utf8Array<i64>) }
-        })
-    }
-    pub fn downcast_chunks(&self) -> Chunks<'_, Utf8Array<i64>> {
-        Chunks::new(&self.chunks)
+    pub fn downcast_get(&self, idx: usize) -> Option<&T::Array> {
+        let arr = self.chunks.get(idx)?;
+        // SAFETY: T::Array guarantees this is correct.
+        let arr = &**arr;
+        unsafe { Some(&*(arr as *const dyn Array as *const T::Array)) }
     }
 
     #[inline]
-    pub(crate) fn index_to_chunked_index(&self, index: usize) -> (usize, usize) {
-        if self.chunks.len() == 1 {
-            return (0, index);
-        }
-        index_to_chunked_index(self.downcast_iter().map(|arr| arr.len()), index)
-    }
-}
-
-#[doc(hidden)]
-impl BinaryChunked {
-    pub fn downcast_iter(&self) -> impl Iterator<Item = &BinaryArray<i64>> + DoubleEndedIterator {
-        // Safety:
-        // This is the array type that must be in a BinaryChunked
-        self.chunks.iter().map(|arr| {
-            // Safety:
-            // This should be the array type in BinaryChunked
-            let arr = &**arr;
-            unsafe { &*(arr as *const dyn Array as *const BinaryArray<i64>) }
-        })
-    }
-    pub fn downcast_chunks(&self) -> Chunks<'_, BinaryArray<i64>> {
-        Chunks::new(&self.chunks)
+    /// # Safety
+    /// It is up to the caller to ensure the chunk idx is in-bounds
+    pub unsafe fn downcast_get_unchecked(&self, idx: usize) -> &T::Array {
+        let arr = self.chunks.get_unchecked(idx);
+        // SAFETY: T::Array guarantees this is correct.
+        let arr = &**arr;
+        unsafe { &*(arr as *const dyn Array as *const T::Array) }
     }
 
+    /// Get the index of the chunk and the index of the value in that chunk.
     #[inline]
     pub(crate) fn index_to_chunked_index(&self, index: usize) -> (usize, usize) {
+        // Fast path.
         if self.chunks.len() == 1 {
-            return (0, index);
+            // SAFETY: chunks.len() == 1 guarantees this is correct.
+            let len = unsafe { self.chunks.get_unchecked(0).len() };
+            return if index < len {
+                (0, index)
+            } else {
+                (1, index - len)
+            };
         }
-        index_to_chunked_index(self.downcast_iter().map(|arr| arr.len()), index)
-    }
-}
-
-#[doc(hidden)]
-impl ListChunked {
-    pub fn downcast_iter(&self) -> impl Iterator<Item = &ListArray<i64>> + DoubleEndedIterator {
-        // Safety:
-        // This is the array type that must be in a ListChunked
-        self.chunks.iter().map(|arr| {
-            let arr = &**arr;
-            unsafe { &*(arr as *const dyn Array as *const ListArray<i64>) }
-        })
-    }
-    pub fn downcast_chunks(&self) -> Chunks<'_, ListArray<i64>> {
-        Chunks::new(&self.chunks)
-    }
-
-    #[inline]
-    pub(crate) fn index_to_chunked_index(&self, index: usize) -> (usize, usize) {
-        if self.chunks.len() == 1 {
-            return (0, index);
+        let chunk_lens = self.chunk_lengths();
+        let len = self.len();
+        if index <= len / 2 {
+            // Access from lhs.
+            index_to_chunked_index(chunk_lens, index)
+        } else {
+            // Access from rhs.
+            let index_from_back = len - index;
+            index_to_chunked_index_rev(chunk_lens.rev(), index_from_back, self.chunks.len())
         }
-        index_to_chunked_index(self.downcast_iter().map(|arr| arr.len()), index)
-    }
-}
-
-#[cfg(feature = "dtype-array")]
-#[doc(hidden)]
-impl ArrayChunked {
-    pub fn downcast_iter(&self) -> impl Iterator<Item = &FixedSizeListArray> + DoubleEndedIterator {
-        // Safety:
-        // This is the array type that must be in a ArrayChunked
-        self.chunks.iter().map(|arr| {
-            let arr = &**arr;
-            unsafe { &*(arr as *const dyn Array as *const FixedSizeListArray) }
-        })
-    }
-    pub fn downcast_chunks(&self) -> Chunks<'_, FixedSizeListArray> {
-        Chunks::new(&self.chunks)
-    }
-
-    #[inline]
-    pub(crate) fn index_to_chunked_index(&self, index: usize) -> (usize, usize) {
-        if self.chunks.len() == 1 {
-            return (0, index);
-        }
-        index_to_chunked_index(self.downcast_iter().map(|arr| arr.len()), index)
-    }
-}
-
-#[cfg(feature = "object")]
-#[doc(hidden)]
-impl<T> ObjectChunked<T>
-where
-    T: PolarsObject,
-{
-    pub fn downcast_iter(&self) -> impl Iterator<Item = &ObjectArray<T>> + DoubleEndedIterator {
-        self.chunks.iter().map(|arr| {
-            let arr = &**arr;
-            unsafe { &*(arr as *const dyn Array as *const ObjectArray<T>) }
-        })
-    }
-    pub fn downcast_chunks(&self) -> Chunks<'_, ObjectArray<T>> {
-        Chunks::new(&self.chunks)
-    }
-
-    #[inline]
-    pub(crate) fn index_to_chunked_index(&self, index: usize) -> (usize, usize) {
-        if self.chunks.len() == 1 {
-            return (0, index);
-        }
-        index_to_chunked_index(self.downcast_iter().map(|arr| arr.len()), index)
     }
 }

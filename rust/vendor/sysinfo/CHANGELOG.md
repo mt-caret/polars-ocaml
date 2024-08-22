@@ -1,3 +1,102 @@
+# 0.30.12
+
+ * FreeBSD: Fix network interfaces retrieval (one was always missing).
+
+# 0.30.11
+
+ * macOS: Fix some invalid utf8 conversions.
+
+# 0.30.10
+
+ * Linux: Fix components not being listed anymore.
+
+# 0.30.9
+
+ * Linux/Windows: Performance improvements.
+ * Linux/macOS/FreeBSD: Parent process ID is updated if changed as expected.
+
+# 0.30.8
+
+ * Linux: Fix missing parallelization.
+ * Linux: Add `cargo` feature flag `linux-tmpfs` to list `tmpfs` mounts.
+ * macOS: Fix CPU usage returning `NaN`.
+ * `Components::refresh` is now parallelized.
+
+# 0.30.7
+
+ * Linux: Fix cgroup memory computation.
+ * FreeBSD: Fix documentation about disk usage.
+
+# 0.30.6
+
+ * macOS: Fix missing update of process run time.
+ * Add new `Groups` API.
+ * Improve documentation.
+
+# 0.30.5
+
+ * Windows: Correctly retrieve processes name on 32 bits platforms.
+ * Windows: Fix swap memory computation.
+
+# 0.30.4
+
+ * Windows: Fix misaligned read.
+
+# 0.30.3
+
+ * Improve dependency stack by updating the `windows` dependency.
+
+# 0.30.2
+
+ * Add `ThreadKind` enum.
+ * Add `Process::thread_kind` method.
+
+# 0.30.1
+
+ * Linux: Fix invalid memory information retrieval (virtual and resident set size were reversed).
+
+# 0.30.0
+
+ * Split `System` into subtypes: `Components`, `Disks`, `Networks` and `Users`.
+ * `brand`, `vendor_id` and `frequency` information is not set anymore on the global CPU.
+ * Unix: Fix endless loop in user groups retrieval.
+ * Unix/Windows: Fix infinite loop when retrieving various information because of bad usage
+   of `Vec::reserve`.
+ * Unix: Fix invalid usage of NULL pointer when retrieving user group name.
+ * Linux: Fix CPU name retrieval.
+ * Linux: Remove cgroup usage from memory computation.
+ * Linux: Add `linux-netdevs` feature to allow to retrieve network devices.
+ * Linux: Improve system memory information retrieval (using `statm` file instead of `stat`).
+ * Linux: Tasks are listed in processes.
+ * macOS: Correctly retrieve process root directory.
+ * Windows: Add warning that `System::load_average` is not working in documentation.
+ * Windows: Fix invalid use of NULL pointer when retrieving users groups.
+ * Windows: Correctly retrieve process root directory.
+ * Create new `System::cgroup_limits` method.
+ * Remove `System::refresh_system` method.
+ * `Disk::file_system` and `Disk::name` now return an `Option<&OsStr>`.
+ * Implement `Display` trait on `DiskKind`.
+ * Move from `winapi` to `windows` crate.
+ * Add `System::cpu_arch`.
+ * Add `System::refresh_pids` and `System::refresh_pids_specifics`.
+ * `System::boot_time`, `System::cpu_arch`, `System::distribution_id`, `System::host_name`,
+   `System::kernel_version`, `System::load_average`, `System::long_os_version`, `System::name`,
+   `System::os_version` and `System::uptime` are static methods.
+ * `ProcessRefreshKind` has a lot more of possibilities for better control over updates.
+ * Add new `UpdateKind` enum.
+ * Add new `MemoryRefreshKind` struct.
+ * Add new `System::refresh_memory_specifics` method.
+ * `Process::exe`, `Process::cwd` and `Process::root` return an `Option<&Path>`.
+ * `Process::tasks` method is available on all platforms.
+ * `Process::tasks` method returns a `HashSet<Pid>`.
+ * Move `System::IS_SUPPORTED`, `System::SUPPORTED_SIGNALS` and
+   `System::MINIMUM_CPU_UPDATE_INTERVAL` constants out of `System` directly at the crate top-level.
+ * Rename `IS_SUPPORTED` into `IS_SUPPORTED_SYSTEM`.
+ * Fix `serde` serialization.
+ * Add `System::refresh_cpu_frequency` and `System::refresh_cpu_all`.
+ * Fix `sysinfo.h` and C wrapper.
+ * Add a migration guide.
+
 # 0.29.11
 
  * macOS: Fix bug when a user group doesn't have a name.
@@ -153,7 +252,7 @@
 # 0.26.6
 
  * Add `Process::wait`.
- * Add "Good pratice" entry into the crate level documentation and in the README.
+ * Add "Good practice" entry into the crate level documentation and in the README.
  * Linux: More precise used memory computation.
 
 # 0.26.5
@@ -228,7 +327,7 @@
 
 # 0.24.4
 
- * Windows: Fix `System::refresh_process` when required higher priviledges.
+ * Windows: Fix `System::refresh_process` when required higher privileges.
 
 # 0.24.3
 
@@ -525,7 +624,7 @@
 
 # 0.16.0
 
- * Windows: show removeable drives on Windows.
+ * Windows: show removable drives on Windows.
  * Switched to Rust 2018 edition.
  * Split `SystemExt::get_version` into `SystemExt::get_kernel_version` and `SystemExt::get_os_version`.
  * Windows: added support for `get_kernel_version` and `get_os_version`.

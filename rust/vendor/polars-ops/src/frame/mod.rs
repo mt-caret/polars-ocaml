@@ -1,4 +1,4 @@
-mod join;
+pub mod join;
 #[cfg(feature = "pivot")]
 pub mod pivot;
 
@@ -27,7 +27,7 @@ impl IntoDf for DataFrame {
 impl<T: IntoDf> DataFrameOps for T {}
 
 pub trait DataFrameOps: IntoDf {
-    /// Create dummy variables.
+    /// Crea dummy variables.
     ///
     /// # Example
     ///
@@ -45,7 +45,7 @@ pub trait DataFrameOps: IntoDf {
     ///   }.unwrap();
     ///
     ///   let dummies = df.to_dummies(None, false).unwrap();
-    ///   dbg!(dummies);
+    ///   println!("{}", dummies);
     /// # }
     /// ```
     /// Outputs:

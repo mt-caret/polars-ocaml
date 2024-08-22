@@ -50,7 +50,7 @@ where
     ChunkedArray<T>: IntoSeries,
 {
     fn subtract(lhs: &ChunkedArray<T>, rhs: &Series) -> PolarsResult<Series> {
-        // Safety:
+        // SAFETY:
         // There will be UB if a ChunkedArray is alive with the wrong datatype.
         // we now only create the potentially wrong dtype for a short time.
         // Note that the physical type correctness is checked!
@@ -60,28 +60,28 @@ where
         Ok(out.into_series())
     }
     fn add_to(lhs: &ChunkedArray<T>, rhs: &Series) -> PolarsResult<Series> {
-        // Safety:
+        // SAFETY:
         // see subtract
         let rhs = unsafe { lhs.unpack_series_matching_physical_type(rhs) };
         let out = lhs + rhs;
         Ok(out.into_series())
     }
     fn multiply(lhs: &ChunkedArray<T>, rhs: &Series) -> PolarsResult<Series> {
-        // Safety:
+        // SAFETY:
         // see subtract
         let rhs = unsafe { lhs.unpack_series_matching_physical_type(rhs) };
         let out = lhs * rhs;
         Ok(out.into_series())
     }
     fn divide(lhs: &ChunkedArray<T>, rhs: &Series) -> PolarsResult<Series> {
-        // Safety:
+        // SAFETY:
         // see subtract
         let rhs = unsafe { lhs.unpack_series_matching_physical_type(rhs) };
         let out = lhs / rhs;
         Ok(out.into_series())
     }
     fn remainder(lhs: &ChunkedArray<T>, rhs: &Series) -> PolarsResult<Series> {
-        // Safety:
+        // SAFETY:
         // see subtract
         let rhs = unsafe { lhs.unpack_series_matching_physical_type(rhs) };
         let out = lhs % rhs;
@@ -89,8 +89,8 @@ where
     }
 }
 
-impl NumOpsDispatchInner for Utf8Type {
-    fn add_to(lhs: &Utf8Chunked, rhs: &Series) -> PolarsResult<Series> {
+impl NumOpsDispatchInner for StringType {
+    fn add_to(lhs: &StringChunked, rhs: &Series) -> PolarsResult<Series> {
         let rhs = lhs.unpack_series_matching_type(rhs)?;
         let out = lhs + rhs;
         Ok(out.into_series())
@@ -118,7 +118,6 @@ pub mod checked {
     use num_traits::{CheckedDiv, One, ToPrimitive, Zero};
 
     use super::*;
-    use crate::utils::align_chunks_binary;
 
     pub trait NumOpsDispatchCheckedInner: PolarsDataType + Sized {
         /// Checked integer division. Computes self / rhs, returning None if rhs == 0 or the division results in overflow.
@@ -155,94 +154,62 @@ pub mod checked {
         ChunkedArray<T>: IntoSeries,
     {
         fn checked_div(lhs: &ChunkedArray<T>, rhs: &Series) -> PolarsResult<Series> {
-            // Safety:
+            // SAFETY:
             // There will be UB if a ChunkedArray is alive with the wrong datatype.
             // we now only create the potentially wrong dtype for a short time.
             // Note that the physical type correctness is checked!
             // The ChunkedArray with the wrong dtype is dropped after this operation
             let rhs = unsafe { lhs.unpack_series_matching_physical_type(rhs) };
-            let (l, r) = align_chunks_binary(lhs, rhs);
 
-            Ok((l)
-                .downcast_iter()
-                .zip(r.downcast_iter())
-                .flat_map(|(l_arr, r_arr)| {
-                    l_arr
-                        .into_iter()
-                        .zip(r_arr)
-                        // we don't use a kernel, because the checked div also supplies nulls.
-                        // so the usual bit combining is not enough.
-                        .map(|(opt_l, opt_r)| match (opt_l, opt_r) {
-                            (Some(l), Some(r)) => l.checked_div(r),
-                            _ => None,
-                        })
+            Ok(
+                arity::binary_elementwise(lhs, rhs, |opt_l, opt_r| match (opt_l, opt_r) {
+                    (Some(l), Some(r)) => l.checked_div(&r),
+                    _ => None,
                 })
-                .collect::<ChunkedArray<T>>()
-                .into_series())
+                .into_series(),
+            )
         }
     }
 
     impl NumOpsDispatchCheckedInner for Float32Type {
         fn checked_div(lhs: &Float32Chunked, rhs: &Series) -> PolarsResult<Series> {
-            // Safety:
+            // SAFETY:
             // see check_div for chunkedarray<T>
             let rhs = unsafe { lhs.unpack_series_matching_physical_type(rhs) };
-            let (l, r) = align_chunks_binary(lhs, rhs);
 
-            Ok((l)
-                .downcast_iter()
-                .zip(r.downcast_iter())
-                .flat_map(|(l_arr, r_arr)| {
-                    l_arr
-                        .into_iter()
-                        .zip(r_arr)
-                        // we don't use a kernel, because the checked div also supplies nulls.
-                        // so the usual bit combining is not enough.
-                        .map(|(opt_l, opt_r)| match (opt_l, opt_r) {
-                            (Some(l), Some(r)) => {
-                                if r.is_zero() {
-                                    None
-                                } else {
-                                    Some(l / r)
-                                }
-                            },
-                            _ => None,
-                        })
-                })
-                .collect::<Float32Chunked>()
-                .into_series())
+            let ca: Float32Chunked =
+                arity::binary_elementwise(lhs, rhs, |opt_l, opt_r| match (opt_l, opt_r) {
+                    (Some(l), Some(r)) => {
+                        if r.is_zero() {
+                            None
+                        } else {
+                            Some(l / r)
+                        }
+                    },
+                    _ => None,
+                });
+            Ok(ca.into_series())
         }
     }
 
     impl NumOpsDispatchCheckedInner for Float64Type {
         fn checked_div(lhs: &Float64Chunked, rhs: &Series) -> PolarsResult<Series> {
-            // Safety:
+            // SAFETY:
             // see check_div
             let rhs = unsafe { lhs.unpack_series_matching_physical_type(rhs) };
-            let (l, r) = align_chunks_binary(lhs, rhs);
 
-            Ok((l)
-                .downcast_iter()
-                .zip(r.downcast_iter())
-                .flat_map(|(l_arr, r_arr)| {
-                    l_arr
-                        .into_iter()
-                        .zip(r_arr)
-                        // we don't use a kernel, because the checked div also supplies nulls.
-                        // so the usual bit combining is not enough.
-                        .map(|(opt_l, opt_r)| match (opt_l, opt_r) {
-                            (Some(l), Some(r)) => {
-                                if r.is_zero() {
-                                    None
-                                } else {
-                                    Some(l / r)
-                                }
-                            },
-                            _ => None,
-                        })
-                })
-                .collect::<Float64Chunked>()
-                .into_series())
+            let ca: Float64Chunked =
+                arity::binary_elementwise(lhs, rhs, |opt_l, opt_r| match (opt_l, opt_r) {
+                    (Some(l), Some(r)) => {
+                        if r.is_zero() {
+                            None
+                        } else {
+                            Some(l / r)
+                        }
+                    },
+                    _ => None,
+                });
+            Ok(ca.into_series())
         }
     }
 
@@ -261,50 +228,50 @@ pub mod checked {
                 UInt8 => s
                     .u8()
                     .unwrap()
-                    .apply_on_opt(|opt_v| opt_v.and_then(|v| v.checked_div(rhs.to_u8().unwrap())))
+                    .apply(|opt_v| opt_v.and_then(|v| v.checked_div(rhs.to_u8().unwrap())))
                     .into_series(),
                 #[cfg(feature = "dtype-i8")]
                 Int8 => s
                     .i8()
                     .unwrap()
-                    .apply_on_opt(|opt_v| opt_v.and_then(|v| v.checked_div(rhs.to_i8().unwrap())))
+                    .apply(|opt_v| opt_v.and_then(|v| v.checked_div(rhs.to_i8().unwrap())))
                     .into_series(),
                 #[cfg(feature = "dtype-i16")]
                 Int16 => s
                     .i16()
                     .unwrap()
-                    .apply_on_opt(|opt_v| opt_v.and_then(|v| v.checked_div(rhs.to_i16().unwrap())))
+                    .apply(|opt_v| opt_v.and_then(|v| v.checked_div(rhs.to_i16().unwrap())))
                     .into_series(),
                 #[cfg(feature = "dtype-u16")]
                 UInt16 => s
                     .u16()
                     .unwrap()
-                    .apply_on_opt(|opt_v| opt_v.and_then(|v| v.checked_div(rhs.to_u16().unwrap())))
+                    .apply(|opt_v| opt_v.and_then(|v| v.checked_div(rhs.to_u16().unwrap())))
                     .into_series(),
                 UInt32 => s
                     .u32()
                     .unwrap()
-                    .apply_on_opt(|opt_v| opt_v.and_then(|v| v.checked_div(rhs.to_u32().unwrap())))
+                    .apply(|opt_v| opt_v.and_then(|v| v.checked_div(rhs.to_u32().unwrap())))
                     .into_series(),
                 Int32 => s
                     .i32()
                     .unwrap()
-                    .apply_on_opt(|opt_v| opt_v.and_then(|v| v.checked_div(rhs.to_i32().unwrap())))
+                    .apply(|opt_v| opt_v.and_then(|v| v.checked_div(rhs.to_i32().unwrap())))
                     .into_series(),
                 UInt64 => s
                     .u64()
                     .unwrap()
-                    .apply_on_opt(|opt_v| opt_v.and_then(|v| v.checked_div(rhs.to_u64().unwrap())))
+                    .apply(|opt_v| opt_v.and_then(|v| v.checked_div(rhs.to_u64().unwrap())))
                     .into_series(),
                 Int64 => s
                     .i64()
                     .unwrap()
-                    .apply_on_opt(|opt_v| opt_v.and_then(|v| v.checked_div(rhs.to_i64().unwrap())))
+                    .apply(|opt_v| opt_v.and_then(|v| v.checked_div(rhs.to_i64().unwrap())))
                     .into_series(),
                 Float32 => s
                     .f32()
                     .unwrap()
-                    .apply_on_opt(|opt_v| {
+                    .apply(|opt_v| {
                         opt_v.and_then(|v| {
                             let res = rhs.to_f32().unwrap();
                             if res.is_zero() {
@@ -318,7 +285,7 @@ pub mod checked {
                 Float64 => s
                     .f64()
                     .unwrap()
-                    .apply_on_opt(|opt_v| {
+                    .apply(|opt_v| {
                         opt_v.and_then(|v| {
                             let res = rhs.to_f64().unwrap();
                             if res.is_zero() {
@@ -427,16 +394,16 @@ pub fn _struct_arithmetic<F: FnMut(&Series, &Series) -> Series>(
     match (s_fields.len(), rhs_fields.len()) {
         (_, 1) => {
             let rhs = &rhs.fields()[0];
-            s.apply_fields(|s| func(s, rhs)).into_series()
+            s._apply_fields(|s| func(s, rhs)).into_series()
         },
         (1, _) => {
             let s = &s.fields()[0];
-            rhs.apply_fields(|rhs| func(s, rhs)).into_series()
+            rhs._apply_fields(|rhs| func(s, rhs)).into_series()
         },
         _ => {
             let mut rhs_iter = rhs.fields().iter();
 
-            s.apply_fields(|s| match rhs_iter.next() {
+            s._apply_fields(|s| match rhs_iter.next() {
                 Some(rhs) => func(s, rhs),
                 None => s.clone(),
             })
@@ -655,6 +622,22 @@ where
     }
 }
 
+// TODO: remove this, temporary band-aid.
+impl Series {
+    pub fn wrapping_trunc_div_scalar<T: Num + NumCast>(&self, rhs: T) -> Self {
+        let s = self.to_physical_repr();
+        macro_rules! div {
+            ($ca:expr) => {{
+                let rhs = NumCast::from(rhs).unwrap();
+                $ca.wrapping_trunc_div_scalar(rhs).into_series()
+            }};
+        }
+
+        let out = downcast_as_macro_arg_physical!(s, div);
+        finish_cast(self, out)
+    }
+}
+
 impl<T> Mul<T> for &Series
 where
     T: Num + NumCast,
@@ -725,21 +708,21 @@ where
     #[must_use]
     pub fn lhs_sub<N: Num + NumCast>(&self, lhs: N) -> Self {
         let lhs: T::Native = NumCast::from(lhs).expect("could not cast");
-        self.apply(|v| lhs - v)
+        ArithmeticChunked::wrapping_sub_scalar_lhs(lhs, self)
     }
 
     /// Apply lhs / self
     #[must_use]
     pub fn lhs_div<N: Num + NumCast>(&self, lhs: N) -> Self {
         let lhs: T::Native = NumCast::from(lhs).expect("could not cast");
-        self.apply(|v| lhs / v)
+        ArithmeticChunked::legacy_div_scalar_lhs(lhs, self)
     }
 
     /// Apply lhs % self
     #[must_use]
     pub fn lhs_rem<N: Num + NumCast>(&self, lhs: N) -> Self {
         let lhs: T::Native = NumCast::from(lhs).expect("could not cast");
-        self.apply(|v| lhs % v)
+        ArithmeticChunked::wrapping_mod_scalar_lhs(lhs, self)
     }
 }
 

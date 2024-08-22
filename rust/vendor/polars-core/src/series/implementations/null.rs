@@ -1,16 +1,12 @@
-use std::borrow::Cow;
-use std::sync::Arc;
+use std::any::Any;
 
-use polars_arrow::prelude::ArrayRef;
-use polars_utils::IdxSize;
+use polars_error::constants::LENGTH_LIMIT_MSG;
 
-use crate::datatypes::IdxCa;
-use crate::error::PolarsResult;
+use crate::prelude::compare_inner::{IntoTotalEqInner, TotalEqInner};
 use crate::prelude::explode::ExplodeByOffsets;
 use crate::prelude::*;
 use crate::series::private::{PrivateSeries, PrivateSeriesNumeric};
 use crate::series::*;
-use crate::utils::slice_offsets;
 
 impl Series {
     pub fn new_null(name: &str, len: usize) -> Series {
@@ -39,11 +35,22 @@ impl NullChunked {
         }
     }
 }
-impl PrivateSeriesNumeric for NullChunked {}
+impl PrivateSeriesNumeric for NullChunked {
+    fn bit_repr_small(&self) -> UInt32Chunked {
+        UInt32Chunked::full_null(self.name.as_ref(), self.len())
+    }
+}
 
 impl PrivateSeries for NullChunked {
     fn compute_len(&mut self) {
-        // no-op
+        fn inner(chunks: &[ArrayRef]) -> usize {
+            match chunks.len() {
+                // fast path
+                1 => chunks[0].len(),
+                _ => chunks.iter().fold(0, |acc, arr| acc + arr.len()),
+            }
+        }
+        self.length = IdxSize::try_from(inner(&self.chunks)).expect(LENGTH_LIMIT_MSG);
     }
     fn _field(&self) -> Cow<Field> {
         Cow::Owned(Field::new(self.name(), DataType::Null))
@@ -57,16 +64,84 @@ impl PrivateSeries for NullChunked {
     }
 
     #[cfg(feature = "zip_with")]
-    fn zip_with_same_type(&self, _mask: &BooleanChunked, _other: &Series) -> PolarsResult<Series> {
-        Ok(self.clone().into_series())
+    fn zip_with_same_type(&self, mask: &BooleanChunked, other: &Series) -> PolarsResult<Series> {
+        let len = match (self.len(), mask.len(), other.len()) {
+            (a, b, c) if a == b && b == c => a,
+            (1, a, b) | (a, 1, b) | (a, b, 1) if a == b => a,
+            (a, 1, 1) | (1, a, 1) | (1, 1, a) => a,
+            (_, 0, _) => 0,
+            _ => {
+                polars_bail!(ShapeMismatch: "shapes of `self`, `mask` and `other` are not suitable for `zip_with` operation")
+            },
+        };
+
+        Ok(Self::new(self.name().into(), len).into_series())
     }
     fn explode_by_offsets(&self, offsets: &[i64]) -> Series {
         ExplodeByOffsets::explode_by_offsets(self, offsets)
     }
 
+    fn subtract(&self, _rhs: &Series) -> PolarsResult<Series> {
+        null_arithmetic(self, _rhs, "subtract")
+    }
+
+    fn add_to(&self, _rhs: &Series) -> PolarsResult<Series> {
+        null_arithmetic(self, _rhs, "add_to")
+    }
+    fn multiply(&self, _rhs: &Series) -> PolarsResult<Series> {
+        null_arithmetic(self, _rhs, "multiply")
+    }
+    fn divide(&self, _rhs: &Series) -> PolarsResult<Series> {
+        null_arithmetic(self, _rhs, "divide")
+    }
+    fn remainder(&self, _rhs: &Series) -> PolarsResult<Series> {
+        null_arithmetic(self, _rhs, "remainder")
+    }
+
+    #[cfg(feature = "algorithm_group_by")]
+    fn group_tuples(&self, _multithreaded: bool, _sorted: bool) -> PolarsResult<GroupsProxy> {
+        Ok(if self.is_empty() {
+            GroupsProxy::default()
+        } else {
+            GroupsProxy::Slice {
+                groups: vec![[0, self.length]],
+                rolling: false,
+            }
+        })
+    }
+
+    #[cfg(feature = "algorithm_group_by")]
+    unsafe fn agg_list(&self, groups: &GroupsProxy) -> Series {
+        AggList::agg_list(self, groups)
+    }
+
     fn _get_flags(&self) -> Settings {
         Settings::empty()
     }
+
+    fn vec_hash(&self, random_state: RandomState, buf: &mut Vec<u64>) -> PolarsResult<()> {
+        VecHash::vec_hash(self, random_state, buf)?;
+        Ok(())
+    }
+
+    fn vec_hash_combine(&self, build_hasher: RandomState, hashes: &mut [u64]) -> PolarsResult<()> {
+        VecHash::vec_hash_combine(self, build_hasher, hashes)?;
+        Ok(())
+    }
+
+    fn into_total_eq_inner<'a>(&'a self) -> Box<dyn TotalEqInner + 'a> {
+        IntoTotalEqInner::into_total_eq_inner(self)
+    }
+}
+
+fn null_arithmetic(lhs: &NullChunked, rhs: &Series, op: &str) -> PolarsResult<Series> {
+    let output_len = match (lhs.len(), rhs.len()) {
+        (1, len_r) => len_r,
+        (len_l, 1) => len_l,
+        (len_l, len_r) if len_l == len_r => len_l,
+        _ => polars_bail!(ComputeError: "Cannot {:?} two series of different lengths.", op),
+    };
+    Ok(NullChunked::new(lhs.name().into(), output_len).into_series())
 }
 
 impl SeriesTrait for NullChunked {
@@ -81,39 +156,28 @@ impl SeriesTrait for NullChunked {
     fn chunks(&self) -> &Vec<ArrayRef> {
         &self.chunks
     }
+    unsafe fn chunks_mut(&mut self) -> &mut Vec<ArrayRef> {
+        &mut self.chunks
+    }
 
-    fn chunk_lengths(&self) -> ChunkIdIter {
+    fn chunk_lengths(&self) -> ChunkLenIter {
         self.chunks.iter().map(|chunk| chunk.len())
-    }
-
-    #[cfg(feature = "chunked_ids")]
-    unsafe fn _take_chunked_unchecked(&self, by: &[ChunkId], _sorted: IsSorted) -> Series {
-        NullChunked::new(self.name.clone(), by.len()).into_series()
-    }
-
-    #[cfg(feature = "chunked_ids")]
-    unsafe fn _take_opt_chunked_unchecked(&self, by: &[Option<ChunkId>]) -> Series {
-        NullChunked::new(self.name.clone(), by.len()).into_series()
-    }
-
-    fn take_iter(&self, iter: &mut dyn TakeIterator) -> PolarsResult<Series> {
-        Ok(NullChunked::new(self.name.clone(), iter.size_hint().0).into_series())
-    }
-
-    unsafe fn take_iter_unchecked(&self, iter: &mut dyn TakeIterator) -> Series {
-        NullChunked::new(self.name.clone(), iter.size_hint().0).into_series()
-    }
-
-    unsafe fn take_unchecked(&self, idx: &IdxCa) -> PolarsResult<Series> {
-        Ok(NullChunked::new(self.name.clone(), idx.len()).into_series())
-    }
-
-    unsafe fn take_opt_iter_unchecked(&self, iter: &mut dyn TakeIteratorNulls) -> Series {
-        NullChunked::new(self.name.clone(), iter.size_hint().0).into_series()
     }
 
     fn take(&self, indices: &IdxCa) -> PolarsResult<Series> {
         Ok(NullChunked::new(self.name.clone(), indices.len()).into_series())
+    }
+
+    unsafe fn take_unchecked(&self, indices: &IdxCa) -> Series {
+        NullChunked::new(self.name.clone(), indices.len()).into_series()
+    }
+
+    fn take_slice(&self, indices: &[IdxSize]) -> PolarsResult<Series> {
+        Ok(NullChunked::new(self.name.clone(), indices.len()).into_series())
+    }
+
+    unsafe fn take_slice_unchecked(&self, indices: &[IdxSize]) -> Series {
+        NullChunked::new(self.name.clone(), indices.len()).into_series()
     }
 
     fn len(&self) -> usize {
@@ -128,12 +192,28 @@ impl SeriesTrait for NullChunked {
         NullChunked::new(self.name.clone(), self.len()).into_series()
     }
 
+    fn drop_nulls(&self) -> Series {
+        NullChunked::new(self.name.clone(), 0).into_series()
+    }
+
     fn cast(&self, data_type: &DataType) -> PolarsResult<Series> {
         Ok(Series::full_null(self.name.as_ref(), self.len(), data_type))
     }
 
     fn null_count(&self) -> usize {
         self.len()
+    }
+
+    #[cfg(feature = "algorithm_group_by")]
+    fn unique(&self) -> PolarsResult<Series> {
+        let ca = NullChunked::new(self.name.clone(), self.n_unique().unwrap());
+        Ok(ca.into_series())
+    }
+
+    #[cfg(feature = "algorithm_group_by")]
+    fn n_unique(&self) -> PolarsResult<usize> {
+        let n = if self.is_empty() { 0 } else { 1 };
+        Ok(n)
     }
 
     fn new_from_index(&self, _index: usize, length: usize) -> Series {
@@ -145,9 +225,18 @@ impl SeriesTrait for NullChunked {
         Ok(AnyValue::Null)
     }
 
+    unsafe fn get_unchecked(&self, _index: usize) -> AnyValue {
+        AnyValue::Null
+    }
+
     fn slice(&self, offset: i64, length: usize) -> Series {
-        let (_, length) = slice_offsets(offset, length, self.len());
-        NullChunked::new(self.name.clone(), length).into_series()
+        let (chunks, len) = chunkops::slice(&self.chunks, offset, length, self.len());
+        NullChunked {
+            name: self.name.clone(),
+            length: len as IdxSize,
+            chunks,
+        }
+        .into_series()
     }
 
     fn is_null(&self) -> BooleanChunked {
@@ -186,6 +275,9 @@ impl SeriesTrait for NullChunked {
 
     fn clone_inner(&self) -> Arc<dyn SeriesTrait> {
         Arc::new(self.clone())
+    }
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 

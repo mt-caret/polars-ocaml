@@ -11,10 +11,15 @@
 
 [package]
 edition = "2021"
-rust-version = "1.57.0"
+rust-version = "1.61.0"
 name = "chrono"
-version = "0.4.31"
-exclude = ["/ci/*"]
+version = "0.4.38"
+include = [
+    "src/*",
+    "tests/*.rs",
+    "LICENSE.txt",
+    "CITATION.cff",
+]
 description = "Date and time library for Rust"
 homepage = "https://github.com/chronotope/chrono"
 documentation = "https://docs.rs/chrono/"
@@ -29,7 +34,12 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/chronotope/chrono"
 
 [package.metadata.docs.rs]
-features = ["serde"]
+features = [
+    "arbitrary",
+    "rkyv",
+    "serde",
+    "unstable-locales",
+]
 rustdoc-args = [
     "--cfg",
     "docsrs",
@@ -51,16 +61,13 @@ version = "0.2"
 default-features = false
 
 [dependencies.pure-rust-locales]
-version = "0.7"
+version = "0.8"
 optional = true
 
 [dependencies.rkyv]
-version = "0.7"
+version = "0.7.43"
 optional = true
-
-[dependencies.rustc-serialize]
-version = "0.3.20"
-optional = true
+default-features = false
 
 [dependencies.serde]
 version = "1.0.99"
@@ -81,10 +88,10 @@ version = "1"
 __internal_bench = []
 alloc = []
 clock = [
-    "std",
     "winapi",
     "iana-time-zone",
     "android-tzdata",
+    "now",
 ]
 default = [
     "clock",
@@ -93,12 +100,27 @@ default = [
     "wasmbind",
 ]
 libc = []
+now = ["std"]
 oldtime = []
-std = []
-unstable-locales = [
-    "pure-rust-locales",
-    "alloc",
+rkyv = [
+    "dep:rkyv",
+    "rkyv/size_32",
 ]
+rkyv-16 = [
+    "dep:rkyv",
+    "rkyv?/size_16",
+]
+rkyv-32 = [
+    "dep:rkyv",
+    "rkyv?/size_32",
+]
+rkyv-64 = [
+    "dep:rkyv",
+    "rkyv?/size_64",
+]
+rkyv-validation = ["rkyv?/validation"]
+std = ["alloc"]
+unstable-locales = ["pure-rust-locales"]
 wasmbind = [
     "wasm-bindgen",
     "js-sys",
@@ -126,8 +148,8 @@ features = ["fallback"]
 optional = true
 
 [target."cfg(windows)".dependencies.windows-targets]
-version = "0.48"
+version = "0.52"
 optional = true
 
 [target."cfg(windows)".dev-dependencies.windows-bindgen]
-version = "0.51"
+version = "0.56"

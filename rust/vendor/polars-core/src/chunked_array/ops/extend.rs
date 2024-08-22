@@ -37,7 +37,7 @@ where
     /// when you read in multiple files and when to store them in a single `DataFrame`.
     /// In the latter case finish the sequence of `append` operations with a [`rechunk`](Self::rechunk).
     pub fn extend(&mut self, other: &Self) {
-        update_sorted_flag_before_append(self, other);
+        update_sorted_flag_before_append::<T>(self, other);
         // all to a single chunk
         if self.chunks.len() > 1 {
             self.append(other);
@@ -88,86 +88,33 @@ where
 }
 
 #[doc(hidden)]
-impl Utf8Chunked {
+impl StringChunked {
     pub fn extend(&mut self, other: &Self) {
-        update_sorted_flag_before_append(self, other);
-        if self.chunks.len() > 1 {
-            self.append(other);
-            *self = self.rechunk();
-            return;
-        }
-        let arr = self.downcast_iter().next().unwrap();
-
-        // increments 1
-        let arr = arr.clone();
-
-        // now we drop our owned ArrayRefs so that
-        // decrements 1
-        {
-            self.chunks.clear();
-        }
-
-        use Either::*;
-
-        match arr.into_mut() {
-            Left(immutable) => {
-                extend_immutable(&immutable, &mut self.chunks, &other.chunks);
-            },
-            Right(mut mutable) => {
-                for arr in other.downcast_iter() {
-                    mutable.extend_trusted_len(arr.into_iter())
-                }
-                let arr: Utf8Array<i64> = mutable.into();
-                self.chunks.push(Box::new(arr) as ArrayRef)
-            },
-        }
-        self.compute_len();
         self.set_sorted_flag(IsSorted::Not);
+        self.append(other)
     }
 }
 
 #[doc(hidden)]
 impl BinaryChunked {
     pub fn extend(&mut self, other: &Self) {
-        update_sorted_flag_before_append(self, other);
-        if self.chunks.len() > 1 {
-            self.append(other);
-            *self = self.rechunk();
-            return;
-        }
-        let arr = self.downcast_iter().next().unwrap();
+        self.set_sorted_flag(IsSorted::Not);
+        self.append(other)
+    }
+}
 
-        // increments 1
-        let arr = arr.clone();
-
-        // now we drop our owned ArrayRefs so that
-        // decrements 1
-        {
-            self.chunks.clear();
-        }
-
-        use Either::*;
-
-        match arr.into_mut() {
-            Left(immutable) => {
-                extend_immutable(&immutable, &mut self.chunks, &other.chunks);
-            },
-            Right(mut mutable) => {
-                for arr in other.downcast_iter() {
-                    mutable.extend_trusted_len(arr.into_iter())
-                }
-                let arr: BinaryArray<i64> = mutable.into();
-                self.chunks.push(Box::new(arr) as ArrayRef)
-            },
-        }
-        self.compute_len();
+#[doc(hidden)]
+impl BinaryOffsetChunked {
+    pub fn extend(&mut self, other: &Self) {
+        self.set_sorted_flag(IsSorted::Not);
+        self.append(other)
     }
 }
 
 #[doc(hidden)]
 impl BooleanChunked {
     pub fn extend(&mut self, other: &Self) {
-        update_sorted_flag_before_append(self, other);
+        update_sorted_flag_before_append::<BooleanType>(self, other);
         // make sure that we are a single chunk already
         if self.chunks.len() > 1 {
             self.append(other);
@@ -255,9 +202,9 @@ mod test {
     }
 
     #[test]
-    fn test_extend_utf8() {
-        let mut ca = Utf8Chunked::new("a", &["a", "b", "c"]);
-        let to_append = Utf8Chunked::new("a", &["a", "b", "e"]);
+    fn test_extend_string() {
+        let mut ca = StringChunked::new("a", &["a", "b", "c"]);
+        let to_append = StringChunked::new("a", &["a", "b", "e"]);
 
         ca.extend(&to_append);
         assert_eq!(ca.len(), 6);

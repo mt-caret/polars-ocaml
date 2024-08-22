@@ -6,31 +6,30 @@
 
 use super::{Object, Value};
 use crate::prelude::*;
-use crate::{stry, StaticNode};
 use std::io;
 use std::io::Write;
 use value_trait::generator::{
-    BaseGenerator, DumpGenerator, PrettyGenerator, PrettyWriterGenerator, WriterGenerator,
+    DumpGenerator, PrettyGenerator, PrettyWriterGenerator, WriterGenerator,
 };
 
 //use util::print_dec;
 
 impl Writable for Value {
-    #[inline]
+    #[cfg_attr(not(feature = "no-inline"), inline)]
     fn encode(&self) -> String {
         let mut g = DumpGenerator::new();
         let _r = g.write_json(self);
         g.consume()
     }
 
-    #[inline]
+    #[cfg_attr(not(feature = "no-inline"), inline)]
     fn encode_pp(&self) -> String {
         let mut g = PrettyGenerator::new(2);
         let _r = g.write_json(self);
         g.consume()
     }
 
-    #[inline]
+    #[cfg_attr(not(feature = "no-inline"), inline)]
     fn write<'writer, W>(&self, w: &mut W) -> io::Result<()>
     where
         W: 'writer + Write,
@@ -39,7 +38,7 @@ impl Writable for Value {
         g.write_json(self)
     }
 
-    #[inline]
+    #[cfg_attr(not(feature = "no-inline"), inline)]
     fn write_pp<'writer, W>(&self, w: &mut W) -> io::Result<()>
     where
         W: 'writer + Write,
@@ -52,7 +51,7 @@ impl Writable for Value {
 trait Generator: BaseGenerator {
     type T: Write;
 
-    #[inline(always)]
+    #[cfg_attr(not(feature = "no-inline"), inline)]
     fn write_object(&mut self, object: &Object) -> io::Result<()> {
         if object.is_empty() {
             self.write(b"{}")
@@ -86,7 +85,7 @@ trait Generator: BaseGenerator {
         }
     }
 
-    #[inline(always)]
+    #[cfg_attr(not(feature = "no-inline"), inline)]
     fn write_json(&mut self, json: &Value) -> io::Result<()> {
         match *json {
             Value::Static(StaticNode::Null) => self.write(b"null"),
@@ -139,7 +138,7 @@ trait Generator: BaseGenerator {
 trait FastGenerator: BaseGenerator {
     type T: Write;
 
-    #[inline(always)]
+    #[cfg_attr(not(feature = "no-inline"), inline)]
     fn write_object(&mut self, object: &Object) -> io::Result<()> {
         if object.is_empty() {
             self.write(b"{}")
@@ -168,7 +167,7 @@ trait FastGenerator: BaseGenerator {
         }
     }
 
-    #[inline(always)]
+    #[cfg_attr(not(feature = "no-inline"), inline)]
     fn write_json(&mut self, json: &Value) -> io::Result<()> {
         match *json {
             Value::Static(StaticNode::Null) => self.write(b"null"),
@@ -210,22 +209,22 @@ trait FastGenerator: BaseGenerator {
     }
 }
 
-impl FastGenerator for DumpGenerator<Value> {
+impl FastGenerator for DumpGenerator {
     type T = Vec<u8>;
 }
 
-impl Generator for PrettyGenerator<Value> {
+impl Generator for PrettyGenerator {
     type T = Vec<u8>;
 }
 
-impl<'writer, W> FastGenerator for WriterGenerator<'writer, W, Value>
+impl<'writer, W> FastGenerator for WriterGenerator<'writer, W>
 where
     W: Write,
 {
     type T = W;
 }
 
-impl<'writer, W> Generator for PrettyWriterGenerator<'writer, W, Value>
+impl<'writer, W> Generator for PrettyWriterGenerator<'writer, W>
 where
     W: Write,
 {
@@ -236,7 +235,7 @@ where
 mod test {
     use super::Value;
     use crate::prelude::*;
-    use crate::StaticNode;
+
     #[test]
     fn null() {
         assert_eq!(Value::Static(StaticNode::Null).encode(), "null");
@@ -262,11 +261,11 @@ mod test {
 
     #[test]
     fn string() {
-        assert_str(r#"this is a test"#, r#""this is a test""#);
+        assert_str("this is a test", r#""this is a test""#);
         assert_str(r#"this is a test ""#, r#""this is a test \"""#);
         assert_str(r#"this is a test """#, r#""this is a test \"\"""#);
         assert_str(
-            r#"this is a test a long test that should span the 32 byte boundary"#,
+            "this is a test a long test that should span the 32 byte boundary",
             r#""this is a test a long test that should span the 32 byte boundary""#,
         );
         assert_str(

@@ -3,9 +3,11 @@ use std::hash::{Hash, Hasher};
 #[cfg(feature = "temporal")]
 use polars_core::export::chrono::{Duration as ChronoDuration, NaiveDate, NaiveDateTime};
 use polars_core::prelude::*;
+use polars_core::utils::materialize_dyn_int;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
+use crate::constants::{get_literal_name, LITERAL_NAME};
 use crate::prelude::*;
 
 #[derive(Clone, PartialEq)]
@@ -15,7 +17,7 @@ pub enum LiteralValue {
     /// A binary true or false.
     Boolean(bool),
     /// A UTF8 encoded string type.
-    Utf8(String),
+    String(String),
     /// A raw binary array
     Binary(Vec<u8>),
     /// An unsigned 8-bit integer number.
@@ -56,14 +58,50 @@ pub enum LiteralValue {
     #[cfg(feature = "dtype-time")]
     Time(i64),
     Series(SpecialEq<Series>),
+    // Used for dynamic languages
+    Float(f64),
+    // Used for dynamic languages
+    Int(i128),
+    // Dynamic string, still needs to be made concrete.
+    StrCat(String),
 }
 
 impl LiteralValue {
-    pub(crate) fn is_float(&self) -> bool {
-        matches!(self, LiteralValue::Float32(_) | LiteralValue::Float64(_))
+    /// Get the output name as `&str`.
+    pub(crate) fn output_name(&self) -> &str {
+        match self {
+            LiteralValue::Series(s) => s.name(),
+            _ => LITERAL_NAME,
+        }
     }
 
-    pub fn to_anyvalue(&self) -> Option<AnyValue> {
+    /// Get the output name as [`ColumnName`].
+    pub(crate) fn output_column_name(&self) -> ColumnName {
+        match self {
+            LiteralValue::Series(s) => ColumnName::from(s.name()),
+            _ => get_literal_name(),
+        }
+    }
+
+    pub fn materialize(self) -> Self {
+        match self {
+            LiteralValue::Int(_) | LiteralValue::Float(_) | LiteralValue::StrCat(_) => {
+                let av = self.to_any_value().unwrap();
+                av.try_into().unwrap()
+            },
+            lv => lv,
+        }
+    }
+
+    pub(crate) fn projects_as_scalar(&self) -> bool {
+        match self {
+            LiteralValue::Range { low, high, .. } => high.saturating_sub(*low) == 1,
+            LiteralValue::Series(s) => s.len() == 1,
+            _ => true,
+        }
+    }
+
+    pub fn to_any_value(&self) -> Option<AnyValue> {
         use LiteralValue::*;
         let av = match self {
             Null => AnyValue::Null,
@@ -82,7 +120,7 @@ impl LiteralValue {
             Int64(v) => AnyValue::Int64(*v),
             Float32(v) => AnyValue::Float32(*v),
             Float64(v) => AnyValue::Float64(*v),
-            Utf8(v) => AnyValue::Utf8(v),
+            String(v) => AnyValue::String(v),
             #[cfg(feature = "dtype-duration")]
             Duration(v, tu) => AnyValue::Duration(*v, *tu),
             #[cfg(feature = "dtype-date")]
@@ -91,7 +129,46 @@ impl LiteralValue {
             DateTime(v, tu, tz) => AnyValue::Datetime(*v, *tu, tz),
             #[cfg(feature = "dtype-time")]
             Time(v) => AnyValue::Time(*v),
-            _ => return None,
+            Series(s) => AnyValue::List(s.0.clone().into_series()),
+            Int(v) => materialize_dyn_int(*v),
+            Float(v) => AnyValue::Float64(*v),
+            StrCat(v) => AnyValue::String(v),
+            Range {
+                low,
+                high,
+                data_type,
+            } => {
+                let opt_s = match data_type {
+                    DataType::Int32 => {
+                        if *low < i32::MIN as i64 || *high > i32::MAX as i64 {
+                            return None;
+                        }
+
+                        let low = *low as i32;
+                        let high = *high as i32;
+                        new_int_range::<Int32Type>(low, high, 1, "range").ok()
+                    },
+                    DataType::Int64 => {
+                        let low = *low;
+                        let high = *high;
+                        new_int_range::<Int64Type>(low, high, 1, "range").ok()
+                    },
+                    DataType::UInt32 => {
+                        if *low < 0 || *high > u32::MAX as i64 {
+                            return None;
+                        }
+                        let low = *low as u32;
+                        let high = *high as u32;
+                        new_int_range::<UInt32Type>(low, high, 1, "range").ok()
+                    },
+                    _ => return None,
+                };
+                match opt_s {
+                    Some(s) => AnyValue::List(s),
+                    None => return None,
+                }
+            },
+            Binary(v) => AnyValue::Binary(v),
         };
         Some(av)
     }
@@ -114,19 +191,22 @@ impl LiteralValue {
             LiteralValue::Int64(_) => DataType::Int64,
             LiteralValue::Float32(_) => DataType::Float32,
             LiteralValue::Float64(_) => DataType::Float64,
-            LiteralValue::Utf8(_) => DataType::Utf8,
+            LiteralValue::String(_) => DataType::String,
             LiteralValue::Binary(_) => DataType::Binary,
             LiteralValue::Range { data_type, .. } => data_type.clone(),
-            #[cfg(all(feature = "temporal", feature = "dtype-date"))]
+            #[cfg(feature = "dtype-date")]
             LiteralValue::Date(_) => DataType::Date,
-            #[cfg(all(feature = "temporal", feature = "dtype-datetime"))]
+            #[cfg(feature = "dtype-datetime")]
             LiteralValue::DateTime(_, tu, tz) => DataType::Datetime(*tu, tz.clone()),
-            #[cfg(all(feature = "temporal", feature = "dtype-duration"))]
+            #[cfg(feature = "dtype-duration")]
             LiteralValue::Duration(_, tu) => DataType::Duration(*tu),
             LiteralValue::Series(s) => s.dtype().clone(),
             LiteralValue::Null => DataType::Null,
             #[cfg(feature = "dtype-time")]
             LiteralValue::Time(_) => DataType::Time,
+            LiteralValue::Int(v) => DataType::Unknown(UnknownKind::Int(*v)),
+            LiteralValue::Float(_) => DataType::Unknown(UnknownKind::Float),
+            LiteralValue::StrCat(_) => DataType::Unknown(UnknownKind::Str),
         }
     }
 }
@@ -136,15 +216,28 @@ pub trait Literal {
     fn lit(self) -> Expr;
 }
 
+pub trait TypedLiteral: Literal {
+    /// [Literal](Expr::Literal) expression.
+    fn typed_lit(self) -> Expr
+    where
+        Self: Sized,
+    {
+        self.lit()
+    }
+}
+
+impl TypedLiteral for String {}
+impl TypedLiteral for &str {}
+
 impl Literal for String {
     fn lit(self) -> Expr {
-        Expr::Literal(LiteralValue::Utf8(self))
+        Expr::Literal(LiteralValue::String(self))
     }
 }
 
 impl<'a> Literal for &'a str {
     fn lit(self) -> Expr {
-        Expr::Literal(LiteralValue::Utf8(self.to_owned()))
+        Expr::Literal(LiteralValue::String(self.to_string()))
     }
 }
 
@@ -166,7 +259,7 @@ impl TryFrom<AnyValue<'_>> for LiteralValue {
         match value {
             AnyValue::Null => Ok(Self::Null),
             AnyValue::Boolean(b) => Ok(Self::Boolean(b)),
-            AnyValue::Utf8(s) => Ok(Self::Utf8(s.to_string())),
+            AnyValue::String(s) => Ok(Self::String(s.to_string())),
             AnyValue::Binary(b) => Ok(Self::Binary(b.to_vec())),
             #[cfg(feature = "dtype-u8")]
             AnyValue::UInt8(u) => Ok(Self::UInt8(u)),
@@ -182,23 +275,23 @@ impl TryFrom<AnyValue<'_>> for LiteralValue {
             AnyValue::Int64(i) => Ok(Self::Int64(i)),
             AnyValue::Float32(f) => Ok(Self::Float32(f)),
             AnyValue::Float64(f) => Ok(Self::Float64(f)),
-            #[cfg(all(feature = "temporal", feature = "dtype-datetime"))]
+            #[cfg(feature = "dtype-date")]
             AnyValue::Date(v) => Ok(LiteralValue::Date(v)),
-            #[cfg(all(feature = "temporal", feature = "dtype-datetime"))]
+            #[cfg(feature = "dtype-datetime")]
             AnyValue::Datetime(value, tu, tz) => Ok(LiteralValue::DateTime(value, tu, tz.clone())),
-            #[cfg(all(feature = "temporal", feature = "dtype-duration"))]
+            #[cfg(feature = "dtype-duration")]
             AnyValue::Duration(value, tu) => Ok(LiteralValue::Duration(value, tu)),
-            #[cfg(all(feature = "temporal", feature = "dtype-datetime"))]
+            #[cfg(feature = "dtype-time")]
             AnyValue::Time(v) => Ok(LiteralValue::Time(v)),
             AnyValue::List(l) => Ok(Self::Series(SpecialEq::new(l))),
-            AnyValue::Utf8Owned(o) => Ok(Self::Utf8(o.into())),
+            AnyValue::StringOwned(o) => Ok(Self::String(o.into())),
             #[cfg(feature = "dtype-categorical")]
-            AnyValue::Categorical(c, rev_mapping, arr) => {
+            AnyValue::Categorical(c, rev_mapping, arr) | AnyValue::Enum(c, rev_mapping, arr) => {
                 if arr.is_null() {
-                    Ok(Self::Utf8(rev_mapping.get(c).to_string()))
+                    Ok(Self::String(rev_mapping.get(c).to_string()))
                 } else {
                     unsafe {
-                        Ok(Self::Utf8(
+                        Ok(Self::String(
                             arr.deref_unchecked().value(c as usize).to_string(),
                         ))
                     }
@@ -221,21 +314,57 @@ macro_rules! make_literal {
     };
 }
 
+macro_rules! make_literal_typed {
+    ($TYPE:ty, $SCALAR:ident) => {
+        impl TypedLiteral for $TYPE {
+            fn typed_lit(self) -> Expr {
+                Expr::Literal(LiteralValue::$SCALAR(self))
+            }
+        }
+    };
+}
+
+macro_rules! make_dyn_lit {
+    ($TYPE:ty, $SCALAR:ident) => {
+        impl Literal for $TYPE {
+            fn lit(self) -> Expr {
+                Expr::Literal(LiteralValue::$SCALAR(self.try_into().unwrap()))
+            }
+        }
+    };
+}
+
 make_literal!(bool, Boolean);
-make_literal!(f32, Float32);
-make_literal!(f64, Float64);
+make_literal_typed!(f32, Float32);
+make_literal_typed!(f64, Float64);
 #[cfg(feature = "dtype-i8")]
-make_literal!(i8, Int8);
+make_literal_typed!(i8, Int8);
 #[cfg(feature = "dtype-i16")]
-make_literal!(i16, Int16);
-make_literal!(i32, Int32);
-make_literal!(i64, Int64);
+make_literal_typed!(i16, Int16);
+make_literal_typed!(i32, Int32);
+make_literal_typed!(i64, Int64);
 #[cfg(feature = "dtype-u8")]
-make_literal!(u8, UInt8);
+make_literal_typed!(u8, UInt8);
 #[cfg(feature = "dtype-u16")]
-make_literal!(u16, UInt16);
-make_literal!(u32, UInt32);
-make_literal!(u64, UInt64);
+make_literal_typed!(u16, UInt16);
+make_literal_typed!(u32, UInt32);
+make_literal_typed!(u64, UInt64);
+
+make_dyn_lit!(f32, Float);
+make_dyn_lit!(f64, Float);
+#[cfg(feature = "dtype-i8")]
+make_dyn_lit!(i8, Int);
+#[cfg(feature = "dtype-i16")]
+make_dyn_lit!(i16, Int);
+make_dyn_lit!(i32, Int);
+make_dyn_lit!(i64, Int);
+#[cfg(feature = "dtype-u8")]
+make_dyn_lit!(u8, Int);
+#[cfg(feature = "dtype-u16")]
+make_dyn_lit!(u16, Int);
+make_dyn_lit!(u32, Int);
+make_dyn_lit!(u64, Int);
+make_dyn_lit!(i128, Int);
 
 /// The literal Null
 pub struct Null {}
@@ -247,18 +376,18 @@ impl Literal for Null {
     }
 }
 
-#[cfg(all(feature = "temporal", feature = "dtype-datetime"))]
+#[cfg(feature = "dtype-datetime")]
 impl Literal for NaiveDateTime {
     fn lit(self) -> Expr {
         if in_nanoseconds_window(&self) {
             Expr::Literal(LiteralValue::DateTime(
-                self.timestamp_nanos(),
+                self.and_utc().timestamp_nanos_opt().unwrap(),
                 TimeUnit::Nanoseconds,
                 None,
             ))
         } else {
             Expr::Literal(LiteralValue::DateTime(
-                self.timestamp_micros(),
+                self.and_utc().timestamp_micros(),
                 TimeUnit::Microseconds,
                 None,
             ))
@@ -266,7 +395,7 @@ impl Literal for NaiveDateTime {
     }
 }
 
-#[cfg(all(feature = "temporal", feature = "dtype-duration"))]
+#[cfg(feature = "dtype-duration")]
 impl Literal for ChronoDuration {
     fn lit(self) -> Expr {
         if let Some(value) = self.num_nanoseconds() {
@@ -280,7 +409,7 @@ impl Literal for ChronoDuration {
     }
 }
 
-#[cfg(all(feature = "temporal", feature = "dtype-datetime"))]
+#[cfg(feature = "dtype-datetime")]
 impl Literal for NaiveDate {
     fn lit(self) -> Expr {
         self.and_hms_opt(0, 0, 0).unwrap().lit()
@@ -310,12 +439,39 @@ pub fn lit<L: Literal>(t: L) -> Expr {
     t.lit()
 }
 
+pub fn typed_lit<L: TypedLiteral>(t: L) -> Expr {
+    t.typed_lit()
+}
+
 impl Hash for LiteralValue {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        if let Some(v) = self.to_anyvalue() {
-            v.hash_impl(state, true)
-        } else {
-            0.hash(state)
+        std::mem::discriminant(self).hash(state);
+        match self {
+            LiteralValue::Series(s) => {
+                // Free stats
+                s.dtype().hash(state);
+                let len = s.len();
+                len.hash(state);
+                s.null_count().hash(state);
+                // Hash 5 first values. Still a poor hash, but it removes the pathological clashes.
+                for i in 0..std::cmp::min(5, len) {
+                    s.get(i).unwrap().hash(state);
+                }
+            },
+            LiteralValue::Range {
+                low,
+                high,
+                data_type,
+            } => {
+                low.hash(state);
+                high.hash(state);
+                data_type.hash(state)
+            },
+            _ => {
+                if let Some(v) = self.to_any_value() {
+                    v.hash_impl(state, true)
+                }
+            },
         }
     }
 }

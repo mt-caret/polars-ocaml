@@ -18,6 +18,7 @@ fn index_of<T>(slice: &[T], item: &T) -> Option<usize> {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Ord, PartialOrd)]
+#[repr(transparent)]
 pub struct Node(pub usize);
 
 impl Default for Node {
@@ -100,6 +101,13 @@ impl<T> Arena<T> {
     }
     pub fn clear(&mut self) {
         self.items.clear()
+    }
+}
+
+impl<T: Clone> Arena<T> {
+    pub fn duplicate(&mut self, node: Node) -> Node {
+        let item = self.items[node.0].clone();
+        self.add(item)
     }
 }
 

@@ -1,42 +1,71 @@
 // Take a look at the license at the top of the repository in the LICENSE file.
 
-use crate::{DiskExt, DiskKind};
+use crate::{Disk, DiskKind};
 
 use std::{ffi::OsStr, path::Path};
 
-#[doc = include_str!("../../md_doc/disk.md")]
-pub struct Disk {}
+pub(crate) struct DiskInner;
 
-impl DiskExt for Disk {
-    fn kind(&self) -> DiskKind {
+impl DiskInner {
+    pub(crate) fn kind(&self) -> DiskKind {
         unreachable!()
     }
 
-    fn name(&self) -> &OsStr {
+    pub(crate) fn name(&self) -> &OsStr {
         unreachable!()
     }
 
-    fn file_system(&self) -> &[u8] {
-        &[]
+    pub(crate) fn file_system(&self) -> &OsStr {
+        Default::default()
     }
 
-    fn mount_point(&self) -> &Path {
+    pub(crate) fn mount_point(&self) -> &Path {
         Path::new("")
     }
 
-    fn total_space(&self) -> u64 {
+    pub(crate) fn total_space(&self) -> u64 {
         0
     }
 
-    fn available_space(&self) -> u64 {
+    pub(crate) fn available_space(&self) -> u64 {
         0
     }
 
-    fn is_removable(&self) -> bool {
+    pub(crate) fn is_removable(&self) -> bool {
         false
     }
 
-    fn refresh(&mut self) -> bool {
+    pub(crate) fn refresh(&mut self) -> bool {
         true
+    }
+}
+
+pub(crate) struct DisksInner {
+    pub(crate) disks: Vec<Disk>,
+}
+
+impl DisksInner {
+    pub(crate) fn new() -> Self {
+        Self { disks: Vec::new() }
+    }
+
+    pub(crate) fn from_vec(disks: Vec<Disk>) -> Self {
+        Self { disks }
+    }
+
+    pub(crate) fn into_vec(self) -> Vec<Disk> {
+        self.disks
+    }
+
+    pub(crate) fn refresh_list(&mut self) {
+        // Does nothing.
+    }
+
+    pub(crate) fn list(&self) -> &[Disk] {
+        &self.disks
+    }
+
+    pub(crate) fn list_mut(&mut self) -> &mut [Disk] {
+        &mut self.disks
     }
 }

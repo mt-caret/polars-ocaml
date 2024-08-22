@@ -13,7 +13,7 @@
 edition = "2021"
 rust-version = "1.60"
 name = "chrono-tz"
-version = "0.8.3"
+version = "0.8.6"
 build = "build.rs"
 description = "TimeZone implementations for chrono from the IANA database"
 documentation = "https://docs.rs/chrono-tz"
@@ -27,7 +27,13 @@ keywords = [
 ]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/chronotope/chrono-tz"
-resolver = "1"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = [
+    "--cfg",
+    "docsrs",
+]
 
 [dependencies.arbitrary]
 version = "1.2"
@@ -35,7 +41,7 @@ features = ["derive"]
 optional = true
 
 [dependencies.chrono]
-version = "0.4"
+version = "0.4.24"
 default-features = false
 
 [dependencies.phf]
@@ -61,14 +67,15 @@ default-features = false
 version = "1"
 
 [build-dependencies.chrono-tz-build]
-version = "0.2"
+version = "0.2.1"
 
 [features]
 case-insensitive = [
-    "uncased",
+    "dep:uncased",
     "chrono-tz-build/case-insensitive",
     "phf/uncased",
 ]
 default = ["std"]
 filter-by-regex = ["chrono-tz-build/filter-by-regex"]
+serde = ["dep:serde"]
 std = []

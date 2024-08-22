@@ -11,6 +11,7 @@ use syn::{
 impl Printer {
     pub fn pat(&mut self, pat: &Pat) {
         match pat {
+            #![cfg_attr(all(test, exhaustive), deny(non_exhaustive_omitted_patterns))]
             Pat::Const(pat) => self.expr_const(pat),
             Pat::Ident(pat) => self.pat_ident(pat),
             Pat::Lit(pat) => self.expr_lit(pat),
@@ -28,7 +29,6 @@ impl Printer {
             Pat::Type(pat) => self.pat_type(pat),
             Pat::Verbatim(pat) => self.pat_verbatim(pat),
             Pat::Wild(pat) => self.pat_wild(pat),
-            #[cfg_attr(all(test, exhaustive), deny(non_exhaustive_omitted_patterns))]
             _ => unimplemented!("unknown Pat"),
         }
     }
@@ -168,8 +168,73 @@ impl Printer {
         self.ty(&pat.ty);
     }
 
+    #[cfg(not(feature = "verbatim"))]
     fn pat_verbatim(&mut self, pat: &TokenStream) {
         unimplemented!("Pat::Verbatim `{}`", pat);
+    }
+
+    #[cfg(feature = "verbatim")]
+    fn pat_verbatim(&mut self, tokens: &TokenStream) {
+        use syn::parse::{Parse, ParseStream, Result};
+        use syn::{braced, Attribute, Block, Token};
+
+        enum PatVerbatim {
+            Ellipsis,
+            Box(Pat),
+            Const(PatConst),
+        }
+
+        struct PatConst {
+            attrs: Vec<Attribute>,
+            block: Block,
+        }
+
+        impl Parse for PatVerbatim {
+            fn parse(input: ParseStream) -> Result<Self> {
+                let lookahead = input.lookahead1();
+                if lookahead.peek(Token![box]) {
+                    input.parse::<Token![box]>()?;
+                    let inner = Pat::parse_single(input)?;
+                    Ok(PatVerbatim::Box(inner))
+                } else if lookahead.peek(Token![const]) {
+                    input.parse::<Token![const]>()?;
+                    let content;
+                    let brace_token = braced!(content in input);
+                    let attrs = content.call(Attribute::parse_inner)?;
+                    let stmts = content.call(Block::parse_within)?;
+                    Ok(PatVerbatim::Const(PatConst {
+                        attrs,
+                        block: Block { brace_token, stmts },
+                    }))
+                } else if lookahead.peek(Token![...]) {
+                    input.parse::<Token![...]>()?;
+                    Ok(PatVerbatim::Ellipsis)
+                } else {
+                    Err(lookahead.error())
+                }
+            }
+        }
+
+        let pat: PatVerbatim = match syn::parse2(tokens.clone()) {
+            Ok(pat) => pat,
+            Err(_) => unimplemented!("Pat::Verbatim `{}`", tokens),
+        };
+
+        match pat {
+            PatVerbatim::Ellipsis => {
+                self.word("...");
+            }
+            PatVerbatim::Box(pat) => {
+                self.word("box ");
+                self.pat(&pat);
+            }
+            PatVerbatim::Const(pat) => {
+                self.word("const ");
+                self.cbox(INDENT);
+                self.small_block(&pat.block, &pat.attrs);
+                self.end();
+            }
+        }
     }
 
     fn pat_wild(&mut self, pat: &PatWild) {

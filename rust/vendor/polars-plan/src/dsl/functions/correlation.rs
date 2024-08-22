@@ -1,19 +1,19 @@
 use super::*;
 
 /// Compute the covariance between two columns.
-pub fn cov(a: Expr, b: Expr) -> Expr {
+pub fn cov(a: Expr, b: Expr, ddof: u8) -> Expr {
     let input = vec![a, b];
     let function = FunctionExpr::Correlation {
         method: CorrelationMethod::Covariance,
-        ddof: 0,
+        ddof,
     };
     Expr::Function {
         input,
         function,
         options: FunctionOptions {
-            collect_groups: ApplyOptions::ApplyGroups,
+            collect_groups: ApplyOptions::GroupWise,
             cast_to_supertypes: true,
-            auto_explode: true,
+            returns_scalar: true,
             ..Default::default()
         },
     }
@@ -34,9 +34,9 @@ pub fn pearson_corr(a: Expr, b: Expr, ddof: u8) -> Expr {
         input,
         function,
         options: FunctionOptions {
-            collect_groups: ApplyOptions::ApplyGroups,
+            collect_groups: ApplyOptions::GroupWise,
             cast_to_supertypes: true,
-            auto_explode: true,
+            returns_scalar: true,
             ..Default::default()
         },
     }
@@ -62,9 +62,9 @@ pub fn spearman_rank_corr(a: Expr, b: Expr, ddof: u8, propagate_nans: bool) -> E
         input,
         function,
         options: FunctionOptions {
-            collect_groups: ApplyOptions::ApplyGroups,
+            collect_groups: ApplyOptions::GroupWise,
             cast_to_supertypes: true,
-            auto_explode: true,
+            returns_scalar: true,
             ..Default::default()
         },
     }
@@ -73,8 +73,8 @@ pub fn spearman_rank_corr(a: Expr, b: Expr, ddof: u8, propagate_nans: bool) -> E
 #[cfg(feature = "rolling_window")]
 pub fn rolling_corr(x: Expr, y: Expr, options: RollingCovOptions) -> Expr {
     // see: https://github.com/pandas-dev/pandas/blob/v1.5.1/pandas/core/window/rolling.py#L1780-L1804
-    let rolling_options = RollingOptions {
-        window_size: Duration::new(options.window_size as i64),
+    let rolling_options = RollingOptionsFixedWindow {
+        window_size: options.window_size as usize,
         min_periods: options.min_periods as usize,
         ..Default::default()
     };
@@ -85,8 +85,8 @@ pub fn rolling_corr(x: Expr, y: Expr, options: RollingCovOptions) -> Expr {
     let var_x = x.clone().rolling_var(rolling_options.clone());
     let var_y = y.clone().rolling_var(rolling_options);
 
-    let rolling_options_count = RollingOptions {
-        window_size: Duration::new(options.window_size as i64),
+    let rolling_options_count = RollingOptionsFixedWindow {
+        window_size: options.window_size as usize,
         min_periods: 0,
         ..Default::default()
     };
@@ -104,8 +104,8 @@ pub fn rolling_corr(x: Expr, y: Expr, options: RollingCovOptions) -> Expr {
 #[cfg(feature = "rolling_window")]
 pub fn rolling_cov(x: Expr, y: Expr, options: RollingCovOptions) -> Expr {
     // see: https://github.com/pandas-dev/pandas/blob/91111fd99898d9dcaa6bf6bedb662db4108da6e6/pandas/core/window/rolling.py#L1700
-    let rolling_options = RollingOptions {
-        window_size: Duration::new(options.window_size as i64),
+    let rolling_options = RollingOptionsFixedWindow {
+        window_size: options.window_size as usize,
         min_periods: options.min_periods as usize,
         ..Default::default()
     };
@@ -113,8 +113,8 @@ pub fn rolling_cov(x: Expr, y: Expr, options: RollingCovOptions) -> Expr {
     let mean_x_y = (x.clone() * y.clone()).rolling_mean(rolling_options.clone());
     let mean_x = x.clone().rolling_mean(rolling_options.clone());
     let mean_y = y.clone().rolling_mean(rolling_options);
-    let rolling_options_count = RollingOptions {
-        window_size: Duration::new(options.window_size as i64),
+    let rolling_options_count = RollingOptionsFixedWindow {
+        window_size: options.window_size as usize,
         min_periods: 0,
         ..Default::default()
     };

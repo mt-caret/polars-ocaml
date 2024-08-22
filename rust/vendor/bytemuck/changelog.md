@@ -1,5 +1,38 @@
 # `bytemuck` changelog
 
+## 1.16.0
+
+* Adds a `const_zeroed` feature (MSRV 1.75) which puts a `zeroed` fn at the crate root.
+  This is just like the `Zeroable::zeroed` method, but as a `const fn`.
+
+## 1.15.0
+
+This primarily relaxes the bounds on a `From` impl.
+
+Previously:
+
+> `impl<T: NoUninit> From<Box<T>> for BoxBytes`
+
+Now:
+
+> `impl<T: ?Sized + sealed::BoxBytesOf> From<Box<T>> for BoxBytes`
+
+All related functions and methods are similarly updated.
+
+We believe this to be backwards compatible with all previous uses,
+and now `BoxBytes` can be converted to/from more types than before.
+
+## 1.14.3
+
+* The new std simd nightly features are apparently arch-specific.
+  This adjusts the feature activation to be x86/ x86_64 only.
+
+## 1.14.2
+
+* Changes the name of the Nightly feature activated by the crate's
+  `nightly_stdsimd` feature. This is needed as of (approximately) Nightly
+  2024-02-06 and later, because the Nightly feature was changed.
+
 ## 1.14.1
 
 * docs clarifications.

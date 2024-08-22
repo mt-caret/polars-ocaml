@@ -12,31 +12,44 @@
 [package]
 edition = "2021"
 name = "polars-json"
-version = "0.32.1"
+version = "0.40.0"
 authors = ["Ritchie Vink <ritchie46@gmail.com>"]
+build = false
+autobins = false
+autoexamples = false
+autotests = false
+autobenches = false
 description = "JSON related logic for the Polars DataFrame library"
 homepage = "https://www.pola.rs/"
+readme = "README.md"
 license = "MIT"
 repository = "https://github.com/pola-rs/polars"
 
+[lib]
+name = "polars_json"
+path = "src/lib.rs"
+
 [dependencies.ahash]
-version = "0.8"
+version = ">=0.8.5"
 
 [dependencies.arrow]
-version = "0.17.4"
+version = "0.40.0"
 features = [
     "compute_aggregate",
     "compute_arithmetics",
+    "compute_bitwise",
     "compute_boolean",
     "compute_boolean_kleene",
     "compute_cast",
     "compute_comparison",
-    "compute_concatenate",
-    "compute_filter",
-    "compute_if_then_else",
 ]
 default-features = false
-package = "arrow2"
+package = "polars-arrow"
+
+[dependencies.chrono]
+version = "0.4.31"
+features = ["std"]
+default-features = false
 
 [dependencies.fallible-streaming-iterator]
 version = "0.1"
@@ -46,28 +59,36 @@ version = "0.14"
 features = [
     "rayon",
     "ahash",
+    "serde",
 ]
 
 [dependencies.indexmap]
 version = "2"
 features = ["std"]
 
+[dependencies.itoa]
+version = "1.0.6"
+
 [dependencies.num-traits]
 version = "0.2"
 
-[dependencies.polars-arrow]
-version = "0.32.1"
+[dependencies.polars-error]
+version = "0.40.0"
 default-features = false
 
-[dependencies.polars-error]
-version = "0.32.1"
-
 [dependencies.polars-utils]
-version = "0.32.1"
+version = "0.40.0"
+default-features = false
+
+[dependencies.ryu]
+version = "1.0.13"
 
 [dependencies.simd-json]
-version = "0.10"
-features = [
-    "allow-non-simd",
-    "known-key",
-]
+version = "0.13"
+features = ["known-key"]
+
+[dependencies.streaming-iterator]
+version = "0.1.9"
+
+[features]
+timezones = ["arrow/chrono-tz"]

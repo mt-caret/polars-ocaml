@@ -1,3 +1,11 @@
+# Version 0.5.13
+
+- Add `select_biased!` macro. (#1040)
+
+# Version 0.5.12
+
+- Fix memory leak in unbounded channel. (#1084)
+
 # Version 0.5.11
 
 - Remove dependency on `cfg-if`. (#1072)

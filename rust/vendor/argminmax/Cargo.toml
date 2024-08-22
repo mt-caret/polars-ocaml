@@ -12,7 +12,7 @@
 [package]
 edition = "2021"
 name = "argminmax"
-version = "0.6.1"
+version = "0.6.2"
 authors = ["Jeroen Van Der Donckt"]
 exclude = [
     ".git*",
@@ -104,7 +104,7 @@ optional = true
 default-features = false
 
 [dependencies.half]
-version = "2.1.0"
+version = "2.3.1"
 features = ["num-traits"]
 optional = true
 default-features = false
@@ -115,25 +115,25 @@ optional = true
 default-features = false
 
 [dependencies.num-traits]
-version = "0.2.15"
+version = "0.2"
 default-features = false
 
 [dev-dependencies.codspeed-criterion-compat]
-version = "1.1"
+version = "2.3.3"
 
 [dev-dependencies.criterion]
-version = "0.3.1"
+version = "0.5.1"
 
 [dev-dependencies.rand]
-version = "0.7.2"
+version = "0.8.5"
 default-features = false
 
 [dev-dependencies.rstest]
-version = "0.16"
+version = "0.18.2"
 default-features = false
 
 [dev-dependencies.rstest_reuse]
-version = "0.5"
+version = "0.6"
 default-features = false
 
 [features]

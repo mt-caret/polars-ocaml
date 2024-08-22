@@ -1,26 +1,22 @@
 use std::borrow::Cow;
 
+use arrow::legacy::kernels::list::array_to_unit_list;
 use arrow::offset::Offsets;
-use polars_arrow::kernels::list::array_to_unit_list;
 
 use crate::chunked_array::builder::get_list_builder;
 use crate::prelude::*;
 
 fn reshape_fast_path(name: &str, s: &Series) -> Series {
-    let chunks = match s.dtype() {
+    let mut ca = match s.dtype() {
         #[cfg(feature = "dtype-struct")]
         DataType::Struct(_) => {
-            vec![Box::new(array_to_unit_list(s.array_ref(0).clone())) as ArrayRef]
+            ListChunked::with_chunk(name, array_to_unit_list(s.array_ref(0).clone()))
         },
-        _ => s
-            .chunks()
-            .iter()
-            .map(|arr| Box::new(array_to_unit_list(arr.clone())) as ArrayRef)
-            .collect::<Vec<_>>(),
+        _ => ListChunked::from_chunk_iter(
+            name,
+            s.chunks().iter().map(|arr| array_to_unit_list(arr.clone())),
+        ),
     };
-
-    // safety dtype is checked.
-    let mut ca = unsafe { ListChunked::from_chunks(name, chunks) };
     ca.set_inner_dtype(s.dtype().clone());
     ca.set_fast_explode();
     ca.into_series()
@@ -28,8 +24,7 @@ fn reshape_fast_path(name: &str, s: &Series) -> Series {
 
 impl Series {
     /// Convert the values of this Series to a ListChunked with a length of 1,
-    /// So a Series of:
-    /// `[1, 2, 3]` becomes `[[1, 2, 3]]`
+    /// so a Series of `[1, 2, 3]` becomes `[[1, 2, 3]]`.
     pub fn implode(&self) -> PolarsResult<ListChunked> {
         let s = self.rechunk();
         let values = s.array_ref(0);
@@ -39,8 +34,7 @@ impl Series {
 
         let data_type = ListArray::<i64>::default_datatype(values.data_type().clone());
 
-        // Safety:
-        // offsets are correct;
+        // SAFETY: offsets are correct.
         let arr = unsafe {
             ListArray::new(
                 data_type,
@@ -49,18 +43,16 @@ impl Series {
                 None,
             )
         };
-        let name = self.name();
 
-        let mut ca = unsafe { ListChunked::from_chunks(name, vec![Box::new(arr)]) };
-        ca.to_logical(inner_type.clone());
+        let mut ca = ListChunked::with_chunk(self.name(), arr);
+        unsafe { ca.to_logical(inner_type.clone()) };
         ca.set_fast_explode();
-
         Ok(ca)
     }
 
-    pub fn reshape(&self, dims: &[i64]) -> PolarsResult<Series> {
-        if dims.is_empty() {
-            panic!("dimensions cannot be empty")
+    pub fn reshape(&self, dimensions: &[i64]) -> PolarsResult<Series> {
+        if dimensions.is_empty() {
+            polars_bail!(ComputeError: "reshape `dimensions` cannot be empty")
         }
         let s = if let DataType::List(_) = self.dtype() {
             Cow::Owned(self.explode()?)
@@ -68,50 +60,51 @@ impl Series {
             Cow::Borrowed(self)
         };
 
-        // no rows
-        if dims[0] == 0 {
-            let s = reshape_fast_path(self.name(), &s);
-            return Ok(s);
-        }
-
         let s_ref = s.as_ref();
 
-        let mut dims = dims.to_vec();
-        if let Some(idx) = dims.iter().position(|i| *i == -1) {
-            let mut product = 1;
+        let dimensions = dimensions.to_vec();
 
-            for (cnt, dim) in dims.iter().enumerate() {
-                if cnt != idx {
-                    product *= *dim
-                }
-            }
-            dims[idx] = s_ref.len() as i64 / product;
-        }
-
-        let prod = dims.iter().product::<i64>() as usize;
-        polars_ensure!(
-            prod == s_ref.len(),
-            ComputeError: "cannot reshape len {} into shape {:?}", s_ref.len(), dims,
-        );
-        match dims.len() {
-            1 => Ok(s_ref.slice(0, dims[0] as usize)),
+        match dimensions.len() {
+            1 => {
+                polars_ensure!(
+                    dimensions[0] as usize == s_ref.len() || dimensions[0] == -1_i64,
+                    ComputeError: "cannot reshape len {} into shape {:?}", s_ref.len(), dimensions,
+                );
+                Ok(s_ref.clone())
+            },
             2 => {
-                let mut rows = dims[0];
-                let mut cols = dims[1];
+                let mut rows = dimensions[0];
+                let mut cols = dimensions[1];
 
-                // infer dimension
-                if rows == -1 {
-                    rows = cols / s_ref.len() as i64
-                }
-                if cols == -1 {
-                    cols = rows / s_ref.len() as i64
+                if s_ref.len() == 0_usize {
+                    if (rows == -1 || rows == 0) && (cols == -1 || cols == 0) {
+                        let s = reshape_fast_path(self.name(), s_ref);
+                        return Ok(s);
+                    } else {
+                        polars_bail!(ComputeError: "cannot reshape len 0 into shape {:?}", dimensions,)
+                    }
                 }
 
-                // fast path, we can create a unit list so we only allocate offsets
+                // Infer dimension.
+                if rows == -1 && cols >= 1 {
+                    rows = s_ref.len() as i64 / cols
+                } else if cols == -1 && rows >= 1 {
+                    cols = s_ref.len() as i64 / rows
+                } else if rows == -1 && cols == -1 {
+                    rows = s_ref.len() as i64;
+                    cols = 1_i64;
+                }
+
+                // Fast path, we can create a unit list so we only allocate offsets.
                 if rows as usize == s_ref.len() && cols == 1 {
                     let s = reshape_fast_path(self.name(), s_ref);
                     return Ok(s);
                 }
+
+                polars_ensure!(
+                    (rows*cols) as usize == s_ref.len() && rows >= 1 && cols >= 1,
+                    ComputeError: "cannot reshape len {} into shape {:?}", s_ref.len(), dimensions,
+                );
 
                 let mut builder =
                     get_list_builder(s_ref.dtype(), s_ref.len(), rows as usize, self.name())?;
@@ -134,7 +127,6 @@ impl Series {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::chunked_array::builder::get_list_builder;
 
     #[test]
     fn test_to_list() -> PolarsResult<()> {
@@ -145,7 +137,7 @@ mod test {
         let expected = builder.finish();
 
         let out = s.implode()?;
-        assert!(expected.into_series().series_equal(&out.into_series()));
+        assert!(expected.into_series().equals(&out.into_series()));
 
         Ok(())
     }
