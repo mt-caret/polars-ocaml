@@ -231,6 +231,16 @@ fn rust_data_frame_height(
 }
 
 #[ocaml_interop_export]
+fn rust_data_frame_estimated_size(
+    cr: &mut &mut OCamlRuntime,
+    data_frame: OCamlRef<DynBox<PolarsDataFrame>>,
+) -> OCaml<OCamlInt> {
+    let Abstract(data_frame) = data_frame.to_rust(cr);
+    let estimated_size = data_frame.borrow().estimated_size() as i64;
+    estimated_size.to_ocaml(cr)
+}
+
+#[ocaml_interop_export]
 fn rust_data_frame_lazy(
     cr: &mut &mut OCamlRuntime,
     data_frame: OCamlRef<DynBox<PolarsDataFrame>>,

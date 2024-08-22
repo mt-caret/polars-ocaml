@@ -236,6 +236,8 @@ module T = struct
 
   let tail ?length t = tail t ~length
 
+  external estimated_size : t -> int = "rust_series_estimated_size"
+
   external sample_n
     :  t
     -> n:int

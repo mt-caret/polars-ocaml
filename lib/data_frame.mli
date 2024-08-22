@@ -23,6 +23,7 @@ val write_jsonl_exn : t -> string -> unit
 val clear : t -> t
 val describe_exn : ?percentiles:float list -> t -> t
 val height : t -> int
+val estimated_size : t -> int
 val lazy_ : t -> Lazy_frame.t
 val select : t -> exprs:Expr.t list -> (t, string) result
 val select_exn : t -> exprs:Expr.t list -> t

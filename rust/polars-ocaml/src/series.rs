@@ -1150,6 +1150,16 @@ fn rust_series_tail(
     })
 }
 
+#[ocaml_interop_export]
+fn rust_series_estimated_size(
+    cr: &mut &mut OCamlRuntime,
+    series: OCamlRef<DynBox<PolarsSeries>>,
+) -> OCaml<OCamlInt> {
+    let Abstract(series) = series.to_rust(cr);
+    let estimated_size = series.borrow().estimated_size() as i64;
+    estimated_size.to_ocaml(cr)
+}
+
 #[ocaml_interop_export(raise_on_err)]
 fn rust_series_sample_n(
     cr: &mut &mut OCamlRuntime,

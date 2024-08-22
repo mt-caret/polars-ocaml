@@ -83,6 +83,7 @@ val to_data_frame : t -> Data_frame0.t
 val sort : ?descending:bool -> t -> t
 val head : ?length:int -> t -> t
 val tail : ?length:int -> t -> t
+val estimated_size : t -> int
 
 val sample_n
   :  ?seed:int
