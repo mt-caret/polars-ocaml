@@ -1,0 +1,7 @@
+(library (
+  (name ppx_polars_test)
+  (libraries (core expect_test_helpers_core polars))
+  (preprocess (pps (ppx_jane ppx_polars ppx_stringable_record)))))
+
+(toplevel_expect_tests (
+  (libraries (core polars)) (preprocess (pps (ppx_jane ppx_polars)))))

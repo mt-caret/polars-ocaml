@@ -1,0 +1,72 @@
+open Core;;
+
+#verbose true
+
+(* Types *)
+
+type t = A [@@deriving polars]
+
+(* TODO: it would be awesome if we could non-argument-carrying variants and
+   map them to categorical types in polars. *)
+[%%expect
+  {|
+Line _, characters _-_:
+Error: Unsupported use of `polars' (you can only use it on records).
+|}]
+
+type 'a t = { a : 'a } [@@deriving polars]
+
+(* TODO: perhaps this is something we can support, by doing something
+   similar to how ppx_sexp_conv? *)
+[%%expect
+  {|
+Line _, characters _-_:
+Error: Unsupported use of `polars' (you cannot use it with type parameters).
+|}]
+
+(* Attributes *)
+
+type t = { a : int [@polars.nested] [@polars.data_type Polars.Data_type.Typed.Int64] }
+[@@deriving polars]
+
+[%%expect
+  {|
+Line _, characters _-_:
+Error: Unsupported use of `polars' (You cannot use the [@polars.nested] and [@polars.data_type] attributes in the same field.).
+|}]
+
+type t = { a : int [@polars.nested] } [@@deriving polars]
+
+[%%expect
+  {|
+Line _, characters _-_:
+Error: Unsupported use of `polars' (you can only use the [@polars.nested] attribute on non-core-primitive type constructors (with no type parameters)).
+|}]
+
+type t = { a : int [@polars.data_type] } [@@deriving polars]
+
+[%%expect
+  {|
+Line _, characters _-_:
+Error: :: expected
+|}]
+
+(* Inferring data types *)
+
+type t = { a : [ `A ] } [@@deriving polars]
+
+[%%expect
+  {|
+Line _, characters _-_:
+Error: Unsupported use of `polars' (cannot infer data type for field a - please use [@polars.data_type _]).
+|}]
+
+type t = { a : int option } [@@deriving polars]
+
+(* TODO: supporting top-level options i.e. [foo option] but not [foo option
+   list] or [foo option option] seems feasible and pretty useful to have. *)
+[%%expect
+  {|
+Line _, characters _-_:
+Error: Unsupported use of `polars' (no field types with arity > 0 allowed unless it's a [_ list]).
+|}]

@@ -999,7 +999,7 @@ val log1p : t -> t
 module Dt : sig
   val strftime : t -> format:string -> t
 
-  (* CR-someday mtakeda: it's pretty weird that we take a string here when there's a
+  (* TODO: it's pretty weird that we take a string here when there's a
      proper type [Tz.t] that can be passed instead. This is due to the Rust library
      API also taking a string here, and underlying data types also using a
      [Option<String>] to represent timezones:

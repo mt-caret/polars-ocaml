@@ -59,7 +59,7 @@ let%expect_test "Expr.Dt.time round trip" =
       if Time_ns_unix.(
            between
              time
-             (* CR-someday mtakeda: Converting to a time that's pre-epoch (at least in the
+             (* TODO: Converting to a time that's pre-epoch (at least in the
                 given zone) causes a panic in Polars with message "invalid time". We can
                 avoid this with code filtering generated times like the following:
 
@@ -74,7 +74,7 @@ let%expect_test "Expr.Dt.time round trip" =
 
                 but this feels like something that should just not panic in Rust/Polars?
 
-                mskarupke: It also fails for a few days after the epoch. I don't know when
+                It also fails for a few days after the epoch. I don't know when
                 exactly this starts working reliably so I bumped it to 1975. An example of a
                 failing date is 1971-10-30:
 
@@ -89,10 +89,10 @@ let%expect_test "Expr.Dt.time round trip" =
                (* round-trippability fails for dates that are far in the future. We
                   suspect this is due to some disagreement between OCaml and Rust around DST
                   handling. *)
-               (* CR-someday mtakeda: this cutoff seems... extremely suspicious?
+               (* TODO: this cutoff seems... extremely suspicious?
                   https://en.wikipedia.org/wiki/Year_2038_problem
 
-                  mskarupke: Fwiw I picked this time because I suspected the year 2038
+                  Fwiw I picked this time because I suspected the year 2038
                   problem. I didn't check when exactly the cutoff happens. If you change this
                   to 2039, the test fails, but it could also be that this is broken on
                   2038-01-01, I haven't checked. *)

@@ -1,0 +1,1 @@
+(library ((name ppx_polars_runtime) (libraries (core polars))))

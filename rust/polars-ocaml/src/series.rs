@@ -1237,7 +1237,7 @@ fn modify_native_series_at_chunk_index<T: NativeType>(
     }
 }
 
-// CR-someday mtakeda: It's slightly sad we have this duplication here. Maybe
+// TODO: It's slightly sad we have this duplication here. Maybe
 // this is something that can be resolved with traits associating
 // [PrimitiveArray<T>] with [T]] and [BooleanArray] with [bool]?
 fn modify_boolean_array_at_chunk_index(
@@ -1299,13 +1299,13 @@ fn modify_optional_native_series_at_chunk_index<T: NativeType>(
     indices_and_values: &Vec<(usize, Option<T>)>,
 ) -> Result<(), String> {
     unsafe {
-        // CR-someday mtakeda: I think Series/ChunkedArrays store a null_count
+        // TODO: I think Series/ChunkedArrays store a null_count
         // separately, so I think we want to explicitly update that as well, if
         // I'm not mistaken. See
         // https://docs.rs/polars/latest/polars/series/struct.Series.html#method.chunks_mut
         // I'm not sure how costly the mentioned [compute_len()] is, though...
         //
-        // ozeng: https://docs.pola.rs/docs/rust/dev/src/polars_core/chunked_array/ops/chunkops.rs.html#87
+        // https://docs.pola.rs/docs/rust/dev/src/polars_core/chunked_array/ops/chunkops.rs.html#87
         // I believe this operation is O(n_chunks) btw, as arr.null_count() is O(1) --
         // each chunk also keeps track of its null count.
         //
@@ -1313,7 +1313,7 @@ fn modify_optional_native_series_at_chunk_index<T: NativeType>(
         // and it seems correct? I don't think I did anything to make sure that
         // the null counts are correct
         //
-        // mtakeda: Hmmm, maybe things are just fine; let's punt on this. I'll
+        // Hmmm, maybe things are just fine; let's punt on this. I'll
         // try looking into this later. cr-someday-ing
 
         let chunks = series.chunks_mut();
@@ -1418,15 +1418,15 @@ pub fn modify_series_at_chunk_index(
     match data_type {
         GADTDataType::Boolean => {
             if are_values_options {
-                // CR-someday mtakeda: why not add support for bool options
+                // TODO: why not add support for bool options
                 // series while we're at it? Is this non-trivial to do?
                 //
-                // mskarupke: This is surprisingly tricky. I tried for a while but I think
+                // This is surprisingly tricky. I tried for a while but I think
                 // BooleanArray just doesn't have a way to modify its internal validity()
                 // without making a copy. Meaning a O(1) update would turn into a O(n)
                 // update. Let me know if I missed anything.
                 //
-                // mtakeda: That's unfortunate; let's cr-someday this and
+                // That's unfortunate; let's cr-someday this and
                 // revisit if we want this at some point.
                 Err("Modifying bool option series in place is not supported yet!".to_string())
             } else {
@@ -1558,7 +1558,7 @@ fn rust_series_compute_null_count(
 ) -> OCaml<OCamlInt> {
     let Abstract(series) = series.to_rust(cr);
     let series = series.borrow_mut();
-    // CR-someday ozeng: consider using the function series.compute_len(),
+    // TODO: consider using the function series.compute_len(),
     // which to my knowledge will re-calculate the null counts. Based on tests,
     // the null count is accurate even if we don't call compute_len(), but
     // the rust docs seem to indicate that we need to call this function to keep
