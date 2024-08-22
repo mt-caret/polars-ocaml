@@ -60,12 +60,13 @@ fn rust_sql_context_execute_with_data_frames(
         sql_context.register(&name, data_frame.borrow().clone().lazy());
     }
 
-    sql_context
-        .execute(&query)
-        .and_then(|query_result| query_result.collect())
-        .map(|df| Abstract(Rc::new(RefCell::new(df))))
-        .map_err(|err| err.to_string())
-        .to_ocaml(cr)
+    cr.releasing_runtime(|| {
+        sql_context
+            .execute(&query)
+            .and_then(|query_result| query_result.collect())
+            .map(|df| Abstract(Rc::new(RefCell::new(df))))
+            .map_err(|err| err.to_string())
+    }).to_ocaml(cr)
 }
 
 fn sql_context_vstack_and_execute(
@@ -128,10 +129,11 @@ fn rust_sql_context_vstack_and_collect(
         names_and_data_frames.to_rust(cr);
     let query: String = query.to_rust(cr);
 
-    sql_context_vstack_and_execute(query, names_and_data_frames)
-        .and_then(|lazy_frame| lazy_frame.collect().map_err(|err| err.to_string()))
-        .map(|df| Abstract(Rc::new(RefCell::new(df))))
-        .to_ocaml(cr)
+    cr.releasing_runtime(|| {
+        sql_context_vstack_and_execute(query, names_and_data_frames)
+            .and_then(|lazy_frame| lazy_frame.collect().map_err(|err| err.to_string()))
+            .map(|df| Abstract(Rc::new(RefCell::new(df))))
+    }).to_ocaml(cr)
 }
 
 #[ocaml_interop_export]
@@ -156,8 +158,10 @@ fn rust_sql_context_execute(
 ) -> OCaml<Result<DynBox<LazyFrame>, String>> {
     let query: String = query.to_rust(cr);
 
-    dyn_box_result(cr, sql_context, |sql_context| {
-        let result = sql_context.borrow_mut().execute(&query);
-        result
+    dyn_box_result_with_cr(cr, sql_context, |cr, sql_context| {
+        cr.releasing_runtime(|| {
+            let result = sql_context.borrow_mut().execute(&query);
+            result
+        })
     })
 }
