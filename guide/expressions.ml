@@ -935,6 +935,24 @@ let%expect_test "Missing data" =
     │ 2    ┆ 2.0  │
     │ 3    ┆ 3.0  │
     └──────┴──────┘ |}];
+  let fill_quantile_df =
+    Data_frame.with_columns_exn
+      df
+      ~exprs:Expr.[ col "col2" |> fill_null ~with_:(col "col2" |> quantile ~quantile_expr:(float 0.1)) ]
+  in
+  Data_frame.print fill_quantile_df;
+  [%expect {|
+    shape: (3, 2)
+    ┌──────┬──────┐
+    │ col1 ┆ col2 │
+    │ ---  ┆ ---  │
+    │ i64  ┆ f64  │
+    ╞══════╪══════╡
+    │ 1    ┆ 1.0  │
+    │ 2    ┆ 2.0  │
+    │ 3    ┆ 3.0  │
+    └──────┴──────┘
+    |}];
   let fill_interpolation_df =
     Data_frame.with_columns_exn
       df

@@ -88,6 +88,17 @@ module T = struct
   external sum : t -> t = "rust_expr_sum"
   external mean : t -> t = "rust_expr_mean"
   external median : t -> t = "rust_expr_median"
+
+
+  external quantile
+    :  t
+      -> quantile_expr:t
+      -> interpol_option:[ `Nearest | `Lower | `Higher |`Linear  | `Midpoint  ]
+    -> t
+    = "rust_expr_quantile"
+
+  let quantile ?(interpol_option = `Midpoint)  t ~quantile_expr = quantile t ~quantile_expr ~interpol_option
+
   external mode : t -> t = "rust_expr_mode"
   external max : t -> t = "rust_expr_max"
   external min : t -> t = "rust_expr_min"
@@ -97,6 +108,8 @@ module T = struct
   external count_ : unit -> t = "rust_expr_count_"
   external n_unique : t -> t = "rust_expr_n_unique"
   external approx_n_unique : t -> t = "rust_expr_approx_n_unique"
+  external unique : t -> t = "rust_expr_unique"
+  external unique_stable : t -> t = "rust_expr_unique_stable"
   external explode : t -> t = "rust_expr_explode"
 
   external over
