@@ -230,6 +230,39 @@ impl GADTDataType {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct PolarsQuantileInterpolOptions(pub QuantileInterpolOptions);
+
+unsafe impl FromOCaml<QuantileInterpolOptions> for PolarsQuantileInterpolOptions {
+    fn from_ocaml(v: OCaml<QuantileInterpolOptions>) -> Self {
+        let result = ocaml_unpack_variant! {
+            v => {
+                QuantileInterpolOptions::Nearest,
+                QuantileInterpolOptions::Lower,
+                QuantileInterpolOptions::Higher,
+                QuantileInterpolOptions::Linear,
+                QuantileInterpolOptions::Midpoint,
+            }
+        };
+        PolarsQuantileInterpolOptions(result.expect("Failure when unpacking an OCaml<QuantileInterpolOptions> variant into PolarsQuantileInterpolOptions (unexpected tag value"))
+    }
+}
+
+unsafe impl ToOCaml<QuantileInterpolOptions> for PolarsQuantileInterpolOptions {
+    fn to_ocaml<'a>(&self, cr: &'a mut OCamlRuntime) -> OCaml<'a, QuantileInterpolOptions> {
+        let PolarsQuantileInterpolOptions(quantile_interpol_options) = self;
+        ocaml_alloc_variant! {
+            cr, quantile_interpol_options => {
+                QuantileInterpolOptions::Nearest,
+                QuantileInterpolOptions::Lower,
+                QuantileInterpolOptions::Higher,
+                QuantileInterpolOptions::Linear,
+                QuantileInterpolOptions::Midpoint,
+            }
+        }
+    }
+}
+
 pub struct PolarsFillNullStrategy(pub FillNullStrategy);
 
 unsafe impl FromOCaml<FillNullStrategy> for PolarsFillNullStrategy {
@@ -493,5 +526,23 @@ unsafe impl FromOCaml<IsSorted> for PolarsIsSorted {
         };
 
         PolarsIsSorted(result.expect("Failure when unpacking an OCaml<IsSorted> variant into PolarsIsSorted (unexpected tag value"))
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct PolarsQuantileInterpolOptions(pub QuantileInterpolOptions);
+
+unsafe impl FromOCaml<QuantileInterpolOptions> for PolarsQuantileInterpolOptions {
+    fn from_ocaml(v: OCaml<QuantileInterpolOptions>) -> Self {
+        let result = ocaml_unpack_polymorphic_variant! {
+            v => {
+                Nearest => QuantileInterpolOptions::Nearest,
+                Lower => QuantileInterpolOptions::Lower,
+                Higher => QuantileInterpolOptions::Higher,
+                Linear => QuantileInterpolOptions::Linear,
+                Midpoint => QuantileInterpolOptions::Midpoint,
+            }
+        };
+        PolarsQuantileInterpolOptions(result.expect("Failure when unpacking an OCaml<QuantileInterpolOptions> variant into PolarsQuantileInterpolOptions (unexpected tag value"))
     }
 }

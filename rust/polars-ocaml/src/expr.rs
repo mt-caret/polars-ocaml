@@ -360,6 +360,22 @@ expr_op!(rust_expr_pow, |base, exponent| base.pow(exponent));
 expr_op!(rust_expr_sum, |expr| expr.sum());
 expr_op!(rust_expr_mean, |expr| expr.mean());
 expr_op!(rust_expr_median, |expr| expr.median());
+
+#[ocaml_interop_export]
+fn rust_expr_quantile(
+    cr: &mut &mut OCamlRuntime,
+    expr: OCamlRef<DynBox<Expr>>,
+    quantile_expr: OCamlRef<DynBox<Expr>>,
+    interpol_option: OCamlRef<QuantileInterpolOptions>,
+) -> OCaml<DynBox<Expr>> {
+    let PolarsQuantileInterpolOptions(interpol_option): PolarsQuantileInterpolOptions =
+        interpol_option.to_rust(cr);
+
+    dyn_box2(cr, expr, quantile_expr, |expr, quantile_expr| {
+        expr.quantile(quantile_expr, interpol_option)
+    })
+}
+
 expr_op!(rust_expr_mode, |expr| expr.mode());
 expr_op!(rust_expr_max, |expr| expr.max());
 expr_op!(rust_expr_min, |expr| expr.min());

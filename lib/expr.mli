@@ -848,6 +848,13 @@ val sum : t -> t
 
 val mean : t -> t
 val median : t -> t
+
+val quantile
+  :  ?interpol_option:[ `Nearest | `Lower | `Higher | `Linear | `Midpoint ]
+  -> t
+  -> quantile_expr:t
+  -> t
+
 val mode : t -> t
 
 (** [max], [min], [arg_max], and [arg_min] calculate the max, min, and indices
