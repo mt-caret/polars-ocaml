@@ -95,7 +95,7 @@ fn try_ocaml_interop_export_implementation(
             pub extern "C" #signature {
                 match ::std::panic::catch_unwind(|| {
                     let #runtime_name = unsafe {
-                        &mut ::ocaml_interop::OCamlRuntime::recover_handle()
+                        &mut ::ocaml_interop::OCamlRuntime::recover_handle_mut()
                     };
 
                     #( #locals )*
@@ -121,7 +121,7 @@ fn try_ocaml_interop_export_implementation(
                         // After further discussion, I think this is safe (as long
                         // as we use OCamlRuntime::releasing_runtime) since the lock
                         // should almost always be re-acquired on the event of a panic.
-                        let cr = unsafe { &mut ::ocaml_interop::OCamlRuntime::recover_handle() };
+                        let cr = unsafe { &mut ::ocaml_interop::OCamlRuntime::recover_handle_mut() };
                         unsafe { raise_ocaml_exception_from_panic(cr, cause) }
                     },
                 }
@@ -133,7 +133,7 @@ fn try_ocaml_interop_export_implementation(
             pub extern "C" #signature {
                 match ::std::panic::catch_unwind(|| {
                     let #runtime_name = unsafe {
-                        &mut ::ocaml_interop::OCamlRuntime::recover_handle()
+                        &mut ::ocaml_interop::OCamlRuntime::recover_handle_mut()
                     };
 
                     #( #locals )*
@@ -146,11 +146,11 @@ fn try_ocaml_interop_export_implementation(
                 }) {
                     Ok(Ok(value)) => value,
                     Ok(Err(error)) => {
-                        let cr = unsafe { &mut ::ocaml_interop::OCamlRuntime::recover_handle() };
+                        let cr = unsafe { &mut ::ocaml_interop::OCamlRuntime::recover_handle_mut() };
                         unsafe { raise_ocaml_exception(cr, error) }
                     },
                     Err(cause) => {
-                        let cr = unsafe { &mut ::ocaml_interop::OCamlRuntime::recover_handle() };
+                        let cr = unsafe { &mut ::ocaml_interop::OCamlRuntime::recover_handle_mut() };
                         unsafe { raise_ocaml_exception_from_panic(cr, cause) }
                     },
                 }
@@ -384,7 +384,7 @@ mod tests {
                 name: ::ocaml_interop::RawOCaml,
             ) -> ::ocaml_interop::RawOCaml {
                 match ::std::panic::catch_unwind(|| {
-                    let cr = unsafe { &mut ::ocaml_interop::OCamlRuntime::recover_handle() };
+                    let cr = unsafe { &mut ::ocaml_interop::OCamlRuntime::recover_handle_mut() };
                     let name: OCamlRef<String> = &::ocaml_interop::BoxRoot::new(unsafe {
                         OCaml::new(cr, name)
                     });
@@ -398,7 +398,7 @@ mod tests {
                 }) {
                     Ok(value) => value,
                     Err(cause) => {
-                        let cr = unsafe { &mut ::ocaml_interop::OCamlRuntime::recover_handle() };
+                        let cr = unsafe { &mut ::ocaml_interop::OCamlRuntime::recover_handle_mut() };
                         unsafe { raise_ocaml_exception_from_panic(cr, cause) }
                     }
                 }
@@ -425,7 +425,7 @@ mod tests {
                 name: ::ocaml_interop::RawOCaml,
             ) -> ::ocaml_interop::RawOCaml {
                 match ::std::panic::catch_unwind(|| {
-                    let cr = unsafe { &mut ::ocaml_interop::OCamlRuntime::recover_handle() };
+                    let cr = unsafe { &mut ::ocaml_interop::OCamlRuntime::recover_handle_mut() };
                     let name: OCamlRef<String> = &::ocaml_interop::BoxRoot::new(unsafe {
                         OCaml::new(cr, name)
                     });
@@ -439,11 +439,11 @@ mod tests {
                 }) {
                     Ok(Ok(value)) => value,
                     Ok(Err(error)) => {
-                        let cr = unsafe { &mut ::ocaml_interop::OCamlRuntime::recover_handle() };
+                        let cr = unsafe { &mut ::ocaml_interop::OCamlRuntime::recover_handle_mut() };
                         unsafe { raise_ocaml_exception(cr, error) }
                     }
                     Err(cause) => {
-                        let cr = unsafe { &mut ::ocaml_interop::OCamlRuntime::recover_handle() };
+                        let cr = unsafe { &mut ::ocaml_interop::OCamlRuntime::recover_handle_mut() };
                         unsafe { raise_ocaml_exception_from_panic(cr, cause) }
                     }
                 }
@@ -515,7 +515,7 @@ mod tests {
                 fixed_seed: ::ocaml_interop::RawOCaml,
             ) -> ::ocaml_interop::RawOCaml {
                 match ::std::panic::catch_unwind(|| {
-                    let cr = unsafe { &mut ::ocaml_interop::OCamlRuntime::recover_handle() };
+                    let cr = unsafe { &mut ::ocaml_interop::OCamlRuntime::recover_handle_mut() };
                     let expr: OCamlRef<DynBox<Expr>> = &::ocaml_interop::BoxRoot::new(unsafe {
                         OCaml::new(cr, expr)
                     });
@@ -552,11 +552,11 @@ mod tests {
                 }) {
                     Ok(Ok(value)) => value,
                     Ok(Err(error)) => {
-                        let cr = unsafe { &mut ::ocaml_interop::OCamlRuntime::recover_handle() };
+                        let cr = unsafe { &mut ::ocaml_interop::OCamlRuntime::recover_handle_mut() };
                         unsafe { raise_ocaml_exception(cr, error) }
                     }
                     Err(cause) => {
-                        let cr = unsafe { &mut ::ocaml_interop::OCamlRuntime::recover_handle() };
+                        let cr = unsafe { &mut ::ocaml_interop::OCamlRuntime::recover_handle_mut() };
                         unsafe { raise_ocaml_exception_from_panic(cr, cause) }
                     }
                 }

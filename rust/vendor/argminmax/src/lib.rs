@@ -68,8 +68,30 @@
 //!```
 //!
 
-// enable SIMD nightly features when on nightly_simd enabled
-#![cfg_attr(feature = "nightly_simd", feature(stdsimd))]
+// Enable SIMD nightly features when on nightly_simd enabled
+#![cfg_attr(feature = "nightly_simd", feature(cfg_version))]
+// ------- version 1.78 and above
+#![cfg_attr(
+    all(
+        feature = "nightly_simd",
+        any(target_arch = "x86_64", target_arch = "x86")
+    ),
+    cfg_attr(version("1.78"), feature(stdarch_x86_avx512))
+)]
+#![cfg_attr(
+    all(feature = "nightly_simd", target_arch = "arm"),
+    cfg_attr(
+        version("1.78"),
+        feature(stdarch_arm_neon_intrinsics),
+        feature(stdarch_arm_feature_detection)
+    )
+)]
+// ------- version 1.77 and below
+#![cfg_attr(
+    feature = "nightly_simd",
+    cfg_attr(not(version("1.78")), feature(stdsimd))
+)]
+// ------- any version
 #![cfg_attr(feature = "nightly_simd", feature(avx512_target_feature))]
 #![cfg_attr(feature = "nightly_simd", feature(arm_target_feature))]
 
@@ -94,9 +116,10 @@ pub(crate) use scalar::{ScalarArgMinMax, SCALAR};
 pub(crate) use simd::AVX512;
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 pub(crate) use simd::{SIMDArgMinMax, AVX2, SSE};
-#[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
-#[cfg(feature = "nightly_simd")]
-// TODO: can be adapted when 64-bit aarch64 implementation is added
+#[cfg(any(
+    all(target_arch = "arm", feature = "nightly_simd"),
+    target_arch = "aarch64"
+))]
 pub(crate) use simd::{SIMDArgMinMax, NEON};
 
 #[cfg(feature = "half")]
@@ -280,10 +303,10 @@ macro_rules! impl_argminmax_int {
                             return unsafe { SSE::<Int>::argminmax(self) }
                         }
                     }
-                    #[cfg(all(target_arch = "aarch64", feature = "nightly_simd"))]
+                    #[cfg(target_arch = "aarch64")]
                     {
                         if std::arch::is_aarch64_feature_detected!("neon") & (<$int_type>::NB_BITS < 64) {
-                            // We miss some NEON instructions for 64-bit numbers
+                            // Scalar is faster for 64-bit numbers
                             return unsafe { NEON::<Int>::argminmax(self) }
                         }
                     }
@@ -325,10 +348,9 @@ macro_rules! impl_argminmax_int {
                             return unsafe { SSE::<Int>::argmin(self) }
                         }
                     }
-                    #[cfg(all(target_arch = "aarch64", feature = "nightly_simd"))]
+                    #[cfg(target_arch = "aarch64")]
                     {
-                        if std::arch::is_aarch64_feature_detected!("neon") & (<$int_type>::NB_BITS < 64) {
-                            // We miss some NEON instructions for 64-bit numbers
+                        if std::arch::is_aarch64_feature_detected!("neon") {
                             return unsafe { NEON::<Int>::argmin(self) }
                         }
                     }
@@ -369,10 +391,9 @@ macro_rules! impl_argminmax_int {
                             return unsafe { SSE::<Int>::argmax(self) }
                         }
                     }
-                    #[cfg(all(target_arch = "aarch64", feature = "nightly_simd"))]
+                    #[cfg(target_arch = "aarch64")]
                     {
-                        if std::arch::is_aarch64_feature_detected!("neon") & (<$int_type>::NB_BITS < 64) {
-                            // We miss some NEON instructions for 64-bit numbers
+                        if std::arch::is_aarch64_feature_detected!("neon") {
                             return unsafe { NEON::<Int>::argmax(self) }
                         }
                     }
@@ -421,10 +442,9 @@ macro_rules! impl_argminmax_float {
                             return unsafe { SSE::<FloatIgnoreNaN>::argminmax(self) }
                         }
                     }
-                    #[cfg(all(target_arch = "aarch64", feature = "nightly_simd"))]
+                    #[cfg(target_arch = "aarch64")]
                     {
-                        if std::arch::is_aarch64_feature_detected!("neon") & (<$float_type>::NB_BITS < 64) {
-                            // We miss some NEON instructions for 64-bit numbers
+                        if std::arch::is_aarch64_feature_detected!("neon") {
                             return unsafe { NEON::<FloatIgnoreNaN>::argminmax(self) }
                         }
                     }
@@ -461,10 +481,9 @@ macro_rules! impl_argminmax_float {
                             return unsafe { SSE::<FloatIgnoreNaN>::argmin(self) }
                         }
                     }
-                    #[cfg(all(target_arch = "aarch64", feature = "nightly_simd"))]
+                    #[cfg(target_arch = "aarch64")]
                     {
-                        if std::arch::is_aarch64_feature_detected!("neon") & (<$float_type>::NB_BITS < 64) {
-                            // We miss some NEON instructions for 64-bit numbers
+                        if std::arch::is_aarch64_feature_detected!("neon") {
                             return unsafe { NEON::<FloatIgnoreNaN>::argmin(self) }
                         }
                     }
@@ -501,10 +520,9 @@ macro_rules! impl_argminmax_float {
                             return unsafe { SSE::<FloatIgnoreNaN>::argmax(self) }
                         }
                     }
-                    #[cfg(all(target_arch = "aarch64", feature = "nightly_simd"))]
+                    #[cfg(target_arch = "aarch64")]
                     {
-                        if std::arch::is_aarch64_feature_detected!("neon") & (<$float_type>::NB_BITS < 64) {
-                            // We miss some NEON instructions for 64-bit numbers
+                        if std::arch::is_aarch64_feature_detected!("neon") {
                             return unsafe { NEON::<FloatIgnoreNaN>::argmax(self) }
                         }
                     }
@@ -541,10 +559,9 @@ macro_rules! impl_argminmax_float {
                             return unsafe { SSE::<FloatReturnNaN>::argminmax(self) }
                         }
                     }
-                    #[cfg(all(target_arch = "aarch64", feature = "nightly_simd"))]
+                    #[cfg(target_arch = "aarch64")]
                     {
-                        if std::arch::is_aarch64_feature_detected!("neon") & (<$float_type>::NB_BITS < 64) {
-                            // We miss some NEON instructions for 64-bit numbers
+                        if std::arch::is_aarch64_feature_detected!("neon") {
                             return unsafe { NEON::<FloatReturnNaN>::argminmax(self) }
                         }
                     }
@@ -579,10 +596,9 @@ macro_rules! impl_argminmax_float {
                             return unsafe { SSE::<FloatReturnNaN>::argmin(self) }
                         }
                     }
-                    #[cfg(all(target_arch = "aarch64", feature = "nightly_simd"))]
+                    #[cfg(target_arch = "aarch64")]
                     {
-                        if std::arch::is_aarch64_feature_detected!("neon") & (<$float_type>::NB_BITS < 64) {
-                            // We miss some NEON instructions for 64-bit numbers
+                        if std::arch::is_aarch64_feature_detected!("neon") {
                             return unsafe { NEON::<FloatReturnNaN>::argmin(self) }
                         }
                     }
@@ -617,10 +633,9 @@ macro_rules! impl_argminmax_float {
                             return unsafe { SSE::<FloatReturnNaN>::argmax(self) }
                         }
                     }
-                    #[cfg(all(target_arch = "aarch64", feature = "nightly_simd"))]
+                    #[cfg(target_arch = "aarch64")]
                     {
-                        if std::arch::is_aarch64_feature_detected!("neon") & (<$float_type>::NB_BITS < 64) {
-                            // We miss some NEON instructions for 64-bit numbers
+                        if std::arch::is_aarch64_feature_detected!("neon") {
                             return unsafe { NEON::<FloatReturnNaN>::argmax(self) }
                         }
                     }
@@ -638,10 +653,12 @@ macro_rules! impl_argminmax_float {
     };
 }
 
-// Implement ArgMinMax for the rust primitive types
+// Implement ArgMinMax for (non-optional) integer rust primitive types
 impl_argminmax_int!(i8, i16, i32, i64, u8, u16, u32, u64);
+// Implement for (optional) float rust primitive types
 #[cfg(feature = "float")]
 impl_argminmax_float!(f32, f64);
+
 // Implement ArgMinMax for other data types
 #[cfg(feature = "half")]
 impl_argminmax_float!(f16);

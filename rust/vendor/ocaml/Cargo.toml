@@ -10,18 +10,28 @@
 # See Cargo.toml.orig for the original contents.
 
 [package]
-edition = "2018"
+edition = "2021"
 name = "ocaml"
-version = "0.22.4"
+version = "1.0.0-beta.5"
 authors = ["Zach Shipko <zachshipko@gmail.com>"]
 description = "OCaml bindings for Rust"
 documentation = "https://docs.rs/ocaml"
 readme = "README.md"
-keywords = ["ocaml", "rust", "ffi"]
+keywords = [
+    "ocaml",
+    "rust",
+    "ffi",
+]
 license = "ISC"
 repository = "https://github.com/zshipko/ocaml-rs"
+
 [package.metadata.docs.rs]
-features = ["without-ocamlopt", "derive", "link"]
+features = [
+    "without-ocamlopt",
+    "derive",
+    "link",
+]
+
 [dependencies.cstr_core]
 version = "0.2"
 optional = true
@@ -31,24 +41,43 @@ version = "^0.15.1"
 optional = true
 
 [dependencies.ocaml-boxroot-sys]
-version = "0.2"
+git = "https://github.com/TheNumbat/ocaml-boxroot"
+branch = "ocaml5"
 
 [dependencies.ocaml-derive]
-version = "0.22"
+version = "^1.0.0-beta.5"
+path = "./derive"
 optional = true
 
 [dependencies.ocaml-interop]
-version = "0.8.8"
+git = "https://github.com/TheNumbat/ocaml-interop"
+branch = "boxroot030"
 
 [dependencies.ocaml-sys]
-version = "0.22"
+version = ">=0.23"
+path = "./sys"
 
 [features]
 bigarray-ext = ["ndarray"]
-caml-state = ["ocaml-sys/caml-state"]
 default = ["derive"]
 derive = ["ocaml-derive"]
 link = ["ocaml-sys/link"]
 no-caml-startup = ["ocaml-interop/no-caml-startup"]
-no-std = ["cstr_core/alloc"]
-without-ocamlopt = ["ocaml-sys/without-ocamlopt", "ocaml-interop/without-ocamlopt", "ocaml-boxroot-sys/without-ocamlopt"]
+no-panic-hook = []
+no-std = [
+    "cstr_core/alloc",
+    "no-panic-hook",
+]
+ocaml5 = ["ocaml-sys/ocaml5"]
+without-ocamlopt = [
+    "ocaml-sys/without-ocamlopt",
+    "ocaml-interop/without-ocamlopt",
+]
+
+[workspace]
+members = [
+    "derive",
+    "sys",
+    "test",
+    "build",
+]

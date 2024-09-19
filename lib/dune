@@ -38,10 +38,10 @@
  (preprocess
   (pps ppx_jane ppx_typed_fields)))
 
-(mdx
- (files :standard - *.mli)
- (libraries core core_kernel.nonempty_list polars)
- (preludes mdx_prelude/mdx_prelude.txt))
+;(mdx
+; (files :standard - *.mli)
+; (libraries core core_kernel.nonempty_list polars)
+; (preludes mdx_prelude/mdx_prelude.txt))
 
 (env
  (utop

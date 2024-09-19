@@ -12,7 +12,7 @@
 [package]
 edition = "2021"
 name = "ocaml-sys"
-version = "0.23.0"
+version = "0.24.0"
 authors = ["Zach Shipko <zachshipko@gmail.com>"]
 description = "Low-level OCaml bindings for Rust"
 documentation = "https://docs.rs/ocaml-sys"
@@ -23,22 +23,22 @@ keywords = [
 ]
 license = "ISC"
 repository = "https://github.com/zshipko/ocaml-rs"
-resolver = "2"
 
 [package.metadata.docs.rs]
 features = [
     "without-ocamlopt",
-    "caml-state",
+    "ocaml5",
 ]
 
-[dependencies.cty]
-version = "0.2"
+[dependencies]
+cty = "0.2"
 
-[build-dependencies.cc]
-version = "1"
+[build-dependencies]
+cc = "1"
 
 [features]
 caml-state = []
 default = []
 link = []
+ocaml5 = []
 without-ocamlopt = []

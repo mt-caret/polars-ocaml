@@ -77,7 +77,7 @@ use ahash::AHashMap;
 let mut map: AHashMap<i32, i32> = AHashMap::new();
 map.insert(12, 34);
 ```
-This avoids the need to type "RandomState". (For convience `From`, `Into`, and `Deref` are provided).
+This avoids the need to type "RandomState". (For convenience `From`, `Into`, and `Deref` are provided).
 
 # Aliases
 
@@ -108,7 +108,7 @@ mod fallback_hash;
 cfg_if::cfg_if! {
     if #[cfg(any(
             all(any(target_arch = "x86", target_arch = "x86_64"), target_feature = "aes", not(miri)),
-            all(target_arch = "aarch64", target_feature = "aes", not(miri)),
+            all(feature = "nightly-arm-aes", target_arch = "aarch64", target_feature = "aes", not(miri)),
             all(feature = "nightly-arm-aes", target_arch = "arm", target_feature = "aes", not(miri)),
         ))] {
         mod aes_hash;
@@ -319,7 +319,6 @@ mod test {
     use crate::specialize::CallHasher;
     use crate::*;
     use std::collections::HashMap;
-    use std::hash::Hash;
 
     #[test]
     fn test_ahash_alias_map_construction() {

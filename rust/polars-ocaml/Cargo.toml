@@ -12,14 +12,19 @@ crate-type = ["staticlib", "cdylib"]
 
 [dependencies]
 chrono = "^0.4.31"
-ocaml = "0.22.4"
-ocaml-interop = "0.10.0"
-ocaml-sys = "0.23.0"
+ocaml = { git = "https://github.com/TheNumbat/ocaml-rs", branch = "ocaml5" }
+ocaml-sys = { git = "https://github.com/TheNumbat/ocaml-rs", branch = "ocaml5" }
+ocaml-derive = { git = "https://github.com/TheNumbat/ocaml-rs", branch = "ocaml5" }
+ocaml-boxroot-sys = { git = "https://github.com/TheNumbat/ocaml-boxroot", branch = "ocaml5" }
+ocaml-interop = { git = "https://github.com/TheNumbat/ocaml-interop", branch="boxroot030" }
 polars-sql = "0.32.1"
 smartstring = "1.0.1"
 polars-ocaml-macros = { path = "../polars-ocaml-macros" }
 arrow2 = "0.18.0"
 chrono-tz = "0.8.3"
+
+[features]
+ocaml5 = ["ocaml-sys/ocaml5", "ocaml/ocaml5"]
 
 [dependencies.polars]
 version = "0.32.1"
