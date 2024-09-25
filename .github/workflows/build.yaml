@@ -66,7 +66,7 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ github.token }}
 
-      - name:
+      - name: Verify minimum supported Rust version
         uses: devcontainers/ci@v0.3
         with:
           imageName: ghcr.io/mt-caret/polars-ocaml
@@ -90,7 +90,8 @@ jobs:
 
       - uses: ocaml/setup-ocaml@v2
         with:
-          ocaml-compiler: 4.14.x
+          ocaml-compiler: "4.14"
+          allow-prerelease-opam: true
       # These environment variables are used by ocaml-sys to figure out which
       # version of OCaml we're building for
       - name: Set opam env
@@ -98,8 +99,7 @@ jobs:
       - name: Add opam switch to PATH
         run: opam var bin >> $GITHUB_PATH
 
-      - name: Install mold
-        run: sudo apt install --yes mold
+      - uses: rui314/setup-mold@v1
 
       - name: Check
         run: cargo check --verbose
@@ -121,8 +121,11 @@ jobs:
 
       - uses: ocaml/setup-ocaml@v2
         with:
-          ocaml-compiler: 4.14.x
-
-      - uses: ocaml/setup-ocaml/lint-opam@v2
+          ocaml-compiler: "4.14"
+          allow-prerelease-opam: true
 
       - uses: ocaml/setup-ocaml/lint-fmt@v2
+
+      - uses: ocaml/setup-ocaml/lint-doc@v2
+
+      - uses: ocaml/setup-ocaml/lint-opam@v2
