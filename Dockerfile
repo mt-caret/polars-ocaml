@@ -1,23 +1,27 @@
-FROM ubuntu:22.04
+FROM ocaml/opam:debian-ocaml-4.14
 
 LABEL org.opencontainers.image.source=https://github.com/mt-caret/polars-ocaml
 
-RUN apt-get update && apt-get install -y \
-    curl \
+RUN sudo ln -f /usr/bin/opam-2.2 /usr/bin/opam
+
+RUN sudo apt-get update && sudo apt-get install -y \
     build-essential \
-    opam \
+    curl \
     mold
-RUN opam init --auto-setup --compiler=4.14.1 --disable-sandboxing
 
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
     sh -s -- -y --default-toolchain=nightly
-ENV PATH="/root/.cargo/bin:${PATH}"
 
-RUN opam install dune ocamlformat ocaml-lsp-server --yes
-RUN cargo install cargo-watch
+ENV PATH="${HOME}/.cargo/bin:${PATH}"
 
-COPY ./polars.opam ./polars_async.opam ./
-RUN opam install . --deps-only --with-doc --with-test --assume-depexts --yes
+RUN opam install dune ocamlformat ocaml-lsp-server \
+    && cargo install cargo-watch
+
+COPY --chown=opam ./polars.opam ./polars_async.opam ./
+
+RUN opam install . --deps-only --with-doc --with-test
 
 # Overwrite default linker with mold (this drastically speeds up builds)
-RUN ln -sf /usr/bin/mold "$(realpath /usr/bin/ld)"
+RUN sudo ln -f /usr/bin/mold "$(realpath /usr/bin/ld)"
+
+COPY --chown=opam . .
